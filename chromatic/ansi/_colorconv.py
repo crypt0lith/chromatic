@@ -1,8 +1,26 @@
-__all__ = ['ansi_4bit_to_rgb', 'ansi_8bit_to_rgb', 'hex2rgb', 'hsl2rgb', 'hsv2rgb', 'lab2rgb', 'lab2xyz',
-           'nearest_ansi_4bit_rgb', 'nearest_ansi_8bit_rgb', 'rgb2hex', 'rgb2hsl', 'rgb2hsv', 'rgb2lab', 'rgb2xyz',
-           'rgb_to_ansi_8bit', 'xyz2lab', 'xyz2rgb']
+__all__ = [
+    'ANSI_4BIT_RGB',
+    'lab2xyz',
+    'rgb2hsv',
+    'ansi_4bit_to_rgb',
+    'ansi_8bit_to_rgb',
+    'hex2rgb',
+    'hsl2rgb',
+    'hsv2rgb',
+    'lab2rgb',
+    'nearest_ansi_4bit_rgb',
+    'nearest_ansi_8bit_rgb',
+    'rgb2hex',
+    'rgb2hsl',
+    'rgb2lab',
+    'rgb2xyz',
+    'rgb_to_ansi_8bit',
+    'xyz2lab',
+    'xyz2rgb'
+]
 
 import math
+from typing import Final
 
 import numpy as np
 
@@ -23,7 +41,7 @@ def hex2rgb(value: int) -> Int3Tuple:
     return (r, g, b)
 
 
-ANSI_4BIT_RGB: list[Int3Tuple] = [
+ANSI_4BIT_RGB: Final[list[Int3Tuple]] = [
     (0, 0, 0),  # black
     (170, 0, 0),  # red
     (0, 170, 0),  # green
@@ -49,11 +67,11 @@ def nearest_ansi_4bit_rgb(value: RGBVector) -> Int3Tuple:
     if value in ANSI_4BIT_RGB:
         return value
 
-    def get_dist(a: Int3Tuple):
+    def _dist_4b(a: Int3Tuple):
         return math.dist(a, value)
 
     try:
-        return min(ANSI_4BIT_RGB, key=get_dist)
+        return min(ANSI_4BIT_RGB, key=_dist_4b)
     except ValueError:
         raise ValueError(
             f"invalid RGB value: {value!r}") from None

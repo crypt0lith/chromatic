@@ -4,56 +4,9 @@ from os import PathLike
 from pathlib import PurePath
 
 
-def glyph_comparisons(__output_dir: str | PathLike[str] = ...):
-    from skimage.metrics import mean_squared_error
-    from numpy import ndarray
-    from chromatic.ascii import get_glyph_masks
-    from chromatic.data import UserFont
-
-    def _find_best_matches(glyph_masks1: dict[str, ndarray],
-                           glyph_masks2: dict[str, ndarray]) -> dict[str, str]:
-        best_matches = {}
-        for char1, mask1 in glyph_masks1.items():
-            best_char = None
-            best_score = float('inf')
-            for char2, mask2 in glyph_masks2.items():
-                score = mean_squared_error(mask1, mask2)
-                if score < best_score:
-                    best_score = score
-                    best_char = char2
-            best_matches[char1] = best_char
-        return best_matches
-
-    if __output_dir is ...:
-        __output_dir = os.getcwd()
-    elif not os.path.isdir(__output_dir):
-        raise NotADirectoryError(
-            __output_dir)
-    user_fonts = [[UserFont.IBM_VGA_437_8X16, UserFont.CONSOLAS]]
-    user_fonts += [user_fonts[0][::-1]]
-    font1: UserFont
-    font2: UserFont
-    for font1, font2 in user_fonts:
-        glyph_masks_1 = get_glyph_masks(font1, dist_transform=True)
-        glyph_masks_2 = get_glyph_masks(font2, dist_transform=True)
-        best_matches_ = _find_best_matches(glyph_masks_1, glyph_masks_2)
-        fname = PurePath(__output_dir) / f"{'_to_'.join(f.name.lower() for f in (font1, font2))}.txt"
-        with open(fname, 'w', encoding='utf-8') as f:
-            for input_char, matched_char in best_matches_.items():
-                f.write(
-                    '->'.center(32, ' ').join(['{}'] * 2).format(
-                        f"{font1.name}[{input_char!r}, {input_char.encode('unicode_escape').decode()!r}]",
-                        f"{font2.name}[{matched_char!r}, {matched_char.encode('unicode_escape').decode()!r}]").center(
-                        100, ' ') + '\n\n' + '\n'.join(
-                        ''.join(z).replace('] [', '').replace('[', ' ').replace(']', '') for z in zip(
-                            f'{glyph_masks_1[input_char].astype(int)}' '\n'.replace('0', ' ').splitlines(),
-                            f'{glyph_masks_2[matched_char].astype(int)}' '\n'.replace('0', ' ').splitlines()[1:])) + (
-                            '#' * 100).join(['\n'] * 2))
-
-
 def escher_dragon_ascii():
     """
-    Create, render, and display an ASCII art conversion of 'Dragon' by M.C. Escher.
+    Render and display an image-to-ASCII transform of 'Dragon' by M.C. Escher.
     """
     from chromatic.ascii import ascii2img, img2ascii
     from chromatic.data import UserFont, escher
@@ -81,7 +34,7 @@ def escher_dragon_ascii():
 
 def escher_dragon_256color():
     """
-    Create, render, and display an ANSI art conversion of 'Dragon' by M.C. Escher in ANSI 8-bit colorspace.
+    Render and display an in 8-bit color image-to-ANSI transform of 'Dragon' by M.C. Escher.
     """
     from chromatic.ascii import ansi2img, img2ansi
     from chromatic.data import UserFont, escher
@@ -93,7 +46,7 @@ def escher_dragon_256color():
         input_img,
         font,
         factor=240,
-        ansi_type='256color',
+        ansi_type='8b',
         equalize=True)
 
     ansi_img = ansi2img(
@@ -106,10 +59,10 @@ def escher_dragon_256color():
 
 def butterfly_16color():
     """
-    Create, render, and display an ANSI art conversion of 'Spider Lily & Papilio xuthus' in ANSI 4-bit colorspace.
+    Render and display an image-to-ANSI transform of 'Spider Lily & Papilio xuthus' in 4-bit color.
     Good ol' C-x M-c M-butterfly...
     """
-    from chromatic.ansi import ansi_color_4Bit
+    from chromatic.ansi import ansicolor4Bit
     from chromatic.ascii import ansi2img, img2ansi
     from chromatic.data import UserFont, butterfly
 
@@ -124,9 +77,7 @@ def butterfly_16color():
         font,
         factor=200,
         char_set=char_set,
-        ansi_type=ansi_color_4Bit,
-        equalize='scale_saturation'
-    )
+        ansi_type=ansicolor4Bit)
 
     ansi_img = ansi2img(
         ansi_array,
@@ -138,7 +89,7 @@ def butterfly_16color():
 
 def butterfly_truecolor():
     """
-    Create, render, and display an ANSI art conversion of 'Spider Lily & Papilio xuthus' in ANSI 24-bit colorspace.
+    Render and display an image-to-ANSI transform of 'Spider Lily & Papilio xuthus' in 24-bit color.
     """
     from chromatic.ascii import ansi2img, img2ansi
     from chromatic.data import UserFont, butterfly
@@ -151,7 +102,7 @@ def butterfly_truecolor():
         input_img,
         font,
         factor=200,
-        ansi_type='truecolor',
+        ansi_type='24b',
         equalize='white_point')
 
     ansi_img = ansi2img(
@@ -192,21 +143,44 @@ def goblin_virus_truecolor():
     ansi_img.show()
 
 
+def named_colors():
+    from chromatic.ansi.palette import display_named_colors, ColorNamespace
+
+    color_ns_typ = type(ColorNamespace)
+    print(f"{'.'.join([color_ns_typ.__module__, color_ns_typ.__qualname__.lstrip('_')])}:")
+    named = display_named_colors()
+    color_count = len(named)
+    get_padding = lambda x: float(len(x) * 1.5).__ceil__()
+    row_len = float(color_count ** (1 / 2)).__floor__()
+    spacer = ' :: '
+    arr = []
+    it = iter(named)
+    while color_count >= row_len:
+        s = ''
+        for _ in range(row_len):
+            color_count -= 1
+            color = next(it)
+            s += f"{color:^{get_padding(color)}}\x1b[0m{spacer}"
+        arr.append(s.removesuffix(spacer))
+    arr.append(spacer.join(f"{x:^{get_padding(x)}}\x1b[0m" for x in it))
+    print('\n'.join(arr))
+
+
 def color_table():
     """
-    Print out monochromatic + ROYGBIV foreground / background combinations in each ANSI format {4-bit, 8-bit, 24-bit}.
+    Print out monochromatic + ROYGBIV foreground / background combinations in each ANSI format.
     A handful of stylistic SGR parameters are displayed as well.
     """
     from chromatic.ansi import (
         ColorStr,
         SgrParameter,
-        ansi_color_24Bit,
-        ansi_color_4Bit,
-        ansi_color_8Bit
+        ansicolor24Bit,
+        ansicolor4Bit,
+        ansicolor8Bit
     )
     from chromatic.ansi.palette import ColorNamespace
 
-    ansi_types = (ansi_color_4Bit, ansi_color_8Bit, ansi_color_24Bit)
+    ansi_types = [ansicolor4Bit, ansicolor8Bit, ansicolor24Bit]
     colors = [
         ColorNamespace.BLACK,
         ColorNamespace.WHITE,
@@ -216,18 +190,23 @@ def color_table():
         ColorNamespace.GREEN,
         ColorNamespace.BLUE,
         ColorNamespace.INDIGO,
-        ColorNamespace.PURPLE
-    ]
+        ColorNamespace.PURPLE]
     colors_dict = {v.name.title(): v for v in colors}
     spacing = max(map(len, colors_dict)) + 1
-    empty_cell = (' ' * spacing)
-
-    fg_colors = [ColorStr(f"{c.name.title(): ^{spacing}}", dict(fg=c), ansi_type=ansi_color_24Bit) for c in colors]
-    bg_colors: list[ColorStr] = [ColorStr().recolor(bg=None)] + [c.recolor(fg=None, bg=c.fg) for c in fg_colors]
-    print('colors [4-bit | 8-bit | 24-bit]:\n')
-    for header in [empty_cell * 3] + [bg.as_ansi_type(typ) for bg in bg_colors[1:] for typ in ansi_types]:
-        print(header, end='\x1b[0m')
-    print()
+    fg_colors = [ColorStr(
+        f"{c.name.title(): ^{spacing}}",
+        color_spec=dict(fg=c),
+        ansi_type=ansicolor24Bit)
+        for c in colors]
+    bg_colors = [
+                    ColorStr().recolor(bg=None)
+                ] + [c.recolor(fg=None, bg=c.fg) for c in fg_colors]
+    pad = spacing - 1
+    print(
+        '|'.join(
+            [f"{'4bit': ^{pad}}",
+             f"{'8bit': ^{pad}}",
+             f"{'24bit': >{pad}}"]))
     for row in fg_colors:
         for col in bg_colors:
             for typ in ansi_types:
@@ -242,13 +221,70 @@ def color_table():
         SgrParameter.ENCIRCLED,
         SgrParameter.SINGLE_UNDERLINE,
         SgrParameter.DOUBLE_UNDERLINE,
-        SgrParameter.NEGATIVE
-    ]
+        SgrParameter.NEGATIVE]
     for style in style_params:
         print(
-            ColorStr('.'.join([SgrParameter.__qualname__, style.name])).update_sgr(style),
+            ColorStr('.'.join([SgrParameter.__qualname__, style.name]))
+            .update_sgr(style),
             end='\x1b[0m' + (' ' * 4))
     print()
+
+
+def glyph_comparisons(__output_dir: str | PathLike[str] = None):
+    from skimage.metrics import mean_squared_error
+    from numpy import ndarray
+    from chromatic.ascii import get_glyph_masks, cp437_printable
+    from chromatic.data import UserFont
+    from random import choices as get_random
+
+    def _find_best_matches(glyph_masks1: dict[str, ndarray],
+                           glyph_masks2: dict[str, ndarray]) -> dict[str, str]:
+        best_matches = {}
+        for char1, mask1 in glyph_masks1.items():
+            best_char = None
+            best_score = float('inf')
+            for char2, mask2 in glyph_masks2.items():
+                score = mean_squared_error(mask1, mask2)
+                if score < best_score:
+                    best_score = score
+                    best_char = char2
+            best_matches[char1] = best_char
+        return best_matches
+
+    if __output_dir and not os.path.isdir(__output_dir):
+        raise NotADirectoryError(
+            __output_dir)
+    user_fonts = [(UserFont.IBM_VGA_437_8X16, UserFont.CONSOLAS)[::x] for x in (1, -1)]
+    trans_table = str.maketrans({']': None, '0': ' ', '[': ' '})
+    char_set = cp437_printable()
+    separator = '#' * 100
+    for font1, font2 in user_fonts:
+        glyph_masks_1 = get_glyph_masks(font1, char_set, dist_transform=True)
+        glyph_masks_2 = get_glyph_masks(font2, char_set, dist_transform=True)
+        best_matches_ = _find_best_matches(glyph_masks_1, glyph_masks_2)
+        txt = ''.join(
+            '->'.center(32, ' ').join(['{}'] * 2).format(
+                f"{font1.name}"
+                f"[{input_char!r}, {input_char.encode('unicode_escape').decode()!r}]",
+                f"{font2.name}"
+                f"[{matched_char!r}, {matched_char.encode('unicode_escape').decode()!r}]")
+            .center(100, ' ')
+            + '\n\n'
+            + '\n'.join(
+                ''.join
+                (z).translate(trans_table)
+                for z in zip(
+                    f'{glyph_masks_1[input_char].astype(int)}\n'.splitlines(),
+                    f'{glyph_masks_2[matched_char].astype(int)}\n'.splitlines()[1:]))
+            + separator.join(['\n'] * 2) for input_char, matched_char in best_matches_.items())
+        if __output_dir is not None:
+            fname = (PurePath(__output_dir) /
+                     f"{'_to_'.join(font.name.lower() for font in (font1, font2))}.txt")
+            with open(fname, 'w', encoding='utf-8') as f:
+                f.write(txt)
+        else:
+            for glyph in get_random(txt.split(separator), k=len(char_set) // 2):
+                print(separator + glyph)
 
 
 def main():
@@ -257,7 +293,8 @@ def main():
     from types import FunctionType
     from inspect import getargs
 
-    global_func_enum = dict(enumerate(sorted(k for k, v in demo_globals.items() if isinstance(v, FunctionType))))
+    global_func_enum = dict(
+        enumerate(sorted(k for k, v in demo_globals.items() if isinstance(v, FunctionType))))
     safe_funcs = {}
     safe_funcs[-1] = exit
     choices = [f'[{x[0]}]: {x[1].name}' for x in safe_funcs.items()]
@@ -273,10 +310,11 @@ def main():
             names.append(v)
 
     def _check_user_input(user_key: str):
-        if user_key.isdigit() and (idx := int(user_key)) in safe_funcs:
-            return idx
-        if (name_match := user_key.strip().replace(' ', '_').casefold()) in names:
-            return next(i for i, v in enumerate(names) if v == name_match)
+        if user_key.strip('-').isdigit():
+            if (k := int(user_key)) in safe_funcs:
+                return k
+        if (s := user_key.strip().replace(' ', '_').casefold()) in names:
+            return next(i for i, v in enumerate(names) if v == s)
         return
 
     selection = None

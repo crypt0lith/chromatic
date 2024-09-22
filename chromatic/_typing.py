@@ -10,9 +10,9 @@ type IntSequence = Sequence[int]
 type RGBArrayLike = ndarray[Any, dtype[uint8]]
 type RGBVector = Union[Int3Tuple, IntSequence, RGBArrayLike]
 ColorDictKeys = Literal['fg', 'bg']
-Ansi4BitAlias = Literal['4b', '16color']
-Ansi8BitAlias = Literal['8b', '256color']
-Ansi24BitAlias = Literal['24b', 'truecolor']
+Ansi4BitAlias = Literal['4b']
+Ansi8BitAlias = Literal['8b']
+Ansi24BitAlias = Literal['24b']
 AnsiColorAlias = Ansi4BitAlias | Ansi8BitAlias | Ansi24BitAlias
 
 

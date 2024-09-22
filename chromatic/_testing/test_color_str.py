@@ -16,10 +16,10 @@ from chromatic import (
     SgrParameter,
     ansi_4bit_to_rgb,
     ansi_8bit_to_rgb,
-    ansi_color_24Bit,
-    ansi_color_4Bit,
-    ansi_color_8Bit,
-    ansi_color_bytes,
+    ansicolor24Bit,
+    ansicolor4Bit,
+    ansicolor8Bit,
+    colorbytes,
     nearest_ansi_4bit_rgb,
     randcolor,
     rgb_luma_transform,
@@ -165,13 +165,13 @@ def _rand_color_str_array(n_rows=10, n_cols=10):
         current = []
         for col in range(n_cols):
             char = random.choice(printable_chars) if next(rand_bin_iter) else None
-            current.append(ColorStr(obj=char, color_spec=randcolor(), ansi_type=ansi_color_24Bit) if char else ' ')
+            current.append(ColorStr(obj=char, color_spec=randcolor(), ansi_type=ansicolor24Bit) if char else ' ')
         output.append(
             '{}{}{}'.format(
                 *map(
                     ''.join, (current,
                               *((ColorStr(color_spec=c, ansi_type=t) if isinstance(c, ColorStr) else c for c in current)
-                                for t in (ansi_color_8Bit, ansi_color_4Bit))))))
+                                for t in (ansicolor8Bit, ansicolor4Bit))))))
     return '\n'.join(output)
 
 
@@ -186,18 +186,18 @@ def test_performance_benchmark():
 # noinspection PyTypeChecker
 class TestAnsiColorBytes(unittest.TestCase):
 
-    def test_ansi_color_bytes_init(self):
-        self.assertIsInstance(ansi_color_bytes(b'\x1b[38;5;46m'), ansi_color_bytes)
-        self.assertIsInstance(ansi_color_4Bit(b'\x1b[31m'), ansi_color_4Bit)
-        self.assertIsInstance(ansi_color_8Bit(b'\x1b[38;5;46m'), ansi_color_8Bit)
-        self.assertIsInstance(ansi_color_24Bit(b'\x1b[38;2;255;0;0m'), ansi_color_24Bit)
+    def test_colorbytes_init(self):
+        self.assertIsInstance(colorbytes(b'\x1b[38;5;46m'), colorbytes)
+        self.assertIsInstance(ansicolor4Bit(b'\x1b[31m'), ansicolor4Bit)
+        self.assertIsInstance(ansicolor8Bit(b'\x1b[38;5;46m'), ansicolor8Bit)
+        self.assertIsInstance(ansicolor24Bit(b'\x1b[38;2;255;0;0m'), ansicolor24Bit)
 
-    def test_ansi_color_bytes_bad_input(self):
+    def test_colorbytes_bad_input(self):
         with self.assertRaises(ValueError):
-            ansi_color_4Bit(b'\x1b[invalidm')
+            ansicolor4Bit(b'\x1b[invalidm')
 
         with self.assertRaises(TypeError):
-            ansi_color_4Bit('not_bytes')
+            ansicolor4Bit('not_bytes')
 
     def test_ansi_4bit_to_rgb(self):
         for value, expected_rgb in enumerate(ANSI_4BIT_RGB):
@@ -205,14 +205,14 @@ class TestAnsiColorBytes(unittest.TestCase):
 
     def test_nearest_ansi_4bit_color(self):
         for _ in range(100):
-            r, g, b = _random_rgb()
+            r, g, b = randcolor().rgb
             nearest_color = nearest_ansi_4bit_rgb((r, g, b))
             self.assertIsInstance(nearest_color, tuple)
             self.assertEqual(len(nearest_color), 3)
 
     def test_rgb_to_ansi_8bit(self):
         for _ in range(100):
-            rgb = _random_rgb()
+            rgb = randcolor().rgb
             ansi_code = rgb_to_ansi_8bit(rgb)
             self.assertIsInstance(ansi_code, int)
             self.assertTrue(0 <= ansi_code <= 255)
@@ -225,11 +225,8 @@ class TestAnsiColorBytes(unittest.TestCase):
 
     def test_color_class(self):
         for _ in range(100):
-            r, g, b = _random_rgb()
-            color = Color((r, g, b))
-            self.assertIsInstance(color, Color)
-            self.assertEqual(color.rgb, (r, g, b))
-
+            color = randcolor()
+            r, g, b = color.rgb
             hex_value = (r << 16) + (g << 8) + b
             color_from_hex = Color(hex_value)
             self.assertEqual(color_from_hex.rgb, (r, g, b))
@@ -309,13 +306,12 @@ class TestColorStr(unittest.TestCase):
 
     def test_update_sgr(self):
         cs = ColorStr(ansi_type='4b', no_reset=True)
-        self.assertEqual(cs.base_str, '')
-        self.assertEqual(cs.ansi, b'')
+        self.assertEqual((cs.base_str, cs.ansi), ('', b''))
 
         red_fg = cs.update_sgr(SgrParameter.RED_BRIGHT_FG)
-        self.assertEqual([ansi_color_4Bit(b'91')], [p._value_ for p in red_fg._sgr_params_])
+        self.assertEqual([ansicolor4Bit(b'91')], red_fg._sgr_.values())
         red_fg += 'iadd'
-        self.assertEqual([ansi_color_4Bit(b'91')], [p._value_ for p in red_fg._sgr_params_])
+        self.assertEqual([ansicolor4Bit(b'91')], red_fg._sgr_.values())
         self.assertEqual(red_fg.base_str, 'iadd')
 
 

@@ -1,18 +1,115 @@
-__all__ = ['ColorNamespace', 'Fore', 'Back', 'Style', 'color_str_wrapper', 'display_named_colors', 'display_ansi256_color_range']
-from typing import Iterator, TypedDict, Unpack
+__all__ = [
+    'Back',
+    'ColorNamespace',
+    'Fore',
+    'Style',
+    'color_str_wrapper',
+]
+from collections.abc import Sequence
+from typing import Iterator, TypedDict, Union, Unpack
 from chromatic._typing import AnsiColorAlias
-from chromatic.ansi.core import AnsiColorFormat, Color, ColorStr, SgrParameter
-class DynamicNSMeta[_VT](type):
-    def __new__(mcls, clsname: str, bases: tuple[type, ...], mapping: dict[str, ...], **kwargs) -> DynamicNSMeta[_VT]: ...
+from chromatic.ansi.core import AnsiColorFormat, Color, ColorStr, SgrParameter, SgrSequence
+type _ColorLike = Union[Color, int, tuple[int, int, int]]
+def display_ansi256_color_range() -> list[list[ColorStr]]: ...
+def display_named_colors() -> list[ColorStr]: ...
+class AnsiBack(ColorNamespace[color_str_wrapper]):
+    def __call__(self, bg: _ColorLike) -> color_str_wrapper: ...
+class AnsiFore(ColorNamespace[color_str_wrapper]):
+    def __call__(self, fg: _ColorLike) -> color_str_wrapper: ...
+class AnsiStyle[StyleStr: color_str_wrapper](DynamicNamespace[StyleStr]):
+    RESET: StyleStr
+    BOLD: StyleStr
+    FAINT: StyleStr
+    ITALICS: StyleStr
+    SINGLE_UNDERLINE: StyleStr
+    SLOW_BLINK: StyleStr
+    RAPID_BLINK: StyleStr
+    NEGATIVE: StyleStr
+    CONCEALED_CHARS: StyleStr
+    CROSSED_OUT: StyleStr
+    PRIMARY: StyleStr
+    FIRST_ALT: StyleStr
+    SECOND_ALT: StyleStr
+    THIRD_ALT: StyleStr
+    FOURTH_ALT: StyleStr
+    FIFTH_ALT: StyleStr
+    SIXTH_ALT: StyleStr
+    SEVENTH_ALT: StyleStr
+    EIGHTH_ALT: StyleStr
+    NINTH_ALT: StyleStr
+    GOTHIC: StyleStr
+    DOUBLE_UNDERLINE: StyleStr
+    RESET_BOLD_AND_FAINT: StyleStr
+    RESET_ITALIC_AND_GOTHIC: StyleStr
+    RESET_UNDERLINES: StyleStr
+    RESET_BLINKING: StyleStr
+    POSITIVE: StyleStr
+    REVEALED_CHARS: StyleStr
+    RESET_CROSSED_OUT: StyleStr
+    BLACK_FG: StyleStr
+    RED_FG: StyleStr
+    GREEN_FG: StyleStr
+    YELLOW_FG: StyleStr
+    BLUE_FG: StyleStr
+    MAGENTA_FG: StyleStr
+    CYAN_FG: StyleStr
+    WHITE_FG: StyleStr
+    ANSI_256_SET_FG: StyleStr
+    DEFAULT_FG_COLOR: StyleStr
+    BLACK_BG: StyleStr
+    RED_BG: StyleStr
+    GREEN_BG: StyleStr
+    YELLOW_BG: StyleStr
+    BLUE_BG: StyleStr
+    MAGENTA_BG: StyleStr
+    CYAN_BG: StyleStr
+    WHITE_BG: StyleStr
+    ANSI_256_SET_BG: StyleStr
+    DEFAULT_BG_COLOR: StyleStr
+    FRAMED: StyleStr
+    ENCIRCLED: StyleStr
+    OVERLINED: StyleStr
+    NOT_FRAMED_OR_CIRCLED: StyleStr
+    IDEOGRAM_UNDER_OR_RIGHT: StyleStr
+    IDEOGRAM_2UNDER_OR_2RIGHT: StyleStr
+    IDEOGRAM_OVER_OR_LEFT: StyleStr
+    IDEOGRAM_2OVER_OR_2LEFT: StyleStr
+    CANCEL: StyleStr
+    BLACK_BRIGHT_FG: StyleStr
+    RED_BRIGHT_FG: StyleStr
+    GREEN_BRIGHT_FG: StyleStr
+    YELLOW_BRIGHT_FG: StyleStr
+    BLUE_BRIGHT_FG: StyleStr
+    MAGENTA_BRIGHT_FG: StyleStr
+    CYAN_BRIGHT_FG: StyleStr
+    WHITE_BRIGHT_FG: StyleStr
+    BLACK_BRIGHT_BG: StyleStr
+    RED_BRIGHT_BG: StyleStr
+    GREEN_BRIGHT_BG: StyleStr
+    YELLOW_BRIGHT_BG: StyleStr
+    BLUE_BRIGHT_BG: StyleStr
+    MAGENTA_BRIGHT_BG: StyleStr
+    CYAN_BRIGHT_BG: StyleStr
+    WHITE_BRIGHT_BG: StyleStr
+class color_str_wrapper:
+    def __add__(self, other) -> ColorStr: ...
+    def __call__(self, __obj=None) -> color_str_wrapper | ColorStr: ...
+    def __init__(self, **kwargs: Unpack[_ColorStrWrapperKwargs]) -> None: ...
+    def __repr__(self) -> str: ...
+    def __str__(self) -> str: ...
+    _ansi_type_: type[AnsiColorFormat]
+    _sgr_: SgrSequence
 class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
-    def __new__(cls, *args, **kwargs) -> DynamicNamespace[_VT]: ...
+    def as_dict(self) -> dict[str, _VT]: ...
     def __init__[_KT](self, **kwargs: dict[_KT, _VT]) -> None: ...
     def __init_subclass__(cls, **kwargs) -> DynamicNamespace[_VT]: ...
-    def __setattr__(self, name, value) -> None: ...
     def __iter__(self) -> Iterator[_VT]: ...
-    def as_dict(self) -> dict[str, _VT]: ...
+    def __new__(cls, *args, **kwargs) -> DynamicNamespace[_VT]: ...
+    def __setattr__(self, name, value) -> None: ...
     __members__: list[_VT]
-class _ColorNamespace[NamedColor: Color](DynamicNamespace[NamedColor]):
+class DynamicNSMeta[_VT](type):
+    def __new__(mcls, clsname: str, bases: tuple[type, ...], mapping: dict[str, ...], **kwargs) -> DynamicNSMeta[_VT]: ...
+class ColorNamespace[NamedColor: Color](DynamicNamespace[NamedColor]):
     BLACK: NamedColor
     DIM_GREY: NamedColor
     GREY: NamedColor
@@ -153,98 +250,12 @@ class _ColorNamespace[NamedColor: Color](DynamicNamespace[NamedColor]):
     PINK: NamedColor
     LIGHT_PINK: NamedColor
 # noinspection PyTypedDict
-class ColorStrWrapperKwargs(TypedDict, total=False):
-    fg: int | Color | tuple[int, int, int]
-    bg: int | Color | tuple[int, int, int]
-    ansi_type: AnsiColorAlias | type[AnsiColorFormat]
-    sgr_params: tuple[SgrParameter, ...]
-class color_str_wrapper:
-    def __init__(self, **kwargs: Unpack[ColorStrWrapperKwargs]) -> None: ...
-    def __call__(self, __obj: object = None) -> ColorStr: ...
-    def __add__(self, other) -> ColorStr: ...
-    def __str__(self) -> ColorStr: ...
-    def __repr__(self) -> str: ...
-    ansi: ColorStr
-class AnsiFore(_ColorNamespace[color_str_wrapper]): ...
-class AnsiBack(_ColorNamespace[color_str_wrapper]): ...
-class AnsiStyle[StyleStr: color_str_wrapper](DynamicNamespace[StyleStr]):
-    RESET: StyleStr
-    BOLD: StyleStr
-    FAINT: StyleStr
-    ITALICS: StyleStr
-    SINGLE_UNDERLINE: StyleStr
-    SLOW_BLINK: StyleStr
-    RAPID_BLINK: StyleStr
-    NEGATIVE: StyleStr
-    CONCEALED_CHARS: StyleStr
-    CROSSED_OUT: StyleStr
-    PRIMARY: StyleStr
-    FIRST_ALT: StyleStr
-    SECOND_ALT: StyleStr
-    THIRD_ALT: StyleStr
-    FOURTH_ALT: StyleStr
-    FIFTH_ALT: StyleStr
-    SIXTH_ALT: StyleStr
-    SEVENTH_ALT: StyleStr
-    EIGHTH_ALT: StyleStr
-    NINTH_ALT: StyleStr
-    GOTHIC: StyleStr
-    DOUBLE_UNDERLINE: StyleStr
-    RESET_BOLD_AND_FAINT: StyleStr
-    RESET_ITALIC_AND_GOTHIC: StyleStr
-    RESET_UNDERLINES: StyleStr
-    RESET_BLINKING: StyleStr
-    POSITIVE: StyleStr
-    REVEALED_CHARS: StyleStr
-    RESET_CROSSED_OUT: StyleStr
-    BLACK_FG: StyleStr
-    RED_FG: StyleStr
-    GREEN_FG: StyleStr
-    YELLOW_FG: StyleStr
-    BLUE_FG: StyleStr
-    MAGENTA_FG: StyleStr
-    CYAN_FG: StyleStr
-    WHITE_FG: StyleStr
-    ANSI_256_SET_FG: StyleStr
-    DEFAULT_FG_COLOR: StyleStr
-    BLACK_BG: StyleStr
-    RED_BG: StyleStr
-    GREEN_BG: StyleStr
-    YELLOW_BG: StyleStr
-    BLUE_BG: StyleStr
-    MAGENTA_BG: StyleStr
-    CYAN_BG: StyleStr
-    WHITE_BG: StyleStr
-    ANSI_256_SET_BG: StyleStr
-    DEFAULT_BG_COLOR: StyleStr
-    FRAMED: StyleStr
-    ENCIRCLED: StyleStr
-    OVERLINED: StyleStr
-    NOT_FRAMED_OR_CIRCLED: StyleStr
-    IDEOGRAM_UNDER_OR_RIGHT: StyleStr
-    IDEOGRAM_2UNDER_OR_2RIGHT: StyleStr
-    IDEOGRAM_OVER_OR_LEFT: StyleStr
-    IDEOGRAM_2OVER_OR_2LEFT: StyleStr
-    CANCEL: StyleStr
-    BLACK_BRIGHT_FG: StyleStr
-    RED_BRIGHT_FG: StyleStr
-    GREEN_BRIGHT_FG: StyleStr
-    YELLOW_BRIGHT_FG: StyleStr
-    BLUE_BRIGHT_FG: StyleStr
-    MAGENTA_BRIGHT_FG: StyleStr
-    CYAN_BRIGHT_FG: StyleStr
-    WHITE_BRIGHT_FG: StyleStr
-    BLACK_BRIGHT_BG: StyleStr
-    RED_BRIGHT_BG: StyleStr
-    GREEN_BRIGHT_BG: StyleStr
-    YELLOW_BRIGHT_BG: StyleStr
-    BLUE_BRIGHT_BG: StyleStr
-    MAGENTA_BRIGHT_BG: StyleStr
-    CYAN_BRIGHT_BG: StyleStr
-    WHITE_BRIGHT_BG: StyleStr
-ColorNamespace = _ColorNamespace()
-Fore = AnsiFore()
+class _ColorStrWrapperKwargs(TypedDict, total=False):
+    ansi_type: Union[AnsiColorAlias, type[AnsiColorFormat]]
+    bg: _ColorLike
+    fg: _ColorLike
+    sgr_params: Sequence[Union[int, SgrParameter]]
 Back = AnsiBack()
+# ColorNamespace = _ColorNamespace()
+Fore = AnsiFore()
 Style = AnsiStyle()
-def display_named_colors() -> list[ColorStr]: ...
-def display_ansi256_color_range() -> list[list[ColorStr]]: ...

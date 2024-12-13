@@ -12,7 +12,7 @@ __all__ = [
 
 from enum import IntEnum
 from types import MappingProxyType
-from typing import Callable, Iterable, Iterator, Union, overload
+from typing import Iterable, Iterator, overload, Union
 
 
 class ControlCharacter(IntEnum):
@@ -56,14 +56,13 @@ class ControlCharacter(IntEnum):
 
 
 CP437_TRANS_TABLE = MappingProxyType(
-    str.maketrans(
-        dict(
-            zip(
-                sorted(c for c in ControlCharacter if c is not ControlCharacter.SP),
-                [None, 0x263a, 0x263b, 0x2665, 0x2666, 0x2663, 0x2660, 0x2022, 0x25d8, 0x25cb,
-                 0x25d9, 0x2642, 0x2640, 0x266a, 0x266b, 0x263c, 0x25ba, 0x25c4, 0x2195, 0x203c,
-                 0xb6, 0xa7, 0x25ac, 0x21a8, 0x2191, 0x2193, 0x2192, 0x2190, 0x221f, 0x2194, 0x25b2,
-                 0x25bc, 0x2302, None]))))
+    {
+        0: None, 1: 0x263a, 2: 0x263b, 3: 0x2665, 4: 0x2666, 5: 0x2663, 6: 0x2660, 7: 0x2022,
+        8: 0x25d8, 9: 0x25cb, 10: 0x25d9, 11: 0x2642, 12: 0x2640, 13: 0x266a, 14: 0x266b,
+        15: 0x263c, 16: 0x25ba, 17: 0x25c4, 18: 0x2195, 19: 0x203c, 20: 0xb6, 21: 0xa7,
+        22: 0x25ac, 23: 0x21a8, 24: 0x2191, 25: 0x2193, 0x1a: 0x2192, 0x1b: 0x2190,
+        0x1c: 0x221f, 0x1d: 0x2194, 0x1e: 0x25b2, 0x1f: 0x25bc, 0x7f: 0x2302, 0xa0: None
+    })
 
 
 @overload
@@ -87,19 +86,20 @@ def translate_cp437[_T: (int, str)](
 def translate_cp437(
     __x: Union[str, Iterable[str]],
     *,
-    ignore: Union[int, str, Iterable[Union[int, str]]] = None
+    ignore: Union[int, Iterable[int]] = None
 ) -> Union[str, Iterator[str]]:
-    translation_table = CP437_TRANS_TABLE.copy()
-    if ignore:
-        if issubclass(vt := type(ignore), (str, int)):
-            translation_table.pop(ignore if issubclass(vt, int) else ord(ignore))
+    keys_view = set(CP437_TRANS_TABLE.keys())
+    if ignore is not None:
+        if isinstance(ignore, Iterable):
+            keys_view.difference_update(ignore)
         else:
-            for char in ignore:
-                translation_table.pop(ord(char) if isinstance(char, str) else char)
+            keys_view.discard(ignore)
+    trans_table = {k: v for (k, v) in
+                   CP437_TRANS_TABLE.items()
+                   if k in keys_view}
     if not isinstance(__x, str):
-        f: Callable[[str], str] = lambda s: str.translate(s, translation_table)
-        return iter(map(f, __x))
-    return __x.translate(translation_table)
+        return iter(map(lambda s: str.translate(s, trans_table), __x))
+    return __x.translate(trans_table)
 
 
 def cp437_printable():

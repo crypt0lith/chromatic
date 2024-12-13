@@ -1,6 +1,10 @@
 /.idea/
-/chromatic/config.json
-/chromatic/data.pyi
-/chromatic/fonts/*/*
-/chromatic/images/*
-/chromatic/_testing/_*
+__pycache__/
+*.pyc
+*.pyo
+/tests/_*
+/dist/
+/docs/
+/chromatic_python.egg-info/
+/chromatic/data/*.json
+/chromatic/data/*.pyi

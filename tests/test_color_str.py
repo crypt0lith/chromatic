@@ -14,21 +14,22 @@ from chromatic import (
     Color,
     ColorStr,
     SgrParameter,
-    ansi_4bit_to_rgb,
-    ansi_8bit_to_rgb,
     ansicolor24Bit,
     ansicolor4Bit,
     ansicolor8Bit,
-    colorbytes,
+    colorbytes
+)
+from chromatic.color.colorconv import (
+    ansi_4bit_to_rgb,
+    ansi_8bit_to_rgb,
     nearest_ansi_4bit_rgb,
-    randcolor,
-    rgb_luma_transform,
     rgb_to_ansi_8bit
 )
-from chromatic.ansi.palette import ColorNamespace
+from chromatic.color.core import randcolor, rgb_luma_transform
+from chromatic.color.palette import ColorNamespace
 
 
-def coerce_argspec[R, ** P](f: Callable[P, R] | FunctionType | type,
+def coerce_argspec[** P, R](f: Callable[P, R] | FunctionType | type,
                             args: P.args = None,
                             kwargs: P.kwargs = None,
                             *,
@@ -54,19 +55,13 @@ def coerce_argspec[R, ** P](f: Callable[P, R] | FunctionType | type,
     return args, kwargs
 
 
-class starcycle[R]:
-
-    def __init__[** P](self,
-                       f: Callable[P, R] | FunctionType | type,
-                       args: P.args = None,
-                       kwargs: P.kwargs = None): self.__func = coerce_argspec(f, args, kwargs, retfunc=True)
-
-    def __iter__(self): yield from self.__func()
-
-
 class cprofile_wrapper[** P, R]:
 
-    def __init__(self, func: Callable[P, R] | FunctionType | type = None, *, number=10000, use_perf_counter=False):
+    def __init__(self,
+                 func: Callable[P, R] | FunctionType | type = None,
+                 *,
+                 number=10000,
+                 use_perf_counter=False):
         self.func = func
         self.number = number
         self.use_perf_counter = use_perf_counter
@@ -165,13 +160,16 @@ def _rand_color_str_array(n_rows=10, n_cols=10):
         current = []
         for col in range(n_cols):
             char = random.choice(printable_chars) if next(rand_bin_iter) else None
-            current.append(ColorStr(obj=char, color_spec=randcolor(), ansi_type=ansicolor24Bit) if char else ' ')
+            current.append(
+                ColorStr(
+                    obj=char, color_spec=randcolor(), ansi_type=ansicolor24Bit) if char else ' ')
         output.append(
             '{}{}{}'.format(
                 *map(
-                    ''.join, (current,
-                              *((ColorStr(color_spec=c, ansi_type=t) if isinstance(c, ColorStr) else c for c in current)
-                                for t in (ansicolor8Bit, ansicolor4Bit))))))
+                    ''.join, (current, *(
+                        (ColorStr(color_spec=c, ansi_type=t)
+                         if isinstance(c, ColorStr) else c for c in current)
+                        for t in (ansicolor8Bit, ansicolor4Bit))))))
     return '\n'.join(output)
 
 
@@ -294,7 +292,7 @@ class TestColorStr(unittest.TestCase):
             b = random.randint(0, 255)
             random_text = ''.join(random.choices(ascii_letters, k=random.randint(5, 15)))
 
-            cs_color = ColorStr(random_text, dict(fg=Color((r, g, b))))
+            cs_color = ColorStr(random_text, dict(fg=Color.from_rgb((r, g, b))))
             self.assertEqual(cs_color.fg.rgb, (r, g, b))
 
             cs_rgb = ColorStr(random_text, dict(fg=(r, g, b)))

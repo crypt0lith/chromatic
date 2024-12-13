@@ -1,16 +1,4 @@
-from . import ansi, ascii, data
-from .ansi import (
-    Back,
-    Color,
-    ColorStr,
-    Fore,
-    SgrParameter,
-    Style,
-    ansicolor24Bit,
-    ansicolor4Bit,
-    ansicolor8Bit,
-    colorbytes
-)
+from . import ascii, color, data
 from .ascii import (
     ansi2img,
     ansi_quantize,
@@ -21,7 +9,6 @@ from .ascii import (
     equalize_white_point,
     get_font_key,
     get_font_object,
-    get_glyph_masks,
     img2ansi,
     img2ascii,
     read_ans,
@@ -29,4 +16,11 @@ from .ascii import (
     reshape_ansi,
     to_sgr_array
 )
-# __all__ = list(set(ansi.__all__) | set(ascii.__all__))
+from .ascii._glyph_proc import get_glyph_masks
+from .color import (
+    ansicolor24Bit, ansicolor4Bit, ansicolor8Bit, Back, Color, colorbytes, ColorStr, Fore,
+    SgrParameter, Style
+)
+from .data import register_user_font
+
+__all__ = []

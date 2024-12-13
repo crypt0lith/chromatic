@@ -5,17 +5,35 @@ __all__ = [
     'Style',
     'color_str_wrapper',
 ]
+
 from collections.abc import Sequence
-from typing import Iterator, TypedDict, Union, Unpack
-from chromatic._typing import AnsiColorAlias
-from chromatic.ansi.core import AnsiColorFormat, Color, ColorStr, SgrParameter, SgrSequence
+from types import MappingProxyType
+from typing import Callable, Iterator, overload, TypedDict, Union, Unpack
+
+from chromatic._typing import AnsiColorAlias, Int3Tuple
+from chromatic.color.core import AnsiColorFormat, Color, ColorStr, SgrParameter, SgrSequence
+
 type _ColorLike = Union[Color, int, tuple[int, int, int]]
+
+
 def display_ansi256_color_range() -> list[list[ColorStr]]: ...
+
+
 def display_named_colors() -> list[ColorStr]: ...
+
+
 class AnsiBack(ColorNamespace[color_str_wrapper]):
+    RESET: color_str_wrapper
+
     def __call__(self, bg: _ColorLike) -> color_str_wrapper: ...
+
+
 class AnsiFore(ColorNamespace[color_str_wrapper]):
+    RESET: color_str_wrapper
+
     def __call__(self, fg: _ColorLike) -> color_str_wrapper: ...
+
+
 class AnsiStyle[StyleStr: color_str_wrapper](DynamicNamespace[StyleStr]):
     RESET: StyleStr
     BOLD: StyleStr
@@ -91,24 +109,52 @@ class AnsiStyle[StyleStr: color_str_wrapper](DynamicNamespace[StyleStr]):
     MAGENTA_BRIGHT_BG: StyleStr
     CYAN_BRIGHT_BG: StyleStr
     WHITE_BRIGHT_BG: StyleStr
+
+
 class color_str_wrapper:
+
     def __add__(self, other) -> ColorStr: ...
+
     def __call__(self, __obj=None) -> color_str_wrapper | ColorStr: ...
+
     def __init__(self, **kwargs: Unpack[_ColorStrWrapperKwargs]) -> None: ...
+
     def __repr__(self) -> str: ...
+
     def __str__(self) -> str: ...
+
     _ansi_type_: type[AnsiColorFormat]
     _sgr_: SgrSequence
+
+
 class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
+
     def as_dict(self) -> dict[str, _VT]: ...
+
     def __init__[_KT](self, **kwargs: dict[_KT, _VT]) -> None: ...
+
     def __init_subclass__(cls, **kwargs) -> DynamicNamespace[_VT]: ...
+
     def __iter__(self) -> Iterator[_VT]: ...
+
     def __new__(cls, *args, **kwargs) -> DynamicNamespace[_VT]: ...
+
     def __setattr__(self, name, value) -> None: ...
+
     __members__: list[_VT]
+
+
 class DynamicNSMeta[_VT](type):
-    def __new__(mcls, clsname: str, bases: tuple[type, ...], mapping: dict[str, ...], **kwargs) -> DynamicNSMeta[_VT]: ...
+
+    def __new__(
+        mcls,
+        clsname: str,
+        bases: tuple[type, ...],
+        mapping: dict[str, ...],
+        **kwargs
+    ) -> DynamicNSMeta[_VT]: ...
+
+
 class ColorNamespace[NamedColor: Color](DynamicNamespace[NamedColor]):
     BLACK: NamedColor
     DIM_GREY: NamedColor
@@ -249,13 +295,36 @@ class ColorNamespace[NamedColor: Color](DynamicNamespace[NamedColor]):
     CRIMSON: NamedColor
     PINK: NamedColor
     LIGHT_PINK: NamedColor
+
+
 # noinspection PyTypedDict
 class _ColorStrWrapperKwargs(TypedDict, total=False):
     ansi_type: Union[AnsiColorAlias, type[AnsiColorFormat]]
     bg: _ColorLike
     fg: _ColorLike
     sgr_params: Sequence[Union[int, SgrParameter]]
+
+
+class rgb_dispatch[** P, R]:
+    color_ns: MappingProxyType[str, Int3Tuple]
+
+    @overload
+    def __new__(
+        cls,
+        func: Callable[P, R], /, *, args: Sequence[str] = ()
+    ):
+        return func
+
+    @overload
+    def __new__(
+        cls,
+        func: None = None, /, *, args: Sequence[str] = ()
+    ) -> type[rgb_dispatch]:
+        ...
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+
+
 Back = AnsiBack()
-# ColorNamespace = _ColorNamespace()
 Fore = AnsiFore()
 Style = AnsiStyle()

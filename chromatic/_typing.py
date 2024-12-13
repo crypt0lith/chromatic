@@ -1,32 +1,79 @@
-from typing import Any, Callable, Literal, Sequence, TypeVar, Union, get_args, get_origin, get_type_hints
+from __future__ import annotations
 
-from numpy import dtype, ndarray, uint8
+from collections.abc import Mapping
+from functools import reduce
+from numbers import Number
+from types import UnionType
+from typing import (
+    Any, Callable, Concatenate, get_args, get_origin, get_type_hints, Iterable, Literal, ParamSpec,
+    Protocol, Sequence, SupportsRound, TYPE_CHECKING, TypeVar, Union
+)
 
-type TupleOf3[T] = tuple[T, T, T]
-type Float3Tuple = TupleOf3[float]
-type Int3Tuple = TupleOf3[int]
-type FloatSequence = Sequence[float]
-type IntSequence = Sequence[int]
-type RGBArrayLike = ndarray[Any, dtype[uint8]]
-type RGBVector = Union[Int3Tuple, IntSequence, RGBArrayLike]
+from numpy import dtype, float64, generic, ndarray, number, uint8
+from numpy._typing import _ArrayLike, NDArray
+from PIL.Image import Image
+from PIL.ImageFont import FreeTypeFont
+
+from chromatic.data import UserFont
+
+_P = ParamSpec('_P')
+_T = TypeVar('_T')
+_T_co = TypeVar('_T_co', covariant=True)
+_T_contra = TypeVar('_T_contra', contravariant=True)
+_AnyNumber_co = TypeVar('_AnyNumber_co', number, Number, covariant=True)
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsRichComparison, SupportsDivMod
+
+
+    class SupportsRoundAndDivMod(
+        SupportsRound[_T_co],
+        SupportsDivMod[Any, _T_co],
+        Protocol
+    ):
+        ...
+
+type ArrayReducerFunc[_SCT: generic] = Callable[Concatenate[_ArrayLike[_SCT], _P], NDArray[_SCT]]
+type KeyFunction[_T] = Callable[[_T], SupportsRichComparison]
+type ShapedNDArray[_Shape: tuple[int, ...], _SCT: generic] = ndarray[_Shape, dtype[_SCT]]
+type MatrixLike[_SCT: generic] = ShapedNDArray[TupleOf2[int], _SCT]
+type SquareMatrix[_I: int, _SCT: generic] = ShapedNDArray[TupleOf2[_I], _SCT]
+type GlyphArray[_SCT: generic] = SquareMatrix[Literal[24], _SCT]
+type TupleOf2[_T] = tuple[_T, _T]
+type TupleOf3[_T] = tuple[_T, _T, _T]
+Float3Tuple = TupleOf3[float]
+Int3Tuple = TupleOf3[int]
+FloatSequence = Sequence[float]
+IntSequence = Sequence[int]
+GlyphBitmask = GlyphArray[bool]
+Bitmask = MatrixLike[bool]
+GreyscaleGlyphArray = GlyphArray[float64]
+GreyscaleArray = MatrixLike[float64]
+RGBArray = ShapedNDArray[tuple[int, int, Literal[3]], uint8]
+RGBPixel = ShapedNDArray[tuple[Literal[3]], uint8]
+
+RGBImageLike = Union[Image, RGBArray]
+RGBVectorLike = Union[Int3Tuple, IntSequence, RGBPixel]
 ColorDictKeys = Literal['fg', 'bg']
 Ansi4BitAlias = Literal['4b']
 Ansi8BitAlias = Literal['8b']
 Ansi24BitAlias = Literal['24b']
 AnsiColorAlias = Ansi4BitAlias | Ansi8BitAlias | Ansi24BitAlias
+FontArgType = Union[FreeTypeFont | UserFont, str, int]
 
 
-def is_matching_type(value, expected_type):
-    if expected_type is Any:
+def is_matching_type(value, typ):
+    if typ is Any:
         return True
-    origin, args = deconstruct_type(expected_type)
+    origin, args = deconstruct_type(typ)
     if origin is Union:
         return any(is_matching_type(value, arg) for arg in args)
     elif origin is Literal:
         return value in args
-    elif isinstance(expected_type, TypeVar):
-        if expected_type.__constraints__:
-            return any(is_matching_type(value, constraint) for constraint in expected_type.__constraints__)
+    elif isinstance(typ, TypeVar):
+        if typ.__constraints__:
+            return any(
+                is_matching_type(value, constraint) for constraint in typ.__constraints__)
         else:
             return True
     elif origin is type:
@@ -40,7 +87,7 @@ def is_matching_type(value, expected_type):
         else:
             return issubclass(value, target_type)
     elif origin is Callable:
-        return is_matching_callable(value, expected_type)
+        return is_matching_callable(value, typ)
     elif origin is list:
         if not isinstance(value, list):
             return False
@@ -53,7 +100,9 @@ def is_matching_type(value, expected_type):
         if not args:
             return True
         key_type, val_type = args
-        return all(is_matching_type(k, key_type) and is_matching_type(v, val_type) for k, v in value.items())
+        return all(
+            is_matching_type(k, key_type) and is_matching_type(v, val_type) for k, v in
+            value.items())
     elif origin is tuple:
         if not isinstance(value, tuple):
             return False
@@ -64,7 +113,7 @@ def is_matching_type(value, expected_type):
         return all(is_matching_type(v, t) for v, t in zip(value, args))
     else:
         try:
-            return isinstance(value, expected_type)
+            return isinstance(value, typ)
         except TypeError:
             return False
 
@@ -81,18 +130,39 @@ def is_matching_callable(value, expected_type):
     return id(value) == id(expected_type)
 
 
+def pseudo_union(ts: Iterable[type]) -> Union[type, UnionType]:
+    return reduce(lambda x, y: x | y, ts)
+
+
+def type_error_msg(err_obj, *expected, context: str = '', obj_repr=False):
+    n_expected = len(expected)
+    name_slots = [f"{{{n}.__qualname__!r}}" for n in range(n_expected)]
+    if name_slots and n_expected > 1:
+        name_slots[-1] = f"or {name_slots[-1]}"
+    names = (', ' if n_expected > 2 else ' ').join(
+        [context.strip()] + name_slots).format(*expected)
+    if not obj_repr:
+        if not isinstance(err_obj, type):
+            err_obj = type(err_obj)
+        oops = repr(err_obj.__qualname__)
+    elif not isinstance(err_obj, str):
+        oops = repr(err_obj)
+    else:
+        oops = err_obj
+    return f"expected {names}, got {oops} instead"
+
+
 def is_matching_typed_dict(__d: dict, typed_dict: type[dict]) -> tuple[bool, str]:
     if not isinstance(__d, dict):
-        return False, f"expected {dict.__qualname__}, got {type(__d).__qualname__!r} instead"
+        return False, type_error_msg(__d, dict)
     expected = get_type_hints(typed_dict)
-    if unexpected := set(__d).difference(expected):
+    if unexpected := __d.keys() - expected:
         return False, f"unexpected keyword arguments: {unexpected}"
-    if missing := set(k for k in getattr(typed_dict, '__required_keys__', expected.keys()) if k not in __d):
+    if missing := set(getattr(typed_dict, '__required_keys__', expected)) - __d.keys():
         return False, f"missing required keys: {missing}"
     for name, typ in expected.items():
-        if name in __d:
-            field = __d[name]
-            if not is_matching_type(field, typ):
-                return False, (f"expected keyword argument {name!r} to be {typ.__qualname__}, "
-                               f"got {type(field).__qualname__!r} instead")
+        if ((field := __d.get(name)) is not None) and not is_matching_type(field, typ):
+            return False, type_error_msg(
+                field, typ,
+                context=f'keyword argument {name!r} of type')
     return True, ''

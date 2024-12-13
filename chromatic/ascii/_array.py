@@ -7,8 +7,18 @@ from collections.abc import Mapping
 from functools import lru_cache, partial
 from os import PathLike
 from typing import (
-    Any, Callable, cast, Iterable, Literal, Optional, overload, Self, Sequence, TYPE_CHECKING,
-    TypeGuard, Union
+    Any,
+    Callable,
+    cast,
+    Iterable,
+    Literal,
+    Optional,
+    overload,
+    Self,
+    Sequence,
+    TYPE_CHECKING,
+    TypeGuard,
+    Union,
 )
 
 import cv2 as cv
@@ -21,13 +31,29 @@ from PIL.ImageFont import FreeTypeFont, truetype
 from sklearn.cluster import DBSCAN
 
 from .._typing import (
-    FontArgType, GreyscaleArray, GreyscaleGlyphArray, Int3Tuple, MatrixLike,
-    RGBArray, RGBImageLike, TupleOf2, type_error_msg
+    FontArgType,
+    GreyscaleArray,
+    GreyscaleGlyphArray,
+    Int3Tuple,
+    MatrixLike,
+    RGBArray,
+    RGBImageLike,
+    TupleOf2,
+    type_error_msg,
 )
 from ..color.colorconv import nearest_ansi_4bit_rgb, nearest_ansi_8bit_rgb
 from ..color.core import (
-    ansicolor24Bit, ansicolor4Bit, ansicolor8Bit, AnsiColorParam, AnsiColorType, Color,
-    ColorStr, DEFAULT_ANSI, get_ansi_type, SGR_RESET, SgrSequence
+    ansicolor24Bit,
+    ansicolor4Bit,
+    ansicolor8Bit,
+    AnsiColorParam,
+    AnsiColorType,
+    Color,
+    ColorStr,
+    DEFAULT_ANSI,
+    get_ansi_type,
+    SGR_RESET,
+    SgrSequence,
 )
 from ..color.palette import rgb_dispatch
 from ..data import UserFont
@@ -35,10 +61,26 @@ from ..data import UserFont
 if TYPE_CHECKING:
     from _typeshed import AnyStr_co
 
-__all__ = ['ansi2img', 'ansi_quantize', 'ascii2img', 'contrast_stretch', 'equalize_white_point',
-           'get_font_key', 'get_font_object', 'img2ansi', 'img2ascii', 'is_csi_param',
-           'read_ans', 'render_ans', 'render_font_char', 'render_font_str',
-           'reshape_ansi', 'scale_saturation', 'shuffle_char_set', 'to_sgr_array']
+__all__ = [
+    'ansi2img',
+    'ansi_quantize',
+    'ascii2img',
+    'contrast_stretch',
+    'equalize_white_point',
+    'get_font_key',
+    'get_font_object',
+    'img2ansi',
+    'img2ascii',
+    'is_csi_param',
+    'read_ans',
+    'render_ans',
+    'render_font_char',
+    'render_font_str',
+    'reshape_ansi',
+    'scale_saturation',
+    'shuffle_char_set',
+    'to_sgr_array',
+]
 
 
 def get_font_key(font: FreeTypeFont):
@@ -53,32 +95,25 @@ def get_font_key(font: FreeTypeFont):
             missing.append(f"{s % 'family'!r}")
         raise ValueError(
             f"Unable to generate font key due to missing fields {' and '.join(missing)}: "
-            f"{font_key}")
+            f"{font_key}"
+        )
     return cast(tuple[str, str], font_key)
 
 
 @overload
 def get_font_object(
-    font: FontArgType,
-    *,
-    retpath: Literal[False] = False
-) -> FreeTypeFont:
-    ...
+    font: FontArgType, *, retpath: Literal[False] = False
+) -> FreeTypeFont: ...
 
 
 @overload
-def get_font_object(
-    font: FontArgType,
-    *,
-    retpath: Literal[True]
-) -> str:
-    ...
+def get_font_object(font: FontArgType, *, retpath: Literal[True]) -> str: ...
 
 
 @lru_cache
-def get_font_object(font: FontArgType,
-                    *,
-                    retpath: bool = False) -> Union[FreeTypeFont, str]:
+def get_font_object(
+    font: FontArgType, *, retpath: bool = False
+) -> Union[FreeTypeFont, str]:
     def path2obj(__path: AnyStr_co):
         return truetype(__path, 24)
 
@@ -101,38 +136,43 @@ def get_font_object(font: FontArgType,
             font_obj = path2obj(font)
             return font_obj.path if retpath else font_obj
         except OSError:
-            raise FileNotFoundError(
-                font) from None
+            raise FileNotFoundError(font) from None
     raise TypeError(
-        f"Expected {FreeTypeFont.__qualname__!r}, got {type(font).__qualname__!r} instead")
+        f"Expected {FreeTypeFont.__qualname__!r}, got {type(font).__qualname__!r} instead"
+    )
 
 
-def shuffle_char_set(char_set: Iterable[str],
-                     *xi: *tuple[Union[int, slice, None], ...]):
+def shuffle_char_set(
+    char_set: Iterable[str], *xi: *tuple[Union[int, slice, None], ...]
+):
     if not isinstance(char_set, Iterable):
         raise TypeError(
             f"Expected 'char_set' to be iterable type, "
-            f"got {type(char_set).__qualname__!r} instead")
+            f"got {type(char_set).__qualname__!r} instead"
+        )
     if xi:
         if (n_args := len(xi)) > 3:
-            raise ValueError(
-                f"Unexpected extra args: expected max 3, got {n_args}")
+            raise ValueError(f"Unexpected extra args: expected max 3, got {n_args}")
         if n_args == 1:
             xi = xi[0]
             vt = type(xi)
             if vt not in {int, slice}:
-                raise TypeError(
-                    f"Unexpected arg type: {vt.__qualname__!r}")
+                raise TypeError(f"Unexpected arg type: {vt.__qualname__!r}")
             if vt is int:
                 xi = slice(xi)
         else:
             good_types = {int, type(None)}
             if bad_types := set(map(type, xi)) - good_types:
-                err = type_error_msg(
-                    ', '.join(sorted(repr(t.__qualname__) for t in bad_types)), *good_types,
-                    obj_repr=True).removeprefix('expected').lstrip()
-                raise ValueError(
-                    f"Multiple args must be {err}")
+                err = (
+                    type_error_msg(
+                        ', '.join(sorted(repr(t.__qualname__) for t in bad_types)),
+                        *good_types,
+                        obj_repr=True,
+                    )
+                    .removeprefix('expected')
+                    .lstrip()
+                )
+                raise ValueError(f"Multiple args must be {err}")
             xi = slice(*xi)
     else:
         xi = slice(0, None)
@@ -148,29 +188,35 @@ def render_font_str(__s: str, font: FontArgType):
         lines = __s.splitlines()
         maxlen = max(map(len, lines))
         stacked = np.vstack(
-            [np.hstack(
-                [np.array(render_font_char(c, font=font), dtype=np.uint8)
-                 for c in line])
-                for line in map(lambda x: f'{x:<{maxlen}}', lines)])
+            [
+                np.hstack(
+                    [
+                        np.array(render_font_char(c, font=font), dtype=np.uint8)
+                        for c in line
+                    ]
+                )
+                for line in map(lambda x: f'{x:<{maxlen}}', lines)
+            ]
+        )
         return Image.fromarray(stacked)
     return render_font_char(__s, font)
 
 
-def render_font_char(__c: str,
-                     font: FontArgType,
-                     size=(24, 24),
-                     fill: Int3Tuple = (255, 255, 255)):
+def render_font_char(
+    __c: str, font: FontArgType, size=(24, 24), fill: Int3Tuple = (255, 255, 255)
+):
     if len(__c) > 1:
         raise TypeError(
             f"{render_font_char.__name__}() expected a character, "
-            f"but string of length {len(__c)} found")
+            f"but string of length {len(__c)} found"
+        )
     img = Image.new('RGB', size=size)
     draw = ImageDraw.Draw(img)
     font_obj = get_font_object(font)
     bbox = draw.textbbox((0, 0), __c, font=font_obj)
     x_offset, y_offset = (
-        (size[i] - (bbox[i + 2] - bbox[i])) // 2 - bbox[i]
-        for i in range(2))
+        (size[i] - (bbox[i + 2] - bbox[i])) // 2 - bbox[i] for i in range(2)
+    )
     draw.text((x_offset, y_offset), __c, font=font_obj, fill=fill)
     return img
 
@@ -188,15 +234,13 @@ def get_rgb_array(__img: Union[RGBImageLike, str, PathLike[str]]) -> RGBArray:
         elif is_array(img):
             conv = {
                 2: lambda im: cv.cvtColor(im[:, :, 0], cv.COLOR_GRAY2RGB),
-                4: lambda im: cv.cvtColor(im, cv.COLOR_RGBA2RGB)
+                4: lambda im: cv.cvtColor(im, cv.COLOR_RGBA2RGB),
             }.get(img.ndim)
             if conv is None:
-                raise ValueError(
-                    f"unexpected array shape: {img.shape!r}")
+                raise ValueError(f"unexpected array shape: {img.shape!r}")
             img = conv(img)
         else:
-            raise TypeError(
-                type_error_msg(img, PathLike, ImageType, ndarray))
+            raise TypeError(type_error_msg(img, PathLike, ImageType, ndarray))
         img = uint8(img)
     return img
 
@@ -212,14 +256,17 @@ def _apply_rgb_ufunc(img: RGBArray, rgb_ufunc: np.ufunc) -> RGBArray:
 _ANSI_QUANTIZERS = {
     t: partial(_apply_rgb_ufunc, rgb_ufunc=_rgb_transform2vec(f))
     for (t, f) in zip(
-        (ansicolor4Bit, ansicolor8Bit),
-        (nearest_ansi_4bit_rgb, nearest_ansi_8bit_rgb))}
+        (ansicolor4Bit, ansicolor8Bit), (nearest_ansi_4bit_rgb, nearest_ansi_8bit_rgb)
+    )
+}
 
 
-def ansi_quantize(img: RGBArray,
-                  ansi_type: type[ansicolor4Bit | ansicolor8Bit],
-                  *,
-                  equalize: bool | Literal['white_point'] = True) -> RGBArray:
+def ansi_quantize(
+    img: RGBArray,
+    ansi_type: type[ansicolor4Bit | ansicolor8Bit],
+    *,
+    equalize: bool | Literal['white_point'] = True,
+) -> RGBArray:
     """Color-quantize an RGB array into ANSI 4-bit or 8-bit color space.
 
     Parameters
@@ -253,21 +300,25 @@ def ansi_quantize(img: RGBArray,
         from .._typing import pseudo_union
 
         context = "{}=type[{}]".format(
-            f"{ansi_type=}".partition('=')[0], ' | '.join(
-                getattr(x, '__name__', f"{x}") for x in
-                pseudo_union(_ANSI_QUANTIZERS.keys()).__args__))
-        raise TypeError(
-            type_error_msg(ansi_type, context=context))
-    if eq_f := {True: contrast_stretch,
-                'white_point': equalize_white_point
-                }.get(equalize):
+            f"{ansi_type=}".partition('=')[0],
+            ' | '.join(
+                getattr(x, '__name__', f"{x}")
+                for x in pseudo_union(_ANSI_QUANTIZERS.keys()).__args__
+            ),
+        )
+        raise TypeError(type_error_msg(ansi_type, context=context))
+    if eq_f := {True: contrast_stretch, 'white_point': equalize_white_point}.get(
+        equalize
+    ):
         img = eq_f(img)
-    if img.size > 1024 ** 2:  # downsize for faster quantization
+    if img.size > 1024**2:  # downsize for faster quantization
         w, h, _ = img.shape
         new_w, new_h = (int(x * 768 / max(w, h)) for x in (w, h))
         img = np.array(
-            Image.fromarray(img, mode='RGB')
-            .resize((new_h, new_w), resample=Image.Resampling.LANCZOS))
+            Image.fromarray(img, mode='RGB').resize(
+                (new_h, new_w), resample=Image.Resampling.LANCZOS
+            )
+        )
     return quantizer(img)
 
 
@@ -314,7 +365,9 @@ def contrast_stretch(img: RGBArray) -> RGBArray:
     equalize_white_point
     """
     p2, p98 = np.percentile(img, (2, 98))
-    return cast(RGBArray, ski.exposure.rescale_intensity(cast(..., img), in_range=(p2, p98)))
+    return cast(
+        RGBArray, ski.exposure.rescale_intensity(cast(..., img), in_range=(p2, p98))
+    )
 
 
 def scale_saturation(img: RGBArray, alpha: float = None) -> RGBArray:
@@ -324,8 +377,9 @@ def scale_saturation(img: RGBArray, alpha: float = None) -> RGBArray:
     return img
 
 
-def _get_asciidraw_vars(__img: Union[RGBImageLike, str, PathLike[str]],
-                        __font: FontArgType):
+def _get_asciidraw_vars(
+    __img: Union[RGBImageLike, str, PathLike[str]], __font: FontArgType
+):
     img = get_rgb_array(__img)
     font = get_font_object(__font)
     return img, font
@@ -343,9 +397,8 @@ def img2ascii(
     char_set: Optional[str] = ...,
     sort_glyphs: bool | type[reversed] = ...,
     *,
-    ret_img: Literal[False] = False
-) -> str:
-    ...
+    ret_img: Literal[False] = False,
+) -> str: ...
 
 
 @overload
@@ -356,18 +409,19 @@ def img2ascii(
     char_set: Optional[str] = ...,
     sort_glyphs: bool | type[reversed] = ...,
     *,
-    ret_img: Literal[True]
-) -> tuple[str, RGBArray]:
-    ...
+    ret_img: Literal[True],
+) -> tuple[str, RGBArray]: ...
 
 
-def img2ascii(__img: RGBImageLike | str | PathLike[str],
-              __font: FontArgType = 'arial.ttf',
-              factor: int = 100,
-              char_set: Iterable[str] = None,
-              sort_glyphs: bool | type[reversed] = True,
-              *,
-              ret_img: bool = False) -> str | tuple[str, RGBArray]:
+def img2ascii(
+    __img: RGBImageLike | str | PathLike[str],
+    __font: FontArgType = 'arial.ttf',
+    factor: int = 100,
+    char_set: Iterable[str] = None,
+    sort_glyphs: bool | type[reversed] = True,
+    *,
+    ret_img: bool = False,
+) -> str | tuple[str, RGBArray]:
     """Convert an image to a multiline ASCII string.
 
     Parameters
@@ -460,7 +514,7 @@ def img2ansi(
     ansi_type: AnsiColorParam = DEFAULT_ANSI,
     sort_glyphs: Union[bool, type[reversed]] = True,
     equalize: Union[bool, Literal['white_point']] = True,
-    bg: Union[Color, Int3Tuple] = (0, 0, 0)
+    bg: Union[Color, Int3Tuple] = (0, 0, 0),
 ):
     """Convert an image to an ANSI array.
 
@@ -521,34 +575,28 @@ def img2ansi(
     if ansi_type is not DEFAULT_ANSI:
         ansi_type = get_ansi_type(ansi_type)
     bg_wrapper = ColorStr(
-        '{}',
-        color_spec={'bg': bg},
-        ansi_type=ansi_type,
-        no_reset=True)
+        '{}', color_spec={'bg': bg}, ansi_type=ansi_type, no_reset=True
+    )
     base_ascii, color_arr = img2ascii(
-        __img, __font, factor, char_set, sort_glyphs,
-        ret_img=True)
+        __img, __font, factor, char_set, sort_glyphs, ret_img=True
+    )
     lines = base_ascii.splitlines()
     h, w = map(len, (lines, lines[0]))
     if ansi_type is not ansicolor24Bit:
-        color_arr = ansi_quantize(
-            color_arr,
-            ansi_type=ansi_type,
-            equalize=equalize)
-    elif eq_func := {True: contrast_stretch,
-                     'white_point': equalize_white_point
-                     }.get(equalize):
+        color_arr = ansi_quantize(color_arr, ansi_type=ansi_type, equalize=equalize)
+    elif eq_func := {True: contrast_stretch, 'white_point': equalize_white_point}.get(
+        equalize
+    ):
         color_arr = eq_func(color_arr)
-    color_arr = Image.fromarray(
-        color_arr, mode='RGB'
-    ).resize((w, h), resample=Image.Resampling.LANCZOS)
+    color_arr = Image.fromarray(color_arr, mode='RGB').resize(
+        (w, h), resample=Image.Resampling.LANCZOS
+    )
     xs = []
     for i in range(h):
         x = []
         for j in range(w):
             char = lines[i][j]
-            fg_color = Color.from_rgb(
-                color_arr.getpixel([j, i]))
+            fg_color = Color.from_rgb(color_arr.getpixel([j, i]))
             if j > 0 and x[-1].fg == fg_color:
                 x[-1] += char
             else:
@@ -558,12 +606,14 @@ def img2ansi(
 
 
 @rgb_dispatch
-def ascii2img(__ascii: str,
-              __font: FontArgType = 'arial.ttf',
-              font_size=24,
-              *,
-              fg: Int3Tuple | str = (0, 0, 0),
-              bg: Int3Tuple | str = (255, 255, 255)):
+def ascii2img(
+    __ascii: str,
+    __font: FontArgType = 'arial.ttf',
+    font_size=24,
+    *,
+    fg: Int3Tuple | str = (0, 0, 0),
+    bg: Int3Tuple | str = (255, 255, 255),
+):
     """Render an ASCII string as an image.
 
     Parameters
@@ -607,12 +657,14 @@ def ascii2img(__ascii: str,
 
 
 @rgb_dispatch
-def ansi2img(__ansi_array: list[list[ColorStr]],
-             __font: FontArgType = 'arial.ttf',
-             font_size=24,
-             *,
-             fg_default: Int3Tuple | str = (170, 170, 170),
-             bg_default: Int3Tuple | str | Literal['auto'] = (0, 0, 0)):
+def ansi2img(
+    __ansi_array: list[list[ColorStr]],
+    __font: FontArgType = 'arial.ttf',
+    font_size=24,
+    *,
+    fg_default: Int3Tuple | str = (170, 170, 170),
+    bg_default: Int3Tuple | str | Literal['auto'] = (0, 0, 0),
+):
     """Render an ANSI array as an image.
 
     Parameters
@@ -647,15 +699,13 @@ def ansi2img(__ansi_array: list[list[ColorStr]],
     img2ansi : Create an ANSI array from an input image, font, and character set.
     """
     if not (n_rows := len(__ansi_array)):
-        raise ValueError(
-            'ANSI string input is empty')
+        raise ValueError('ANSI string input is empty')
     font = truetype(get_font_object(__font, retpath=True), font_size)
     row_height = _get_bbox_shape(font)[-1]
     max_row_width = max(
-        sum(
-            font.getbbox(color_str.base_str)[2]
-            for color_str in row)
-        for row in __ansi_array)
+        sum(font.getbbox(color_str.base_str)[2] for color_str in row)
+        for row in __ansi_array
+    )
     iw, ih = map(int, (max_row_width, n_rows * row_height))
     input_fg = fg_default
     if auto := bg_default == 'auto':
@@ -679,12 +729,14 @@ def ansi2img(__ansi_array: list[list[ColorStr]],
                     bg_default = bg_color
             draw.rectangle(
                 [x_offset, y_offset, x_offset + text_width, y_offset + row_height],
-                fill=bg_color or (0, 0, 0))
+                fill=bg_color or (0, 0, 0),
+            )
             draw.text(
                 (x_offset, y_offset),
                 color_str.base_str,
                 font=font,
-                fill=fg_color or input_fg)
+                fill=fg_color or input_fg,
+            )
             x_offset += text_width
         y_offset += row_height
     return img
@@ -718,9 +770,9 @@ def is_rgb_imagelike(__obj: Any) -> TypeGuard[Union[RGBArray, ImageType]]:
     return is_rgb_array(__obj) or is_rgb_image(__obj)
 
 
-type _LiteralDigitStr = Sequence[Literal[
-    '0', '1', '2', '3', '4',
-    '5', '6', '7', '8', '9']]
+type _LiteralDigitStr = Sequence[
+    Literal['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+]
 
 
 def is_csi_param(__c: str) -> TypeGuard[Literal[';'] | _LiteralDigitStr]:
@@ -746,7 +798,7 @@ def reshape_ansi(__str: str, h: int, w: int):
     try:
         x, y = next(flat_iter)
         while j < str_len:
-            if __str[j:(i := j + 2)] == '\x1b[':
+            if __str[j : (i := j + 2)] == '\x1b[':
                 j = i
                 while is_csi_param(c := __str[j]):
                     j += 1
@@ -755,8 +807,7 @@ def reshape_ansi(__str: str, h: int, w: int):
                     for _ in range(int(params)):
                         increment()
                 elif c == 'm':
-                    arr[x][y] += str(
-                        SgrSequence(list(map(int, params.split(';')))))
+                    arr[x][y] += str(SgrSequence(list(map(int, params.split(';')))))
             elif (c := __str[j]) == '\n':
                 while y < w - 1:
                     increment()
@@ -767,9 +818,9 @@ def reshape_ansi(__str: str, h: int, w: int):
     except StopIteration:
         pass
     return '\n'.join(
-        ' ' * (w - offsets[idx]) + ''.join(
-            c for c in row if c != '\x00')
-        for idx, row in enumerate(arr))
+        ' ' * (w - offsets[idx]) + ''.join(c for c in row if c != '\x00')
+        for idx, row in enumerate(arr)
+    )
 
 
 def to_sgr_array(__str: str, ansi_type: AnsiColorParam = DEFAULT_ANSI):
@@ -778,7 +829,7 @@ def to_sgr_array(__str: str, ansi_type: AnsiColorParam = DEFAULT_ANSI):
     fix_bold = lambda v: (b'1;%s' % v) if type(v) is ansicolor4Bit else v
     resets_btok = {b'39': 'fg', b'49': 'bg'}
     resets = frozenset(resets_btok)
-    pad_esc = {0x1b: '\x00\x1b'}
+    pad_esc = {0x1B: '\x00\x1b'}
     x = []
     for line in __str.splitlines():
         xs = []
@@ -786,11 +837,11 @@ def to_sgr_array(__str: str, ansi_type: AnsiColorParam = DEFAULT_ANSI):
         prev: ColorStr | None = None
         for s in filter(None, line.translate(pad_esc).split('\x00')):
             sgr = None
-            if s[:(i := min(2, len(s) - 1))] == '\x1b[':
+            if s[: (i := min(2, len(s) - 1))] == '\x1b[':
                 params, _, text = s[i:].partition('m')
                 cs = new_cs(
-                    text,
-                    sgr := SgrSequence([int(b) for b in params.split(';')]))
+                    text, sgr := SgrSequence([int(b) for b in params.split(';')])
+                )
                 if sgr.is_color():
                     prev = cs
             else:
@@ -806,16 +857,12 @@ def to_sgr_array(__str: str, ansi_type: AnsiColorParam = DEFAULT_ANSI):
                     ansi_meta[k] = sgr.get_color(k)
             if sgr.has_bright_colors:
                 ansi_meta['bright'] = True
-            elif (ansi_meta.get('bright')
-                  or (prev is not None
-                      and b'1' in sgr.values())):
+            elif ansi_meta.get('bright') or (prev is not None and b'1' in sgr.values()):
                 if sgr.is_color():
                     new_sgr = SgrSequence([fix_bold(v) for v in sgr.values()])
                     for k in new_sgr.rgb_dict.keys():
                         ansi_meta[k] = new_sgr.get_color(k)
-                    prev = cs = new_cs(
-                        cs.base_str,
-                        color_spec=new_sgr)
+                    prev = cs = new_cs(cs.base_str, color_spec=new_sgr)
                 elif prev:
                     if not ansi_meta.get('bright'):
                         ansi_meta['bright'] = True
@@ -833,7 +880,7 @@ def render_ans(
     font: FontArgType = UserFont.IBM_VGA_437_8X16,
     font_size: int = 16,
     *,
-    bg_default: Union[tuple[int, int, int], Literal['auto'], str] = (0, 0, 0)
+    bg_default: Union[tuple[int, int, int], Literal['auto'], str] = (0, 0, 0),
 ) -> ImageType:
     """Parse and render literal ANSI text as an image.
 
@@ -855,10 +902,9 @@ def render_ans(
     return ansi2img(ansi_array, font, font_size, bg_default=bg_default)
 
 
-def read_ans[AnyStr: (str, bytes)](
-    __path: Union[PathLike[AnyStr], AnyStr],
-    encoding='cp437'
-) -> str:
+def read_ans[
+    AnyStr: (str, bytes)
+](__path: Union[PathLike[AnyStr], AnyStr], encoding='cp437') -> str:
     """Read an ANSI file and return the content as a string.
 
     Extends code page 437 translation if `encoding='cp437'`, and truncates any SAUCE metadata.
@@ -872,19 +918,21 @@ def read_ans[AnyStr: (str, bytes)](
     if encoding == 'cp437':
         from ._curses import translate_cp437
 
-        content = translate_cp437(content, ignore=(0x0a, 0x1a, 0x1b))
+        content = translate_cp437(content, ignore=(0x0A, 0x1A, 0x1B))
     return content
 
 
 class AnsiImage:
 
     @classmethod
-    def open[AnyStr: (str, bytes)](
+    def open[
+        AnyStr: (str, bytes)
+    ](
         cls,
         fp: Union[PathLike[AnyStr], AnyStr],
         shape: TupleOf2[int],
         encoding='cp437',
-        ansi_type: AnsiColorParam = DEFAULT_ANSI
+        ansi_type: AnsiColorParam = DEFAULT_ANSI,
     ) -> Self:
         inst = super().__new__(cls)
         inst._height_, inst._width_ = shape
@@ -892,9 +940,10 @@ class AnsiImage:
         inst.fp = os.path.abspath(fp)
         inst.data = to_sgr_array(
             reshape_ansi(
-                read_ans(inst.fp, encoding=encoding),
-                inst._height_, inst._width_),
-            ansi_type=inst._ansi_format_)
+                read_ans(inst.fp, encoding=encoding), inst._height_, inst._width_
+            ),
+            ansi_type=inst._ansi_format_,
+        )
         return inst
 
     @property
@@ -914,20 +963,19 @@ class AnsiImage:
         font: FontArgType = UserFont.IBM_VGA_437_8X16,
         font_size: int = 16,
         bg_default=None,
-        **kwargs
+        **kwargs,
     ) -> ImageType:
         return ansi2img(
-            self.data, font, font_size,
-            bg_default=bg_default or 'auto',
-            **kwargs)
+            self.data, font, font_size, bg_default=bg_default or 'auto', **kwargs
+        )
 
     def translate(self, __table: Mapping[int, str | int | None]):
         table = {
-            k: v if v not in frozenset(
-                x
-                for c in ' \t\n\r\v\f'
-                for x in (c, ord(c)))
-            else ' '
+            k: (
+                v
+                if v not in frozenset(x for c in ' \t\n\r\v\f' for x in (c, ord(c)))
+                else ' '
+            )
             for (k, v) in __table.items()
             if k != ord('\n')
         }
@@ -938,10 +986,7 @@ class AnsiImage:
         return type(self)(data, ansi_type=self.ansi_format)
 
     def __init__(
-        self,
-        arr: list[list[ColorStr]],
-        *,
-        ansi_type: AnsiColorParam = DEFAULT_ANSI
+        self, arr: list[list[ColorStr]], *, ansi_type: AnsiColorParam = DEFAULT_ANSI
     ):
         self.data = arr
         self._height_, self._width_ = map(len, (arr, arr[0]))
@@ -966,7 +1011,8 @@ def otsu_mask(img: MatrixLike[np.uint8] | ImageType) -> MatrixLike[np.uint8]:
 
 def zt_canny_edges(arr: MatrixLike) -> MatrixLike:
     return ski.feature.canny(
-        arr, sigma=0.1, low_threshold=0.1, high_threshold=0.2, use_quantiles=False)
+        arr, sigma=0.1, low_threshold=0.1, high_threshold=0.2, use_quantiles=False
+    )
 
 
 def scaled_hu_moments(arr: MatrixLike):
@@ -982,7 +1028,7 @@ def scaled_hu_moments(arr: MatrixLike):
 def approx_gridlike(
     __fp: PathLike[str] | str,
     shape: TupleOf2[int],
-    font: FontArgType = UserFont.IBM_VGA_437_8X16
+    font: FontArgType = UserFont.IBM_VGA_437_8X16,
 ):
     def _get_grid_indices(arr: np.ndarray):
         regions = ski.measure.regionprops(ski.measure.label(zt_canny_edges(arr)))
@@ -993,21 +1039,18 @@ def approx_gridlike(
         bboxes = bboxes[area_bboxes < np.std(area_bboxes) * 2]
         r, c = cast(
             TupleOf2[Int3Tuple],
-            zip(
-                np.min(bboxes[:, :2], axis=0),
-                np.max(bboxes[:, 2:], axis=0),
-                shape)
+            zip(np.min(bboxes[:, :2], axis=0), np.max(bboxes[:, 2:], axis=0), shape),
         )
         h, w = map(round, ((x[1] - x[0]) / x[-1] for x in (r, c)))
         rr = r[0] + np.asarray(rs := range(r[-1])) * h
         cc = c[0] + np.asarray(cs := range(c[-1])) * w
         return cast(
             list[TupleOf2[slice]],
-            [np.index_exp[
-             rr[rx]:(rr + h)[rx],
-             cc[cx]:(cc + w)[cx]]
-             for rx in rs
-             for cx in cs]
+            [
+                np.index_exp[rr[rx] : (rr + h)[rx], cc[cx] : (cc + w)[cx]]
+                for rx in rs
+                for cx in cs
+            ],
         )
 
     with Image.open(__fp).convert('L') as grey:
@@ -1019,18 +1062,15 @@ def approx_gridlike(
     clustered_grid = np.reshape(
         getattr(
             DBSCAN(eps=0.5, min_samples=2, metric='euclidean').fit(
-                np.array(
-                    [scaled_hu_moments(thresh[ind])
-                     for ind in grid_indices])),
-            'labels_'),
-        shape)
+                np.array([scaled_hu_moments(thresh[ind]) for ind in grid_indices])
+            ),
+            'labels_',
+        ),
+        shape,
+    )
     char_grid = np.full_like(clustered_grid, ' ', dtype=np.str_)
     glyph_map = {
-        c: otsu_mask(
-            render_font_char(
-                c, font,
-                size=cell_shape[::-1]
-            ).convert('L'))
+        c: otsu_mask(render_font_char(c, font, size=cell_shape[::-1]).convert('L'))
         for c in cp437_printable()
     }
 
@@ -1044,16 +1084,20 @@ def approx_gridlike(
         cropped = arr[y0:y1, x0:x1]
         dy, dx = cropped.shape
         ys, xs = map(lambda t, d: (t - d) // 2, cell_shape, (dy, dx))
-        cell[ys:ys + dy, xs:xs + dx] = cropped
+        cell[ys : ys + dy, xs : xs + dx] = cropped
         return cell
 
-    for u_indices in map(
-            clustered_grid.__eq__,
-            np.unique_values(clustered_grid)):
+    for u_indices in map(clustered_grid.__eq__, np.unique_values(clustered_grid)):
         u_slice = thresh[
-            grid_indices[next(idx for (idx, v) in enumerate(np.ravel(u_indices)) if v is True)]]
+            grid_indices[
+                next(idx for (idx, v) in enumerate(np.ravel(u_indices)) if v is True)
+            ]
+        ]
         char_grid[u_indices] = min(
-            glyph_map, key=lambda k: ski.metrics.mean_squared_error(
-                *map(_normalize_cell, (glyph_map[k], u_slice))))
+            glyph_map,
+            key=lambda k: ski.metrics.mean_squared_error(
+                *map(_normalize_cell, (glyph_map[k], u_slice))
+            ),
+        )
 
     return AnsiImage([[ColorStr(s) for s in r] for r in char_grid])

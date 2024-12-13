@@ -19,18 +19,10 @@ def escher_dragon_ascii():
     char_set = r"  ._-~+<vX♦'^Vx>|πΦ0Ω#$║╫"
 
     ascii_str = img2ascii(
-        input_img,
-        font,
-        factor=240,
-        char_set=char_set,
-        sort_glyphs=True)
+        input_img, font, factor=240, char_set=char_set, sort_glyphs=True
+    )
 
-    ascii_img = ascii2img(
-        ascii_str,
-        font,
-        font_size=16,
-        fg='white',
-        bg='black')
+    ascii_img = ascii2img(ascii_str, font, font_size=16, fg='white', bg='black')
 
     ascii_img.show()
 
@@ -43,17 +35,9 @@ def escher_dragon_256color():
     input_img = escher()
     font = UserFont.IBM_VGA_437_8X16
 
-    ansi_array = img2ansi(
-        input_img,
-        font,
-        factor=240,
-        ansi_type='8b',
-        equalize=True)
+    ansi_array = img2ansi(input_img, font, factor=240, ansi_type='8b', equalize=True)
 
-    ansi_img = ansi2img(
-        ansi_array,
-        font,
-        font_size=16)
+    ansi_img = ansi2img(ansi_array, font, font_size=16)
 
     ansi_img.show()
 
@@ -74,16 +58,10 @@ def butterfly_16color():
     char_set = r"'·,•-_→+<>ⁿ*%⌂7√Iï∞πbz£9yîU{}1αHSw♥æ?GX╕╒éà⌡MF╝╩ΘûÇƒQ½☻Å¶┤▄╪║▒█"
 
     ansi_array = img2ansi(
-        input_img,
-        font,
-        factor=200,
-        char_set=char_set,
-        ansi_type=ansicolor4Bit)
+        input_img, font, factor=200, char_set=char_set, ansi_type=ansicolor4Bit
+    )
 
-    ansi_img = ansi2img(
-        ansi_array,
-        font,
-        font_size=16)
+    ansi_img = ansi2img(ansi_array, font, font_size=16)
 
     ansi_img.show()
 
@@ -98,16 +76,10 @@ def butterfly_truecolor():
     font = UserFont.IBM_VGA_437_8X16
 
     ansi_array = img2ansi(
-        input_img,
-        font,
-        factor=200,
-        ansi_type='24b',
-        equalize='white_point')
+        input_img, font, factor=200, ansi_type='24b', equalize='white_point'
+    )
 
-    ansi_img = ansi2img(
-        ansi_array,
-        font,
-        font_size=16)
+    ansi_img = ansi2img(ansi_array, font, font_size=16)
 
     ansi_img.show()
 
@@ -122,11 +94,8 @@ def butterfly_randcolor():
     font = UserFont.IBM_VGA_437_8X16
 
     ansi_array = img2ansi(
-        input_img,
-        font,
-        factor=200,
-        ansi_type='8b',
-        equalize='white_point')
+        input_img, font, factor=200, ansi_type='8b', equalize='white_point'
+    )
 
     for row in range(len(ansi_array)):
         for idx, cs in enumerate(ansi_array[row]):
@@ -135,10 +104,7 @@ def butterfly_randcolor():
                 h, s, _ = rgb2hsv(randcolor().rgb)
                 ansi_array[row][idx] = cs.recolor(fg=Color.from_rgb(hsv2rgb((h, s, v))))
 
-    ansi_img = ansi2img(
-        ansi_array,
-        font,
-        font_size=16)
+    ansi_img = ansi2img(ansi_array, font, font_size=16)
 
     ansi_img.show()
 
@@ -155,17 +121,10 @@ def goblin_virus_truecolor():
     char_set = r'  .-|_⌐¬^:()═+<>v≥≤«*»x└┘π╛╘┴┐┌┬╧╚╙X╒╜╨#0╓╝╩╤╥│╔┤├╞╗╦┼╪║╟╠╫╣╬░▒▓█▄▌▐▀'
 
     ansi_array = img2ansi(
-        input_img,
-        font,
-        factor=200,
-        char_set=char_set,
-        ansi_type='24b',
-        equalize=False)
+        input_img, font, factor=200, char_set=char_set, ansi_type='24b', equalize=False
+    )
 
-    ansi_img = ansi2img(
-        ansi_array,
-        font,
-        font_size=16)
+    ansi_img = ansi2img(ansi_array, font, font_size=16)
 
     ansi_img.show()
 
@@ -180,9 +139,8 @@ def named_colors():
     for idx, n in enumerate(named):
         hsv = rgb2hsv(n.fg.rgb)
         if all(
-                map(
-                    lambda i, x: math.isclose(hsv[i], x, abs_tol=.16),
-                    (-1, 1), (1, 0))):
+            map(lambda i, x: math.isclose(hsv[i], x, abs_tol=0.16), (-1, 1), (1, 0))
+        ):
             if idx - whites[-1] < 4:
                 whites.pop()
             whites.append(idx)
@@ -190,8 +148,9 @@ def named_colors():
     buffer = []
     for start, stop in zip(whites, whites[1:]):
         xs = sorted(
-            named[start + 1 if start else None:stop + 1 if ~stop else None],
-            key=lambda x: rgb2lab(x.fg.rgb))
+            named[start + 1 if start else None : stop + 1 if ~stop else None],
+            key=lambda x: rgb2lab(x.fg.rgb),
+        )
         buffer.append(xs)
     for ln in buffer:
         print(' | '.join(ln))
@@ -207,7 +166,7 @@ def color_table():
         SgrParameter,
         ansicolor24Bit,
         ansicolor4Bit,
-        ansicolor8Bit
+        ansicolor8Bit,
     )
     from chromatic.color.palette import ColorNamespace
 
@@ -222,23 +181,23 @@ def color_table():
         color_ns.GREEN,
         color_ns.BLUE,
         color_ns.INDIGO,
-        color_ns.PURPLE]
+        color_ns.PURPLE,
+    ]
     colors_dict = {v.name.title(): v for v in colors}
     spacing = max(map(len, colors_dict)) + 1
-    fg_colors = [ColorStr(
-        f"{c.name.title(): ^{spacing}}",
-        color_spec=dict(fg=c),
-        ansi_type=ansicolor24Bit)
-        for c in colors]
-    bg_colors = [
-                    ColorStr().recolor(bg=None)
-                ] + [c.recolor(fg=None, bg=c.fg) for c in fg_colors]
+    fg_colors = [
+        ColorStr(
+            f"{c.name.title(): ^{spacing}}",
+            color_spec=dict(fg=c),
+            ansi_type=ansicolor24Bit,
+        )
+        for c in colors
+    ]
+    bg_colors = [ColorStr().recolor(bg=None)] + [
+        c.recolor(fg=None, bg=c.fg) for c in fg_colors
+    ]
     pad = spacing - 1
-    print(
-        '|'.join(
-            [f"{'4bit': ^{pad}}",
-             f"{'8bit': ^{pad}}",
-             f"{'24bit': >{pad}}"]))
+    print('|'.join([f"{'4bit': ^{pad}}", f"{'8bit': ^{pad}}", f"{'24bit': >{pad}}"]))
     for row in fg_colors:
         for col in bg_colors:
             for typ in ansi_types:
@@ -253,12 +212,15 @@ def color_table():
         SgrParameter.ENCIRCLED,
         SgrParameter.SINGLE_UNDERLINE,
         SgrParameter.DOUBLE_UNDERLINE,
-        SgrParameter.NEGATIVE]
+        SgrParameter.NEGATIVE,
+    ]
     for style in style_params:
         print(
-            ColorStr('.'.join([SgrParameter.__qualname__, style.name]))
-            .update_sgr(style),
-            end='\x1b[0m' + (' ' * 4))
+            ColorStr('.'.join([SgrParameter.__qualname__, style.name])).update_sgr(
+                style
+            ),
+            end='\x1b[0m' + (' ' * 4),
+        )
     print()
 
 
@@ -270,8 +232,9 @@ def glyph_comparisons(__output_dir: str | PathLike[str] = None):
     from chromatic.data import UserFont
     from random import choices as get_random
 
-    def _find_best_matches(glyph_masks1: dict[str, ndarray],
-                           glyph_masks2: dict[str, ndarray]) -> dict[str, str]:
+    def _find_best_matches(
+        glyph_masks1: dict[str, ndarray], glyph_masks2: dict[str, ndarray]
+    ) -> dict[str, str]:
         best_matches = {}
         for char1, mask1 in glyph_masks1.items():
             best_char = None
@@ -285,8 +248,7 @@ def glyph_comparisons(__output_dir: str | PathLike[str] = None):
         return best_matches
 
     if __output_dir and not os.path.isdir(__output_dir):
-        raise NotADirectoryError(
-            __output_dir)
+        raise NotADirectoryError(__output_dir)
     user_fonts = [pair := (UserFont.IBM_VGA_437_8X16, UserFont.CONSOLAS), pair[::-1]]
     trans_table = str.maketrans({']': None, '0': ' ', '[': ' '})
     char_set = cp437_printable()
@@ -296,23 +258,31 @@ def glyph_comparisons(__output_dir: str | PathLike[str] = None):
         glyph_masks_2 = get_glyph_masks(font2, char_set, dist_transform=True)
         best_matches_ = _find_best_matches(glyph_masks_1, glyph_masks_2)
         txt = ''.join(
-            '->'.center(32, ' ').join(['{}'] * 2).format(
+            '->'.center(32, ' ')
+            .join(['{}'] * 2)
+            .format(
                 f"{font1.name}"
                 f"[{input_char!r}, {input_char.encode('unicode_escape').decode()!r}]",
                 f"{font2.name}"
-                f"[{matched_char!r}, {matched_char.encode('unicode_escape').decode()!r}]")
+                f"[{matched_char!r}, {matched_char.encode('unicode_escape').decode()!r}]",
+            )
             .center(100, ' ')
             + '\n\n'
             + '\n'.join(
-                ''.join
-                (z).translate(trans_table)
+                ''.join(z).translate(trans_table)
                 for z in zip(
                     f'{glyph_masks_1[input_char].astype(int)}\n'.splitlines(),
-                    f'{glyph_masks_2[matched_char].astype(int)}\n'.splitlines()[1:]))
-            + separator.join(['\n'] * 2) for input_char, matched_char in best_matches_.items())
+                    f'{glyph_masks_2[matched_char].astype(int)}\n'.splitlines()[1:],
+                )
+            )
+            + separator.join(['\n'] * 2)
+            for input_char, matched_char in best_matches_.items()
+        )
         if __output_dir is not None:
-            fname = (PurePath(__output_dir) /
-                     f"{'_to_'.join(font.name.lower() for font in (font1, font2))}.txt")
+            fname = (
+                PurePath(__output_dir)
+                / f"{'_to_'.join(font.name.lower() for font in (font1, font2))}.txt"
+            )
             with open(fname, 'w', encoding='utf-8') as f:
                 f.write(txt)
         else:
@@ -320,12 +290,9 @@ def glyph_comparisons(__output_dir: str | PathLike[str] = None):
                 print(separator + glyph)
 
 
-class _time_wrapper[** P, R]:
+class _time_wrapper[**P, R]:
 
-    def __init__(
-        self,
-        func: Callable[P, R] | FunctionType | type = None
-    ):
+    def __init__(self, func: Callable[P, R] | FunctionType | type = None):
         self.func = func
         if self.func is not None:
             functools.update_wrapper(self, self.func)
@@ -347,7 +314,8 @@ class _time_wrapper[** P, R]:
         delta = stop - start
         mag, fmt = min(
             [(1, 's'), (1e-3, 'ms'), (1e-6, 'μs'), (1e-9, 'ns'), (1e-12, 'ps')],
-            key=lambda x: abs(math.log10(x[0]) - math.log10(delta)))
+            key=lambda x: abs(math.log10(x[0]) - math.log10(delta)),
+        )
         delta *= 1 / mag
         return f"{delta:.3f} {fmt}"
 
@@ -360,8 +328,12 @@ def main():
     global_func_enum = dict(
         enumerate(
             sorted(
-                k for k, v in demo_globals.items() if
-                isinstance(v, FunctionType) and not v.__name__.startswith('_'))))
+                k
+                for k, v in demo_globals.items()
+                if isinstance(v, FunctionType) and not v.__name__.startswith('_')
+            )
+        )
+    )
     safe_funcs = {-1: exit}
     choices = [f'[{x[0]}]: {x[1].name}' for x in safe_funcs.items()]
     names = []
@@ -387,12 +359,19 @@ def main():
     if len(sys.argv) > 1:
         key = sys.argv[1]
         if key.casefold() == '-h'.casefold():
-            xs = ['Run one of the following demo functions:',
-                  *('{}:\n\t{}'.format(
-                      n, '\n'.join(
-                          filter(None, (globals()[n].__doc__ or '...').splitlines())).strip())
-                      for n in names)]
-            print(f'\n{'\n\n'.join(xs)}')
+            docstrings = (
+                '{}:\n\t{}'.format(
+                    n,
+                    '\n'.join(
+                        ln for ln in (globals()[n].__doc__ or '...').splitlines() if ln
+                    ).strip(),
+                )
+                for n in names
+            )
+            print(
+                '\n'
+                + '\n\n'.join(['Run one of the following demo functions:', *docstrings])
+            )
             exit()
         selection = _check_user_input(key)
     if selection is None:

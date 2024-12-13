@@ -1,10 +1,11 @@
-/.idea/
-__pycache__/
 *.pyc
 *.pyo
-/tests/_*
+__pycache__/
+/.idea/
 /dist/
 /docs/
-/chromatic_python.egg-info/
+/tests/_*
 /chromatic/data/*.json
 /chromatic/data/*.pyi
+/chromatic/_version.py
+/*.egg-info/

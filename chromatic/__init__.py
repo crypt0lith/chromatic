@@ -1,3 +1,8 @@
+try:
+    from ._version import version as __version__
+except ImportError:
+    __version__ = "0.0.0"
+
 from . import ascii, color, data
 from .ascii import (
     ansi2img,
@@ -14,12 +19,20 @@ from .ascii import (
     read_ans,
     render_ans,
     reshape_ansi,
-    to_sgr_array
+    to_sgr_array,
 )
 from .ascii._glyph_proc import get_glyph_masks
 from .color import (
-    ansicolor24Bit, ansicolor4Bit, ansicolor8Bit, Back, Color, colorbytes, ColorStr, Fore,
-    SgrParameter, Style
+    ansicolor24Bit,
+    ansicolor4Bit,
+    ansicolor8Bit,
+    Back,
+    Color,
+    colorbytes,
+    ColorStr,
+    Fore,
+    SgrParameter,
+    Style,
 )
 from .data import register_user_font
 

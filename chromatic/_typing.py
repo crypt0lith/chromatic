@@ -1,12 +1,24 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from functools import reduce
 from numbers import Number
 from types import UnionType
 from typing import (
-    Any, Callable, Concatenate, get_args, get_origin, get_type_hints, Iterable, Literal, ParamSpec,
-    Protocol, Sequence, SupportsRound, TYPE_CHECKING, TypeVar, Union
+    Any,
+    Callable,
+    Concatenate,
+    get_args,
+    get_origin,
+    get_type_hints,
+    Iterable,
+    Literal,
+    ParamSpec,
+    Protocol,
+    Sequence,
+    SupportsRound,
+    TYPE_CHECKING,
+    TypeVar,
+    Union,
 )
 
 from numpy import dtype, float64, generic, ndarray, number, uint8
@@ -25,17 +37,18 @@ _AnyNumber_co = TypeVar('_AnyNumber_co', number, Number, covariant=True)
 if TYPE_CHECKING:
     from _typeshed import SupportsRichComparison, SupportsDivMod
 
-
     class SupportsRoundAndDivMod(
-        SupportsRound[_T_co],
-        SupportsDivMod[Any, _T_co],
-        Protocol
-    ):
-        ...
+        SupportsRound[_T_co], SupportsDivMod[Any, _T_co], Protocol
+    ): ...
 
-type ArrayReducerFunc[_SCT: generic] = Callable[Concatenate[_ArrayLike[_SCT], _P], NDArray[_SCT]]
+
+type ArrayReducerFunc[_SCT: generic] = Callable[
+    Concatenate[_ArrayLike[_SCT], _P], NDArray[_SCT]
+]
 type KeyFunction[_T] = Callable[[_T], SupportsRichComparison]
-type ShapedNDArray[_Shape: tuple[int, ...], _SCT: generic] = ndarray[_Shape, dtype[_SCT]]
+type ShapedNDArray[_Shape: tuple[int, ...], _SCT: generic] = ndarray[
+    _Shape, dtype[_SCT]
+]
 type MatrixLike[_SCT: generic] = ShapedNDArray[TupleOf2[int], _SCT]
 type SquareMatrix[_I: int, _SCT: generic] = ShapedNDArray[TupleOf2[_I], _SCT]
 type GlyphArray[_SCT: generic] = SquareMatrix[Literal[24], _SCT]
@@ -73,7 +86,9 @@ def is_matching_type(value, typ):
     elif isinstance(typ, TypeVar):
         if typ.__constraints__:
             return any(
-                is_matching_type(value, constraint) for constraint in typ.__constraints__)
+                is_matching_type(value, constraint)
+                for constraint in typ.__constraints__
+            )
         else:
             return True
     elif origin is type:
@@ -101,8 +116,9 @@ def is_matching_type(value, typ):
             return True
         key_type, val_type = args
         return all(
-            is_matching_type(k, key_type) and is_matching_type(v, val_type) for k, v in
-            value.items())
+            is_matching_type(k, key_type) and is_matching_type(v, val_type)
+            for k, v in value.items()
+        )
     elif origin is tuple:
         if not isinstance(value, tuple):
             return False
@@ -139,8 +155,11 @@ def type_error_msg(err_obj, *expected, context: str = '', obj_repr=False):
     name_slots = [f"{{{n}.__qualname__!r}}" for n in range(n_expected)]
     if name_slots and n_expected > 1:
         name_slots[-1] = f"or {name_slots[-1]}"
-    names = (', ' if n_expected > 2 else ' ').join(
-        [context.strip()] + name_slots).format(*expected)
+    names = (
+        (', ' if n_expected > 2 else ' ')
+        .join([context.strip()] + name_slots)
+        .format(*expected)
+    )
     if not obj_repr:
         if not isinstance(err_obj, type):
             err_obj = type(err_obj)
@@ -163,6 +182,6 @@ def is_matching_typed_dict(__d: dict, typed_dict: type[dict]) -> tuple[bool, str
     for name, typ in expected.items():
         if ((field := __d.get(name)) is not None) and not is_matching_type(field, typ):
             return False, type_error_msg(
-                field, typ,
-                context=f'keyword argument {name!r} of type')
+                field, typ, context=f'keyword argument {name!r} of type'
+            )
     return True, ''

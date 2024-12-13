@@ -27,7 +27,14 @@ from typing import cast, Final, Literal, SupportsInt
 
 import numpy as np
 
-from .._typing import Float3Tuple, FloatSequence, Int3Tuple, RGBPixel, RGBVectorLike, ShapedNDArray
+from .._typing import (
+    Float3Tuple,
+    FloatSequence,
+    Int3Tuple,
+    RGBPixel,
+    RGBVectorLike,
+    ShapedNDArray,
+)
 
 
 def is_hex_rgb(value, *, strict: bool = False):
@@ -36,8 +43,7 @@ def is_hex_rgb(value, *, strict: bool = False):
             return True
         elif not strict:
             return False
-    raise TypeError(
-        f"{value!r} is not a valid RGB color") from None
+    raise TypeError(f"{value!r} is not a valid RGB color") from None
 
 
 def hexstr2rgb(__str: str) -> Int3Tuple:
@@ -56,7 +62,7 @@ def rgb2hex(rgb: RGBVectorLike) -> int:
 
 
 def hex2rgb(value: int) -> Int3Tuple:
-    return (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff
+    return (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF
 
 
 def xyz2lab(xyz: Float3Tuple | FloatSequence) -> Float3Tuple:
@@ -74,7 +80,7 @@ def xyz2lab(xyz: Float3Tuple | FloatSequence) -> Float3Tuple:
 
 def lab2xyz(lab: Float3Tuple | FloatSequence) -> Float3Tuple:
     x_ref, y_ref, z_ref = 95.047, 100.0, 108.883
-    f_inv = lambda n: cubic if (cubic := n ** 3) > 0.008856 else (n - 16 / 116) / 7.787
+    f_inv = lambda n: cubic if (cubic := n**3) > 0.008856 else (n - 16 / 116) / 7.787
     L, a, b = lab
     f_y = (L + 16) / 116
     f_x = a / 500 + f_y
@@ -89,7 +95,7 @@ M_RGB2XYZ = np.array(
     [[0.4124564, 0.3575761, 0.1804375],
      [0.2126729, 0.7151522, 0.0721750],
      [0.0193339, 0.1191920, 0.9503041]],
-    dtype=np.float64)
+    dtype=np.float64)  # fmt: skip
 M_XYZ2RGB = np.linalg.inv(M_RGB2XYZ)
 
 
@@ -99,7 +105,9 @@ def rgb2xyz(rgb: RGBPixel) -> Float3Tuple:
 
 
 def xyz2rgb(xyz: ShapedNDArray[tuple[Literal[3]], np.float64]) -> Int3Tuple:
-    r, g, b = (np.clip(M_XYZ2RGB @ np.array(xyz, dtype=np.float64), 0.0, 1.0) * 255.0).astype(int)
+    r, g, b = (
+        np.clip(M_XYZ2RGB @ np.array(xyz, dtype=np.float64), 0.0, 1.0) * 255.0
+    ).astype(int)
     return r, g, b
 
 
@@ -228,7 +236,7 @@ ANSI_4BIT_RGB: Final[list[Int3Tuple]] = [
     (85, 85, 255),  # bright blue
     (255, 85, 255),  # bright magenta
     (85, 255, 255),  # bright cyan
-    (255, 255, 255)  # bright white
+    (255, 255, 255),  # bright white
 ]
 
 
@@ -252,17 +260,19 @@ def _4b_lookup():
         r_diff = (rgb[:, 0:1] - ansi[:, 0]) * (2 + r_mean / 256)
         g_diff = (rgb[:, 1:2] - ansi[:, 1]) * 4
         b_diff = (rgb[:, 2:3] - ansi[:, 2]) * (2 + (255 - r_mean) / 256)
-        return r_diff ** 2 + g_diff ** 2 + b_diff ** 2
+        return r_diff**2 + g_diff**2 + b_diff**2
 
     rgb_4b_arr = np.asarray(ANSI_4BIT_RGB)
     quants = np.stack(
         np.meshgrid(*np.repeat(np.arange(32).reshape([1, -1]), 3, 0), indexing='ij'),
-        axis=-1).reshape([-1, 3])
+        axis=-1,
+    ).reshape([-1, 3])
     rgb_colors = quants * 8
     nearest_colors = rgb_4b_arr[np.argmin(rgb_dist(rgb_colors, rgb_4b_arr), axis=1)]
     table = {
         tuple(map(int, color)): tuple(map(int, nearest_colors[i]))
-        for i, color in enumerate(quants)}
+        for i, color in enumerate(quants)
+    }
     return cast(dict[Int3Tuple, Int3Tuple], table)
 
 
@@ -271,7 +281,7 @@ ANSI_4BIT_RGB_MAP = _4b_lookup()
 
 def _quantize_rgb(rgb: RGBVectorLike):
     r, g, b = rgb
-    return min(r >> 3, 0x1f), min(g >> 3, 0x1f), min(b >> 3, 0x1f)
+    return min(r >> 3, 0x1F), min(g >> 3, 0x1F), min(b >> 3, 0x1F)
 
 
 def nearest_ansi_4bit_rgb(value: RGBVectorLike) -> Int3Tuple:
@@ -282,8 +292,7 @@ def nearest_ansi_8bit_rgb(value: RGBVectorLike) -> Int3Tuple:
     try:
         return ansi_8bit_to_rgb(rgb_to_ansi_8bit(value))
     except ValueError:
-        raise ValueError(
-            f"invalid RGB value: {value!r}") from None
+        raise ValueError(f"invalid RGB value: {value!r}") from None
 
 
 def ansi_8bit_to_rgb(value: int):
@@ -295,8 +304,7 @@ def ansi_8bit_to_rgb(value: int):
     elif value <= 255:
         grey = 8 + (value - 232) * 10
         return grey, grey, grey
-    raise ValueError(
-        f"expected an unsigned 8-bit integer, got {value}")
+    raise ValueError(f"expected an unsigned 8-bit integer, got {value}")
 
 
 def rgb_to_ansi_8bit(rgb: RGBVectorLike) -> int:

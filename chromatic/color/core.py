@@ -616,7 +616,7 @@ def _co_yield_colorbytes(
     new_24b = lambda x: ansicolor24Bit.from_rgb(
         {x: tuple(next(__iter) for _ in range(3))}
     )
-    default = lambda x: bytes(ascii(x), 'ansi')
+    default = lambda x: ascii(x).encode()
     obj = bytes()
     while True:
         value = yield obj
@@ -1237,7 +1237,10 @@ class ColorStr(str):
             return self
         valid, context = is_matching_typed_dict(kwargs, _ColorDict)
         if not valid:
-            raise ValueError(context)
+            try:
+                kwargs = {k: Color(v) for k, v in kwargs.items()}
+            except Exception as _:
+                raise ValueError(context) from None
         sgr = SgrSequence(self._sgr_)
         if bool(absolute):
             del sgr.rgb_dict

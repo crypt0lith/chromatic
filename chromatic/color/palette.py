@@ -92,9 +92,8 @@ class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
         factory: Callable[[...], _VT] | FunctionType = kwargs.get('factory')
         if not callable(factory):
             raise ValueError(
-                f"{cls.__name__!r} does not inherit {DynamicNamespace.__name__!r} as a "
-                f"base class "
-                f"and does not provide callable 'factory' keyword argument"
+                f"{cls.__name__!r} neither inherits {DynamicNamespace.__name__!r} as a "
+                f"base class nor does it provide a callable 'factory' keyword argument"
             )
         base: type[DynamicNamespace] = cast(
             type[...],
@@ -130,8 +129,7 @@ class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
         super().__setattr__(name, value)
 
     def as_dict(self):
-        cls = type(self)
-        return dict(zip(cls.__annotations__, self.__members__))
+        return dict(zip(type(self).__annotations__, self.__members__))
 
     def __iter__(self):
         return iter(self.__members__)
@@ -626,9 +624,7 @@ class rgb_dispatch[**P, R]:
             *params,
             *(
                 v
-                for (s, v) in zip(
-                    ('*' * x for x in range(1, 3)), (argspec.varargs, argspec.varkw)
-                )
+                for (s, v) in (('*', argspec.varargs), ('**', argspec.varkw))
                 if s in params
             ),
         }
@@ -643,7 +639,7 @@ class rgb_dispatch[**P, R]:
                 (
                     param.replace(
                         annotation=' | '.join(
-                            [*f"{param.annotation}".split(' | '), 'str']
+                            {*f"{param.annotation}".split(' | '), 'str'}
                         )
                     )
                     if name in self.rgb_args and param.annotation is not param.empty

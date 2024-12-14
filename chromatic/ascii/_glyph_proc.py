@@ -78,8 +78,16 @@ def sort_glyphs(__s: str, font: FontArgType, reverse: bool = False):
 
 
 def ttf_extract_codepoints(
-    __fp: PathLike[str] | str, **kwargs
+    __fp: PathLike[str] | str | FontArgType, **kwargs
 ) -> ShapedNDArray[tuple[int], np.uint16]:
+    if not hasattr(__fp, '__fspath__'):
+        if isinstance(__fp, int):
+            from ..data import UserFont
+
+            __fp = UserFont(__fp)
+        if hasattr(__fp, 'path'):
+            __fp = __fp.path
+
     codepoints = set()
     with TTFont(__fp, **kwargs) as font:
         for table in font['cmap'].tables:

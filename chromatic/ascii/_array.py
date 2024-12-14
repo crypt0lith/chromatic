@@ -24,7 +24,7 @@ from typing import (
 import cv2 as cv
 import numpy as np
 import skimage as ski
-from numpy import dtype, float64, issubdtype, ndarray, uint8
+from numpy import float64, issubdtype, ndarray, uint8
 from PIL import Image, ImageDraw
 from PIL.Image import Image as ImageType
 from PIL.ImageFont import FreeTypeFont, truetype
@@ -71,7 +71,6 @@ __all__ = [
     'get_font_object',
     'img2ansi',
     'img2ascii',
-    'is_csi_param',
     'read_ans',
     'render_ans',
     'render_font_char',
@@ -79,11 +78,31 @@ __all__ = [
     'reshape_ansi',
     'scale_saturation',
     'shuffle_char_set',
+    'scaled_hu_moments',
     'to_sgr_array',
+    'AnsiImage',
+    'otsu_mask',
 ]
 
 
 def get_font_key(font: FreeTypeFont):
+    """Obtain a unique tuple pair from a FreeTypeFont object.
+
+    Parameters
+    ----------
+    font : FreeTypeFont
+        The FreeTypeFont object from which to derive a key.
+
+    Returns
+    -------
+    tuple[str, str]
+        A tuple containing the font family and font name.
+
+    Raises
+    ------
+    ValueError
+        If the font key cannot be generated due to missing fields.
+    """
     font = get_font_object(font)
     font_key = font.getname()
     if not all(font_key):
@@ -114,6 +133,30 @@ def get_font_object(font: FontArgType, *, retpath: Literal[True]) -> str: ...
 def get_font_object(
     font: FontArgType, *, retpath: bool = False
 ) -> Union[FreeTypeFont, str]:
+    """Obtain a FreeTypeFont object or its filepath from various input types.
+
+    Parameters
+    ----------
+    font : FontArgType
+        The font input, which could be a FreeTypeFont object, UserFont, string, or integer.
+
+    retpath : bool, optional
+        If True, returns the font's filepath instead of the font object.
+
+    Returns
+    -------
+    FreeTypeFont or str
+        The FreeTypeFont object or its filepath, depending on the `retpath` parameter.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the font file cannot be located.
+
+    TypeError
+        If the input type is unsupported.
+    """
+
     def path2obj(__path: AnyStr_co):
         return truetype(__path, 24)
 
@@ -143,8 +186,31 @@ def get_font_object(
 
 
 def shuffle_char_set(
-    char_set: Iterable[str], *xi: *tuple[Union[int, slice, None], ...]
+    char_set: Iterable[str], *xi: *tuple[Union[slice, int, None], ...]
 ):
+    """Randomly shuffle characters in a given character set.
+
+    Parameters
+    ----------
+    char_set : Iterable[str]
+        Iterable containing characters.
+
+    *xi : *(slice | int | None)
+        Specifies slices to take from the shuffled result.
+
+    Returns
+    -------
+    str
+        The shuffled string of characters.
+
+    Raises
+    ------
+    TypeError
+        If `char_set` is not iterable.
+
+    ValueError
+        If the number of varargs exceeds `[start[, stop[, step]]]`.
+    """
     if not isinstance(char_set, Iterable):
         raise TypeError(
             f"Expected 'char_set' to be iterable type, "
@@ -182,8 +248,28 @@ def shuffle_char_set(
 
 
 def render_font_str(__s: str, font: FontArgType):
-    font = get_font_object(font)
+    """Render a string as an image using the specified font.
+
+    Parameters
+    ----------
+    __s : str
+        The string to render.
+
+    font : FontArgType
+        The font to use for rendering.
+
+    Returns
+    -------
+    ImageType
+        An image of the rendered string.
+
+    Raises
+    ------
+    ValueError
+        If the string is empty.
+    """
     __s = __s.translate({ord('\t'): ' ' * 4})
+    font = get_font_object(font)
     if len(__s) > 1:
         lines = __s.splitlines()
         maxlen = max(map(len, lines))
@@ -205,8 +291,33 @@ def render_font_str(__s: str, font: FontArgType):
 def render_font_char(
     __c: str, font: FontArgType, size=(24, 24), fill: Int3Tuple = (255, 255, 255)
 ):
+    """Render a one-character string as an image.
+
+    Parameters
+    ----------
+    __c : str
+        Character to be rendered.
+
+    font : FreeTypeFont | UserFont | int | str
+        Font to use for rendering.
+
+    size : tuple[int, int]
+        Size of the bounding box to use for the output image, in pixels.
+
+    fill : tuple[int, int, int]
+        The color to fill the character.
+
+    Returns
+    -------
+    Image :
+        The character rendered in the given font.
+
+    Raises
+    ------
+        ValueError : If the input string is longer than a single character.
+    """
     if len(__c) > 1:
-        raise TypeError(
+        raise ValueError(
             f"{render_font_char.__name__}() expected a character, "
             f"but string of length {len(__c)} found"
         )
@@ -221,17 +332,36 @@ def render_font_char(
     return img
 
 
-def get_rgb_array(__img: Union[RGBImageLike, str, PathLike[str]]) -> RGBArray:
+def get_rgb_array(__img: Union[RGBImageLike, PathLike[str], str]):
+    """Convert an input image into an RGB array.
+
+    Parameters
+    ----------
+    __img : RGBImageLike | PathLike[str] | str
+        Input image or path to the image.
+
+    Returns
+    -------
+    RGBArray
+
+    Raises
+    ------
+    ValueError
+        If the image format is invalid.
+
+    TypeError
+        If the input is not a valid image or path.
+    """
     if hasattr(__img, '__fspath__'):
         img = ski.io.imread(__img.__fspath__())
     elif isinstance(__img, str):
         img = ski.io.imread(__img)
     else:
         img = __img
-    if not is_rgb_array(img):
-        if is_image(img):
+    if not _is_rgb_array(img):
+        if _is_image(img):
             img = img.convert('RGB')
-        elif is_array(img):
+        elif _is_array(img):
             conv = {
                 2: lambda im: cv.cvtColor(im[:, :, 0], cv.COLOR_GRAY2RGB),
                 4: lambda im: cv.cvtColor(im, cv.COLOR_RGBA2RGB),
@@ -266,13 +396,13 @@ def ansi_quantize(
     ansi_type: type[ansicolor4Bit | ansicolor8Bit],
     *,
     equalize: bool | Literal['white_point'] = True,
-) -> RGBArray:
+):
     """Color-quantize an RGB array into ANSI 4-bit or 8-bit color space.
 
     Parameters
     ----------
-    img : ndarray[Any, dtype[uint8]]
-        Input image, as an RGB array.
+    img : RGBArray
+        Input image in RGB format.
 
     ansi_type : type[ansicolor4Bit | ansicolor8Bit]
         ANSI color format to map the quantized image to.
@@ -285,11 +415,11 @@ def ansi_quantize(
     Raises
     ------
     TypeError
-        If `ansi_type` is not `ansi_color_4Bit` or `ansi_color_8Bit`.
+        If `ansi_type` is not ``ansi_color_4Bit`` or ``ansi_color_8Bit``.
 
     Returns
     -------
-    ansi_array : ndarray[Any, dtype[uint8]]
+    quantized : RGBArray
         The image with RGB values transformed into ANSI color space.
     """
     try:
@@ -329,11 +459,11 @@ def equalize_white_point(img: RGBArray) -> RGBArray:
 
     Parameters
     ----------
-    img : numpy.ndarray[Any, dtype[uint8]]
+    img : RGBArray
 
     Returns
     -------
-    eq_img : numpy.ndarray[Any, dtype[uint8]]
+    eq_img : RGBArray
 
     See Also
     --------
@@ -354,11 +484,11 @@ def contrast_stretch(img: RGBArray) -> RGBArray:
 
     Parameters
     ----------
-    img : numpy.ndarray[Any, dtype[uint8]]
+    img : RGBArray
 
     Returns
     -------
-    eq_img : numpy.ndarray[Any, dtype[uint8]]
+    eq_img : RGBArray
 
     See Also
     --------
@@ -414,7 +544,7 @@ def img2ascii(
 
 
 def img2ascii(
-    __img: RGBImageLike | str | PathLike[str],
+    __img: RGBImageLike | PathLike[str] | str,
     __font: FontArgType = 'arial.ttf',
     factor: int = 100,
     char_set: Iterable[str] = None,
@@ -426,10 +556,10 @@ def img2ascii(
 
     Parameters
     ----------
-    __img : RGBImageLike | str | PathLike[str]
+    __img : RGBImageLike | PathLike[str] | str
         Base image being converted to ASCII.
 
-    __font : FreeTypeFont | UserFont | str | int
+    __font : FontArgType
         Font to use for glyph comparisons and representation.
 
     factor : int
@@ -438,14 +568,14 @@ def img2ascii(
     char_set : Iterable[str], optional
         Characters to be mapped to greyscale values of `__img`.
 
-    sort_glyphs : {True, False, `reversed`}
+    sort_glyphs : {True, False, ``reversed``}
         Specifies to sort `char_set` or leave it unsorted before mapping to greyscale.
         Glyph bitmasks obtained from `__font` are compared when sorting the string.
-        :py:class:`reversed` specifies reverse sorting order.
+        ``reversed`` specifies reverse sorting order.
 
     ret_img : bool, default=False
         Specifies to return both the output string and original RGB array.
-        Used by :py:func:`img2ansi` to lazily obtain the base ASCII chars and original RGB array.
+        Used by ``img2ansi`` to lazily obtain the base ASCII chars and original RGB array.
 
     Returns
     -------
@@ -456,24 +586,6 @@ def img2ascii(
     ------
     TypeError
         If `char_set` is of an unexpected type.
-
-    Notes
-    -----
-    * 'row length' and 'absolute width' are synonymous with the `factor` param.
-    * `factor` equals n characters per row.
-
-    * `char_set`: ASCII printable is default for most fonts, but some fonts are mapped to
-    specific encodings.
-    * For example, if `__font` is `UserFont.IBM_VGA_437_8X16`, the default will be printable
-    characters from 'cp437'.
-
-    * ASCII interpolation maps the greyscale value range (0.0 to 1.0) across `char_set`.
-    * To illustrate, `char_set=' *#█'` contains 4 characters:
-        [' ', '*', '#', '█']
-    * The interpolation ranges map to characters:
-        {' ': (0.0, 0.25), '*': (0.25, 0.5), '#': (0.5, 0.75), '█': (0.75, 1.0)}
-    * If `char_set='ABCD'` and is left unsorted, the ranges would map to the literal string:
-        {'A': (0.0, 0.25), 'B': (0.25, 0.5), 'C': (0.5, 0.75), 'D': (0.75, 1.0)}
 
     See Also
     --------
@@ -520,10 +632,10 @@ def img2ansi(
 
     Parameters
     ----------
-    __img : RGBImageLike | str | PathLike[str]
+    __img : RGBImageLike | PathLike[str] | str
         Base image or path to image being convert into ANSI.
 
-    __font : FreeTypeFont | UserFont | str | int
+    __font : FontArgType
         Font to use for glyph comparisons and representation.
 
     factor : int
@@ -534,35 +646,35 @@ def img2ansi(
         visualization.
         If None (default), the character set will be determined based on the `__font` parameter.
 
-    ansi_type : str or type[ansi_color_4Bit | ansi_color_8Bit | ansi_color_24Bit], optional
+    ansi_type : AnsiColorParam
         ANSI color format to map the RGB values to.
         Can be 4-bit, 8-bit, or 24-bit ANSI color space.
         If 4-bit or 8-bit, the RGB array will be color-quantized into ANSI color space;
         if 24-bit, colors are sourced from the base RGB array;
         if None (default), uses default ANSI type (4-bit or 8-bit, depending on the system).
 
-    sort_glyphs : {True, False, `reversed`}
+    sort_glyphs : {True, False, ``reversed``}
         Specifies to sort `char_set` or leave it unsorted before mapping to greyscale.
         Glyph bitmasks obtained from `__font` are compared when sorting the string.
-        :py:class:`reversed` specifies reverse sorting order.
+        ``reversed`` specifies reverse sorting order.
 
     equalize : {True, False, 'white_point'}
         Apply contrast equalization to the input image.
         If True, performs contrast stretching;
         if 'white_point', applies white-point equalization.
 
-    bg : sequence of ints or ndarray[Any, dtype[uint8]]
-        Background color to use for all :py:class:`ColorStr` objects in the array.
+    bg : sequence of ints or RGBArray
+        Background color to use for all ``ColorStr`` objects in the array.
 
     Returns
     -------
     ansi_array : list[list[ColorStr]]
-        The ANSI-converted image, as an array of :py:class:`ColorStr` objects.
+        The ANSI-converted image, as an array of ``ColorStr`` objects.
 
     Raises
     ------
     ValueError
-        If `bg` cannot be coerced into a :py:class:`Color` object.
+        If `bg` cannot be coerced into a ``Color`` object.
 
     TypeError
         If `ansi_type` is not a valid ANSI type.
@@ -614,14 +726,14 @@ def ascii2img(
     fg: Int3Tuple | str = (0, 0, 0),
     bg: Int3Tuple | str = (255, 255, 255),
 ):
-    """Render an ASCII string as an image.
+    """Render a literal string as an image.
 
     Parameters
     ----------
     __ascii : str
         The ASCII string to convert into an image.
 
-    __font : FreeTypeFont | UserFont | str | int
+    __font : FontArgType
         Font to use for rendering the ASCII characters.
 
     font_size : int
@@ -635,7 +747,7 @@ def ascii2img(
 
     Returns
     -------
-    ascii_img : Image.Image
+    ascii_img : ImageType
         An Image object of the rendered ASCII string.
 
     See Also
@@ -670,9 +782,9 @@ def ansi2img(
     Parameters
     ----------
     __ansi_array : list[list[ColorStr]]
-        An array-like, row-major list of lists of `ColorStr` objects
+        A 2D list of ``ColorStr`` objects
 
-    __font : FreeTypeFont | UserFont | str | int
+    __font : FontArgType
         Font to render the ANSI strings with.
 
     font_size : int
@@ -686,8 +798,8 @@ def ansi2img(
 
     Returns
     -------
-    ansi_img : Image.Image
-        PIL Image of the rendered ANSI array.
+    ansi_img : ImageType
+        The rendered ANSI array as an ``Image`` object.
 
     Raises
     ------
@@ -742,32 +854,32 @@ def ansi2img(
     return img
 
 
-def is_array(__obj: Any) -> TypeGuard[ndarray]:
+def _is_array(__obj: Any) -> TypeGuard[ndarray]:
     return isinstance(__obj, ndarray)
 
 
-def is_rgb_array(__obj: Any) -> TypeGuard[RGBArray]:
-    return is_array(__obj) and __obj.ndim == 3 and issubdtype(__obj.dtype, uint8)
+def _is_rgb_array(__obj: Any) -> TypeGuard[RGBArray]:
+    return _is_array(__obj) and __obj.ndim == 3 and issubdtype(__obj.dtype, uint8)
 
 
-def is_greyscale_array(__obj: Any) -> TypeGuard[GreyscaleArray]:
-    return is_array(__obj) and __obj.ndim == 2 and issubdtype(__obj.dtype, float64)
+def _is_greyscale_array(__obj: Any) -> TypeGuard[GreyscaleArray]:
+    return _is_array(__obj) and __obj.ndim == 2 and issubdtype(__obj.dtype, float64)
 
 
-def is_greyscale_glyph(__obj: Any) -> TypeGuard[GreyscaleGlyphArray]:
-    return is_greyscale_array(__obj) and __obj.shape == (24, 24)
+def _is_greyscale_glyph(__obj: Any) -> TypeGuard[GreyscaleGlyphArray]:
+    return _is_greyscale_array(__obj) and __obj.shape == (24, 24)
 
 
-def is_image(__obj: Any) -> TypeGuard[ImageType]:
+def _is_image(__obj: Any) -> TypeGuard[ImageType]:
     return isinstance(__obj, ImageType)
 
 
-def is_rgb_image(__obj: Any) -> TypeGuard[ImageType]:
-    return is_image(__obj) and __obj.mode == 'RGB'
+def _is_rgb_image(__obj: Any) -> TypeGuard[ImageType]:
+    return _is_image(__obj) and __obj.mode == 'RGB'
 
 
-def is_rgb_imagelike(__obj: Any) -> TypeGuard[Union[RGBArray, ImageType]]:
-    return is_rgb_array(__obj) or is_rgb_image(__obj)
+def _is_rgb_imagelike(__obj: Any) -> TypeGuard[Union[RGBArray, ImageType]]:
+    return _is_rgb_array(__obj) or _is_rgb_image(__obj)
 
 
 type _LiteralDigitStr = Sequence[
@@ -775,7 +887,7 @@ type _LiteralDigitStr = Sequence[
 ]
 
 
-def is_csi_param(__c: str) -> TypeGuard[Literal[';'] | _LiteralDigitStr]:
+def _is_csi_param(__c: str) -> TypeGuard[Literal[';'] | _LiteralDigitStr]:
     return __c == ';' or __c.isdigit()
 
 
@@ -786,7 +898,7 @@ def reshape_ansi(__str: str, h: int, w: int):
     str_len = len(__str)
     j = 0
 
-    def increment(__c: str = ' '):
+    def _increment(__c: str = ' '):
         nonlocal x, y
         arr[x][y] += __c
         offsets[x] += 1
@@ -800,20 +912,20 @@ def reshape_ansi(__str: str, h: int, w: int):
         while j < str_len:
             if __str[j : (i := j + 2)] == '\x1b[':
                 j = i
-                while is_csi_param(c := __str[j]):
+                while _is_csi_param(c := __str[j]):
                     j += 1
                 params = __str[i:j]
                 if c == 'C':
                     for _ in range(int(params)):
-                        increment()
+                        _increment()
                 elif c == 'm':
                     arr[x][y] += str(SgrSequence(list(map(int, params.split(';')))))
             elif (c := __str[j]) == '\n':
                 while y < w - 1:
-                    increment()
+                    _increment()
                 x, y = next(flat_iter)
             else:
-                increment(c)
+                _increment(c)
             j += 1
     except StopIteration:
         pass
@@ -882,20 +994,25 @@ def render_ans(
     *,
     bg_default: Union[tuple[int, int, int], Literal['auto'], str] = (0, 0, 0),
 ) -> ImageType:
-    """Parse and render literal ANSI text as an image.
+    """Create an image from a literal ANSI string.
 
     Parameters
     ----------
     __str : str
         Literal ANSI text.
+
     shape : tuple[int, int]
         (height, width) of the expected output, in ASCII characters.
-    font : FreeTypeFont | UserFont | str | int
+
+    font : FontArgType
         Font to use when rendering the image.
+
     font_size : int
         Font size in pixels.
+
     bg_default : tuple[int, int, int] | Literal['auto']
-        Default background color to use when rendering the image.
+        Background color to use as a fallback when ANSI SGR has none.
+        'auto' will determine background color dynamically.
     """
     reshaped = reshape_ansi(__str, *shape)
     ansi_array = to_sgr_array(reshaped)
@@ -905,7 +1022,7 @@ def render_ans(
 def read_ans[
     AnyStr: (str, bytes)
 ](__path: Union[PathLike[AnyStr], AnyStr], encoding='cp437') -> str:
-    """Read an ANSI file and return the content as a string.
+    """Read a .ANS file and return the content as a string.
 
     Extends code page 437 translation if `encoding='cp437'`, and truncates any SAUCE metadata.
     Otherwise, the function is just a wrapped text file read operation.
@@ -934,6 +1051,26 @@ class AnsiImage:
         encoding='cp437',
         ansi_type: AnsiColorParam = DEFAULT_ANSI,
     ) -> Self:
+        """Construct an ``AnsiImage`` object from a readable file.
+
+        Parameters
+        ----------
+        fp : PathLike[AnyStr] or AnyStr
+            Filepath to the ANSI file.
+
+        shape : tuple[int, int]
+            Dimensions of the ANSI image (height, width).
+
+        encoding : str='cp437'
+            Encoding of the ANSI file.
+
+        ansi_type : AnsiColorParam
+            ANSI color format.
+
+        Returns
+        -------
+        AnsiImage
+        """
         inst = super().__new__(cls)
         inst._height_, inst._width_ = shape
         inst._ansi_format_ = get_ansi_type(ansi_type)

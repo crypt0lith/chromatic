@@ -89,7 +89,7 @@ def translate_cp437(
             keys_view.discard(ignore)
     trans_table = {k: v for (k, v) in CP437_TRANS_TABLE.items() if k in keys_view}
     if not isinstance(__x, str):
-        return iter(map(lambda s: str.translate(s, trans_table), __x))
+        return map(lambda s: str.translate(s, trans_table), __x)
     return __x.translate(trans_table)
 
 

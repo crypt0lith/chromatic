@@ -5,6 +5,7 @@ except ImportError:
 
 from . import ascii, color, data
 from .ascii import (
+    AnsiImage,
     ansi2img,
     ansi_quantize,
     ascii2img,
@@ -23,16 +24,18 @@ from .ascii import (
 )
 from .ascii._glyph_proc import get_glyph_masks
 from .color import (
-    ansicolor24Bit,
-    ansicolor4Bit,
-    ansicolor8Bit,
     Back,
     Color,
-    colorbytes,
+    ColorNamespace,
     ColorStr,
     Fore,
     SgrParameter,
     Style,
+    ansicolor24Bit,
+    ansicolor4Bit,
+    ansicolor8Bit,
+    colorbytes,
+    named_color,
 )
 from .data import register_user_font
 

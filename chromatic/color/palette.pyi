@@ -1,19 +1,22 @@
-__all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'color_str_wrapper']
+__all__ = [
+    'Back',
+    'ColorNamespace',
+    'Fore',
+    'Style',
+    'color_str_wrapper',
+    'rgb_dispatch',
+    'named_color',
+]
 
+import inspect
 from collections.abc import Sequence
 from types import MappingProxyType
-from typing import Callable, Iterator, overload, TypedDict, Union, Unpack
+from typing import Callable, Iterator, Literal, TypeVar, TypedDict, Union, Unpack, overload
 
 from chromatic._typing import AnsiColorAlias, Int3Tuple
-from chromatic.color.core import (
-    AnsiColorFormat,
-    Color,
-    ColorStr,
-    SgrParameter,
-    SgrSequence,
-)
+from chromatic.color.core import AnsiColorFormat, Color, ColorStr, SgrParameter, SgrSequence
 
-type _ColorLike = Union[Color, int, tuple[int, int, int]]
+type _ColorLike = Union[Color, Int3Tuple, int]
 
 def display_ansi256_color_range() -> list[list[ColorStr]]: ...
 def display_named_colors() -> list[ColorStr]: ...
@@ -270,7 +273,49 @@ class ColorNamespace[NamedColor: Color](DynamicNamespace[NamedColor]):
     PINK: NamedColor
     LIGHT_PINK: NamedColor
 
-# noinspection PyTypedDict
+# fmt: off
+_ColorName = TypeVar(
+    '_ColorName',
+    bound=Literal[
+        'ALICE_BLUE', 'ANTIQUE_WHITE', 'AQUAMARINE', 'AZURE', 'BEIGE', 'BISQUE', 'BLACK',
+        'BLANCHED_ALMOND', 'BLUE', 'BLUE_VIOLET', 'BROWN', 'BURLY_WOOD', 'BURNT_SIENNA',
+        'CADET_BLUE', 'CHARTREUSE', 'CHOCOLATE', 'CORAL', 'CORNFLOWER_BLUE', 'CORNSILK',
+        'CRIMSON', 'CYAN', 'DARK_BLUE', 'DARK_CYAN', 'DARK_GOLDENROD', 'DARK_GREEN', 'DARK_GREY',
+        'DARK_KHAKI', 'DARK_MAGENTA', 'DARK_OLIVE_GREEN', 'DARK_ORANGE', 'DARK_ORCHID',
+        'DARK_RED', 'DARK_SALMON', 'DARK_SEA_GREEN', 'DARK_SLATE_BLUE', 'DARK_SLATE_GREY',
+        'DARK_TURQUOISE', 'DARK_VIOLET', 'DEEP_PINK', 'DEEP_SKY_BLUE', 'DIM_GREY', 'DODGER_BLUE',
+        'FIREBRICK', 'FLORAL_WHITE', 'FOREST_GREEN', 'FUCHSIA', 'GHOST_WHITE', 'GOLD',
+        'GOLDENROD', 'GREEN', 'GREEN_YELLOW', 'GREY', 'HONEYDEW', 'HOT_PINK', 'INDIAN_RED',
+        'INDIGO', 'IVORY', 'KHAKI', 'LAVENDER', 'LAVENDER_BLUSH', 'LAWN_GREEN', 'LEMON_CHIFFON',
+        'LIGHT_BLUE', 'LIGHT_CORAL', 'LIGHT_CYAN', 'LIGHT_GOLDENROD_YELLOW', 'LIGHT_GREEN',
+        'LIGHT_GREY', 'LIGHT_PINK', 'LIGHT_SALMON', 'LIGHT_SEA_GREEN', 'LIGHT_SKY_BLUE',
+        'LIGHT_SLATE_GREY', 'LIGHT_STEEL_BLUE', 'LIGHT_YELLOW', 'LIME', 'LIME_GREEN', 'LINEN',
+        'MAROON', 'MEDIUM_AQUAMARINE', 'MEDIUM_BLUE', 'MEDIUM_ORCHID', 'MEDIUM_PURPLE',
+        'MEDIUM_SEA_GREEN', 'MEDIUM_SLATE_BLUE', 'MEDIUM_SPRING_GREEN', 'MEDIUM_TURQUOISE',
+        'MEDIUM_VIOLET_RED', 'MIDNIGHT_BLUE', 'MINT_CREAM', 'MISTY_ROSE', 'MOCCASIN',
+        'NAVAJO_WHITE', 'NAVY', 'OLD_LACE', 'OLIVE', 'OLIVE_DRAB', 'ORANGE', 'ORANGE_RED',
+        'ORCHID', 'PALE_GOLDENROD', 'PALE_GREEN', 'PALE_TURQUOISE', 'PALE_VIOLET_RED',
+        'PAPAYA_WHIP', 'PEACH_PUFF', 'PERU', 'PINK', 'PLUM', 'POWDER_BLUE', 'PURPLE',
+        'REBECCA_PURPLE', 'RED', 'ROSY_BROWN', 'ROYAL_BLUE', 'SADDLE_BROWN', 'SALMON',
+        'SANDY_BROWN', 'SEASHELL', 'SEA_GREEN', 'SIENNA', 'SILVER', 'SKY_BLUE', 'SLATE_BLUE',
+        'SLATE_GREY', 'SNOW', 'SPRING_GREEN', 'STEEL_BLUE', 'TAN', 'TEAL', 'THISTLE', 'TOMATO',
+        'TURQUOISE', 'VIOLET', 'WHEAT', 'WHITE', 'WHITE_SMOKE', 'YELLOW', 'YELLOW_GREEN'
+    ]
+)
+_ColorName4Bit = TypeVar(
+    '_ColorName4Bit',
+    bound=Literal[
+        'BLACK', 'RED', 'GREEN', 'YELLOW', 'BLUE', 'MAGENTA', 'CYAN', 'GREY', 'DARK_GREY',
+        'BRIGHT_RED', 'BRIGHT_GREEN', 'BRIGHT_YELLOW', 'BRIGHT_BLUE', 'BRIGHT_MAGENTA',
+        'BRIGHT_CYAN', 'WHITE'
+    ]
+)
+# fmt: on
+named_color: Union[
+    dict[Literal['4b'], Callable[[_ColorName4Bit], Color]],
+    dict[Literal['24b'], Callable[[_ColorName], Color]],
+]
+
 class _ColorStrWrapperKwargs(TypedDict, total=False):
     ansi_type: Union[AnsiColorAlias, type[AnsiColorFormat]]
     bg: _ColorLike
@@ -280,15 +325,14 @@ class _ColorStrWrapperKwargs(TypedDict, total=False):
 class rgb_dispatch[**P, R]:
     color_ns: MappingProxyType[str, Int3Tuple]
 
-    @overload
-    def __new__(cls, func: Callable[P, R], /, *, args: Sequence[str] = ()):
-        return func
+    __signature__: inspect.Signature
 
     @overload
-    def __new__(
-        cls, func: None = None, /, *, args: Sequence[str] = ()
-    ) -> type[rgb_dispatch]: ...
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+    def __new__(cls, __f, /, *, args: Sequence[str] = ()):
+        return __f
+
+    @property
+    def __wrapped__(self) -> Callable[P, R]: ...
 
 Back = AnsiBack()
 Fore = AnsiFore()

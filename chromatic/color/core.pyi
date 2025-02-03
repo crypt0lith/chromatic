@@ -23,14 +23,16 @@ from types import MappingProxyType
 from typing import (
     Final,
     Literal,
-    overload,
+    Optional,
     Self,
     SupportsIndex,
     SupportsInt,
-    TypedDict,
+    TypeAlias,
     TypeVar,
+    TypedDict,
     Union,
     Unpack,
+    overload,
 )
 
 from chromatic._typing import (
@@ -44,22 +46,6 @@ from chromatic._typing import (
     RGBVectorLike,
     TupleOf3,
 )
-
-AnsiColorFormat = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
-AnsiColorParam = AnsiColorAlias | AnsiColorType
-AnsiColorType = type[AnsiColorFormat]
-
-type _CSpecDict = Mapping[ColorDictKeys, _CSpecScalar]
-type _CSpecKVPair = tuple[ColorDictKeys, _CSpecScalar]
-type _CSpecScalar = Union[int, Color, RGBVectorLike]
-type _CSpecTuplePair = Union[
-    tuple[_CSpecScalar, _CSpecScalar], tuple[_CSpecKVPair, _CSpecKVPair]
-]
-type _CSpecType = Union[
-    SgrSequence, str, bytes, _CSpecScalar, _CSpecTuplePair, _CSpecKVPair, _CSpecDict
-]
-type _RgbCoercible = Union[Color, SupportsInt]
-type _RgbMapping[_KT: Union[ColorDictKeys, str], _VT: _RgbCoercible] = Mapping[_KT, _VT]
 
 @overload
 def get_ansi_type[_T: AnsiColorType](typ: _T) -> _T: ...
@@ -127,14 +113,9 @@ class ColorStr(str):
     def as_ansi_type(self, __ansi_type: AnsiColorParam) -> ColorStr: ...
     def format(self, *args, **kwargs) -> ColorStr: ...
     def recolor(
-        self,
-        __value: ColorStr = None,
-        absolute: bool = False,
-        **kwargs: Unpack[_ColorDict],
+        self, __value: ColorStr = None, absolute: bool = False, **kwargs: Unpack[_ColorDict]
     ) -> ColorStr: ...
-    def replace(
-        self, __old: str, __new: str, __count: SupportsIndex = -1
-    ) -> ColorStr: ...
+    def replace(self, __old: str, __new: str, __count: SupportsIndex = -1) -> ColorStr: ...
     def split(self, sep=None, maxsplit=-1) -> list[ColorStr]: ...
     def update_sgr(self, *p: *tuple[Union[int, SgrParameter], ...]) -> ColorStr: ...
     def __add__[_T: (str, ColorStr, SgrParameter)](self, other: _T) -> ColorStr: ...
@@ -164,7 +145,7 @@ class ColorStr(str):
     def __sub__(self, other: Union[Color, ColorStr]) -> ColorStr: ...
 
     _ansi_: bytes
-    _ansi_type_: type[AnsiColorFormat]
+    _ansi_type_: AnsiColorType
     _base_str_: str
     _color_dict_: MappingProxyType[ColorDictKeys, Color]
     _no_reset_: bool
@@ -178,9 +159,9 @@ class ColorStr(str):
     @property
     def base_str(self) -> str: ...
     @property
-    def bg(self) -> Color | None: ...
+    def bg(self) -> Optional[Color]: ...
     @property
-    def fg(self) -> Color | None: ...
+    def fg(self) -> Optional[Color]: ...
     @property
     def no_reset(self) -> bool: ...
     @property
@@ -269,9 +250,7 @@ class SgrParamWrapper:
     def __bytes__(self) -> bytes: ...
     def __eq__(self, other: ...) -> bool: ...
     def __hash__(self) -> int: ...
-    def __init__[
-        _T: (bytes, AnsiColorFormat, SgrParamWrapper)
-    ](self, value: _T = b'') -> None: ...
+    def __init__[_T: (bytes, AnsiColorFormat, SgrParamWrapper)](self, value: _T = b'') -> None: ...
 
     _value_: Union[bytes, AnsiColorFormat]
 
@@ -305,15 +284,15 @@ class SgrSequence:
     def __str__(self) -> str: ...
 
     __slots__ = '_bytes_', '_has_bright_colors_', '_rgb_dict_', '_sgr_params_'
-    _bytes_: Union[bytes, None]
+    _bytes_: Optional[bytes]
     _has_bright_colors_: bool
     _rgb_dict_: dict[ColorDictKeys, Int3Tuple]
     _sgr_params_: list[SgrParamWrapper]
 
     @property
-    def bg(self) -> Int3Tuple | None: ...
+    def bg(self) -> Optional[Int3Tuple]: ...
     @property
-    def fg(self) -> Int3Tuple | None: ...
+    def fg(self) -> Optional[Int3Tuple]: ...
     @property
     def has_bright_colors(self) -> bool: ...
     @property
@@ -327,16 +306,14 @@ class SgrSequence:
     @rgb_dict.setter
     def rgb_dict[
         _AnsiColorType: type[AnsiColorFormat]
-    ](
-        self, __value: tuple[_AnsiColorType, dict[ColorDictKeys, Union[Color, None]]]
-    ) -> None: ...
+    ](self, __value: tuple[_AnsiColorType, dict[ColorDictKeys, Optional[Color]]]) -> None: ...
 
 class _ColorDict(TypedDict, total=False):
-    bg: Union[Color, AnsiColorFormat, None]
-    fg: Union[Color, AnsiColorFormat, None]
+    bg: Optional[Color | AnsiColorFormat]
+    fg: Optional[Color | AnsiColorFormat]
 
 class _ColorStrKwargs(TypedDict, total=False):
-    ansi_type: Union[AnsiColorAlias, type[AnsiColorFormat], None]
+    ansi_type: Optional[AnsiColorAlias | type[AnsiColorFormat]]
     no_reset: bool
 
 class _ColorStrWeakVars(TypedDict, total=False):
@@ -354,8 +331,20 @@ _ANSI16C_STD: Final[frozenset[int]]
 _ANSI256_B2KEY: Final[dict[bytes, str]]
 _ANSI256_KEY2I: Final[dict[str, int]]
 _ANSI_COLOR_TYPES: Final[frozenset[AnsiColorType]]
-_ANSI_FORMAT_MAP: Final[dict[AnsiColorAlias | AnsiColorType, type[AnsiColorFormat]]]
-_AnsiColor_co = TypeVar('_AnsiColor_co', bound=colorbytes, covariant=True)
-_ColorSpec = TypeVar('_ColorSpec', bound=_CSpecType)
-_RGBVectorLike = TypeVar('_RGBVectorLike', bound=RGBVectorLike)
+_ANSI_FORMAT_MAP: Final[dict[AnsiColorAlias | AnsiColorType, AnsiColorType]]
 _SGR_PARAM_VALUES: Final[frozenset[int]]
+
+AnsiColorFormat: TypeAlias = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
+AnsiColorType: TypeAlias = type[AnsiColorFormat]
+AnsiColorParam: TypeAlias = Union[AnsiColorAlias, AnsiColorType]
+
+_CSpecDict: TypeAlias = Mapping[ColorDictKeys, _CSpecScalar]
+_CSpecKVPair: TypeAlias = tuple[ColorDictKeys, _CSpecScalar]
+_CSpecScalar: TypeAlias = int | Color | RGBVectorLike
+_CSpecTuplePair: TypeAlias = tuple[_CSpecScalar, _CSpecScalar] | tuple[_CSpecKVPair, _CSpecKVPair]
+_CSpecType: TypeAlias = SgrSequence | _CSpecScalar | _CSpecTuplePair | _CSpecKVPair | _CSpecDict
+_ColorSpec = TypeVar('_ColorSpec', _CSpecType, str, bytes)
+_AnsiColor_co = TypeVar('_AnsiColor_co', bound=colorbytes, covariant=True)
+_RGBVectorLike = TypeVar('_RGBVectorLike', bound=RGBVectorLike)
+_RgbCoercible: TypeAlias = Color | SupportsInt
+type _RgbMapping[_KT: Union[ColorDictKeys, str], _VT: _RgbCoercible] = Mapping[_KT, _VT]

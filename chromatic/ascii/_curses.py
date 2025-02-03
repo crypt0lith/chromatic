@@ -12,7 +12,7 @@ __all__ = [
 
 from enum import IntEnum
 from types import MappingProxyType
-from typing import Iterable, Iterator, overload, Union
+from typing import Iterable, Iterator, overload
 
 
 class ControlCharacter(IntEnum):
@@ -57,30 +57,30 @@ class ControlCharacter(IntEnum):
 
 CP437_TRANS_TABLE = MappingProxyType(
     {
-        0: None, 1: 0x263A, 2: 0x263B, 3: 0x2665, 4: 0x2666, 5: 0x2663, 6: 0x2660, 7: 0x2022,
-        8: 0x25D8, 9: 0x25CB, 10: 0x25D9, 11: 0x2642, 12: 0x2640, 13: 0x266A, 14: 0x266B,
-        15: 0x263C, 16: 0x25BA, 17: 0x25C4, 18: 0x2195, 19: 0x203C, 20: 0xB6, 21: 0xA7, 22: 0x25AC,
-        23: 0x21A8, 24: 0x2191, 25: 0x2193, 0x1A: 0x2192, 0x1B: 0x2190, 0x1C: 0x221F, 0x1D: 0x2194,
-        0x1E: 0x25B2, 0x1F: 0x25BC, 0x7F: 0x2302, 0xA0: None,        # fmt: skip
+        0x0: None, 0x1: 0x263A, 0x2: 0x263B, 0x3: 0x2665, 0x4: 0x2666,
+        0x5: 0x2663, 0x6: 0x2660, 0x7: 0x2022, 0x8: 0x25D8, 0x9: 0x25CB,
+        0xA: 0x25D9, 0xB: 0x2642, 0xC: 0x2640, 0xD: 0x266A, 0xE: 0x266B,
+        0xF: 0x263C, 0x10: 0x25BA, 0x11: 0x25C4, 0x12: 0x2195, 0x13: 0x203C,
+        0x14: 0xB6, 0x15: 0xA7, 0x16: 0x25AC, 0x17: 0x21A8, 0x18: 0x2191, 0x19: 0x2193,
+        0x1A: 0x2192, 0x1B: 0x2190, 0x1C: 0x221F, 0x1D: 0x2194, 0x1E: 0x25B2, 0x1F: 0x25BC,
+        0x7F: 0x2302, 0xA0: None  # fmt: skip
     }
 )
 
 
 @overload
-def translate_cp437[
-    _T: (int, str)
-](__x: str, *, ignore: Union[_T, Iterable[_T]] = ...) -> str: ...
+def translate_cp437[_T: (int, str)](__x: str, *, ignore: _T | Iterable[_T] = ...) -> str: ...
 
 
 @overload
 def translate_cp437[
     _T: (int, str)
-](__iter: Iterable[str], *, ignore: Union[_T, Iterable[_T]] = ...) -> Iterator[str]: ...
+](__iter: Iterable[str], *, ignore: _T | Iterable[_T] = ...) -> Iterator[str]: ...
 
 
 def translate_cp437(
-    __x: Union[str, Iterable[str]], *, ignore: Union[int, Iterable[int]] = None
-) -> Union[str, Iterator[str]]:
+    __x: str | Iterable[str], *, ignore: int | Iterable[int] = None
+) -> str | Iterator[str]:
     keys_view = set(CP437_TRANS_TABLE.keys())
     if ignore is not None:
         if isinstance(ignore, Iterable):
@@ -102,36 +102,36 @@ def ascii_printable():
     return bytes(range(32, 127)).decode(encoding='ascii')
 
 
-def _ctoi(c: Union[str, int]):
+def _ctoi(c: str | int):
     if isinstance(c, str):
         return ord(c)
     else:
         return c
 
 
-def isprint(c: Union[str, int]):
+def isprint(c: str | int):
     return 32 <= _ctoi(c) <= 126
 
 
-def isctrl(c: Union[str, int]):
+def isctrl(c: str | int):
     return 0 <= _ctoi(c) < 32
 
 
-def ctrl(c: Union[str, int]):
+def ctrl(c: str | int):
     if isinstance(c, str):
         return chr(_ctoi(c) & 0x1F)
     else:
         return _ctoi(c) & 0x1F
 
 
-def alt(c: Union[str, int]):
+def alt(c: str | int):
     if isinstance(c, str):
         return chr(_ctoi(c) | 0x80)
     else:
         return _ctoi(c) | 0x80
 
 
-def unctrl(c: Union[str, int]):
+def unctrl(c: str | int):
     bits = _ctoi(c)
     if bits == 0x7F:
         rep = '^?'

@@ -1,10 +1,8 @@
-from functools import lru_cache, update_wrapper, wraps
-from inspect import getfullargspec, signature
+from functools import lru_cache, update_wrapper
+from inspect import getfullargspec, getmodule, isbuiltin, signature
 from types import FunctionType, MappingProxyType
 from typing import (
     Callable,
-    cast,
-    dataclass_transform,
     Iterable,
     Iterator,
     Sequence,
@@ -12,17 +10,19 @@ from typing import (
     TypedDict,
     Union,
     Unpack,
+    cast,
+    dataclass_transform,
 )
 
-from .colorconv import hex2rgb
+from .colorconv import ANSI_4BIT_RGB, hex2rgb
 from .core import (
     AnsiColorFormat,
     Color,
     ColorStr,
     DEFAULT_ANSI,
-    get_ansi_type,
     SgrParameter,
     SgrSequence,
+    get_ansi_type,
 )
 from .._typing import AnsiColorAlias, Int3Tuple
 
@@ -58,9 +58,7 @@ class Member[_T]:
 @dataclass_transform()
 class DynamicNSMeta[_VT](type):
 
-    def __new__(
-        mcls, clsname: str, bases: tuple[type, ...], mapping: dict[str, ...], **kwargs
-    ):
+    def __new__(mcls, clsname: str, bases: tuple[type, ...], mapping: dict[str, ...], **kwargs):
         slot_names: dict[str, ...] = mapping.get('__annotations__', {})
         member: Member[_VT]
         for offset, name in enumerate(slot_names):
@@ -76,8 +74,7 @@ class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
     def __new__(cls, *args, **kwargs):
         inst = super().__new__(cls)
         if hasattr(cls, '__annotations__'):
-            is_member = _check_if_ns_member(cls)
-            slots = kwargs.pop('slots', list(filter(is_member, cls.__annotations__)))
+            slots = kwargs.pop('slots', list(filter(_check_if_ns_member(cls), cls.__annotations__)))
             empty_slots = [null] * len(slots)
             object.__setattr__(inst, '__members__', empty_slots)
         return inst
@@ -87,17 +84,11 @@ class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
             self.__setattr__(name, value)
 
     def __init_subclass__(cls, **kwargs):
-        if DynamicNamespace in cls.__bases__:
-            return super().__new__(cls)
         factory: Callable[[...], _VT] | FunctionType = kwargs.get('factory')
-        if not callable(factory):
-            raise ValueError(
-                f"{cls.__name__!r} neither inherits {DynamicNamespace.__name__!r} as a "
-                f"base class nor does it provide a callable 'factory' keyword argument"
-            )
+        if DynamicNamespace in cls.__bases__ or not callable(factory):
+            return super().__new__(cls)
         base: type[DynamicNamespace] = cast(
-            type[...],
-            next((typ for typ in cls.mro() if DynamicNamespace in typ.__bases__), null),
+            type[...], next((typ for typ in cls.mro() if DynamicNamespace in typ.__bases__), null)
         )
         if base is null:
             raise TypeError(
@@ -106,26 +97,18 @@ class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
             ) from None
         d = dict(zip(base.__annotations__, map(factory, base().__members__)))
         cls.__annotations__: dict[str, ...] = {k: type(v) for k, v in d.items()}
-        new = cls.__new__
-
-        @wraps(cls.__new__)
-        def wrapped_new(*args, **kw):
-            return new(*args, **(kw | dict(slots=d)))
-
-        @wraps(cls.__init__)
-        def wrapped_init(*args, **kw):
-            return DynamicNamespace.__init__(*args, **(kw | d))
-
-        cls.__new__ = wrapped_new
-        cls.__init__ = wrapped_init
-        return super().__new__(cls)
+        _new = cls.__new__
+        cls.__new__ = update_wrapper(
+            lambda *args, **kwds: _new(*args, **(kwds | dict(slots=d))), cls.__new__
+        )
+        cls.__init__ = update_wrapper(
+            lambda *args, **kwds: DynamicNamespace.__init__(*args, **(kwds | d)), cls.__init__
+        )
 
     def __setattr__(self, name, value):
         cls = type(self)
         if hasattr(cls, '__annotations__') and name not in cls.__annotations__:
-            raise AttributeError(
-                f'{cls.__name__!r} object has no attribute {name!r}'
-            ) from None
+            raise AttributeError(f'{cls.__name__!r} object has no attribute {name!r}') from None
         super().__setattr__(name, value)
 
     def as_dict(self):
@@ -137,37 +120,28 @@ class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
 
 def _check_if_ns_member(cls: type) -> Callable[[str], bool]:
     type_params = cls.__type_params__
-    if type_params and len(type_params) == 1:
+    if not type_params or len(type_params) != 1:
+        return lambda _: False
+    else:
         anno_dict = cls.__annotations__
         member_type = type_params[0]
-
-        def f(x: str):
-            return member_type == anno_dict.get(x)
-
-        return f
-    else:
-        return lambda _: False
+        return lambda x: member_type == anno_dict.get(x)
 
 
 def _ns_from_iter[
     _KT, _VT
-](
-    __iter: Iterator[_KT] | Callable[[], Iterator[_KT]], member_type: _VT = null
-) -> Callable[[type[DynamicNamespace[_VT]]], type[DynamicNamespace[_VT]]]:
+](__iter: Iterator[_KT] | Callable[[], Iterator[_KT]], member_type: _VT = null) -> Callable[
+    [type[DynamicNamespace[_VT]]], type[DynamicNamespace[_VT]]
+]:
     def decorator(cls: type[DynamicNamespace[_VT]]):
         anno = cls.__annotations__
         type_params = cls.__type_params__
         m_iter = __iter() if callable(__iter) else iter(__iter)
-        members: Iterator[_KT] = (
-            m_iter if member_type == null else map(member_type, m_iter)
-        )
+        members: Iterator[_KT] = m_iter if member_type == null else map(member_type, m_iter)
         d = dict(zip((k for k, v in anno.items() if v in type_params), members))
-
-        @wraps(cls.__init__)
-        def wrapped(*args, **kwargs):
-            return cls.__base__.__init__(*args, **(kwargs | d))
-
-        cls.__init__ = wrapped
+        cls.__init__ = update_wrapper(
+            lambda *args, **kwargs: cls.__base__.__init__(*args, **(kwargs | d)), cls.__init__
+        )
         return cls
 
     return decorator
@@ -190,7 +164,8 @@ def _gen_named_color_values() -> Iterator[int]:
         0xE6E6FA, 0x000080, 0x00008B, 0x0000CD, 0x0000FF, 0xF8F8FF, 0x4B0082, 0x9400D3, 0x483D8B,
         0x663399, 0x8A2BE2, 0x9932CC, 0x6A5ACD, 0xBA55D3, 0x7B68EE, 0x9370DB, 0xD8BFD8, 0x800080,
         0x8B008B, 0xC71585, 0xFF00FF, 0xFF1493, 0xDA70D6, 0xFF69B4, 0xEE82EE, 0xDDA0DD, 0xFFF0F5,
-        0xDC143C, 0xDB7093, 0xFFB6C1, 0xFFC0CB]  # fmt: skip
+        0xDC143C, 0xDB7093, 0xFFB6C1, 0xFFC0CB  # fmt: skip
+    ]
 
 
 @_ns_from_iter(_gen_named_color_values, Color)
@@ -344,8 +319,7 @@ class _ColorStrWrapperKwargs(TypedDict, total=False):
     sgr_params: Sequence[Union[int, SgrParameter]]
 
 
-# noinspection PyUnresolvedReferences
-class color_str_wrapper:
+class color_str_wrapper:  # noqa
 
     def __init__(self, **kwargs: Unpack[_ColorStrWrapperKwargs]):
         self._rhs_ = kwargs.get('_rhs_', False)
@@ -367,51 +341,34 @@ class color_str_wrapper:
     def __call__(self, __obj=None):
         if type(self) is type(__obj):
             new_sgr = self._sgr_ + __obj._sgr_
-            new_kwargs = {
-                'ansi_type': self._ansi_type_,
-                '_concat_': self.__dict__.get('_concat_', '').removesuffix(
-                    str(self._sgr_)
+            return color_str_wrapper(
+                **dict(
+                    ansi_type=self._ansi_type_,
+                    sgr_params=[int(v._value_) for v in new_sgr if ~v.is_color()],
+                    _concat_=getattr(self, '_concat_', '').replace(str(self._sgr_), new_sgr),
+                    _rhs_=getattr(self, '_rhs_', False),
                 )
-                + str(new_sgr),
-                '_rhs_': self.__dict__['_rhs_'],
-                **new_sgr.rgb_dict,
-            }
-            new_kwargs['sgr_params'] = [
-                int(v._value_) for v in new_sgr if not v.is_color()
-            ]
-            return color_str_wrapper(**new_kwargs)
+                | new_sgr.rgb_dict
+            )
+        if getattr(self, '_rhs_', False):
+            return color_str_wrapper(
+                **dict(
+                    ansi_type=self._ansi_type_,
+                    sgr_params=list(self._sgr_),
+                    _concat_=f"{getattr(self, '_concat_', '')}{__obj}".removesuffix('[0m'),
+                    _rhs_=False if isinstance(__obj, ColorStr) else True,
+                )
+                | self._sgr_.rgb_dict
+            )
         if isinstance(__obj, ColorStr):
-            if getattr(self, '_rhs_', False):
-                new_kwargs = {
-                    'ansi_type': self._ansi_type_,
-                    'sgr_params': list(self._sgr_),
-                    '_concat_': (getattr(self, '_concat_', '') + __obj).removesuffix(
-                        '[0m'
-                    ),
-                    '_rhs_': True,
-                    **self._sgr_.rgb_dict,
-                }
-                return color_str_wrapper(**new_kwargs)
-            new_params = [
-                v for v in __obj._sgr_.values() if v not in self._sgr_.values()
-            ]
             return ColorStr(
                 __obj.base_str,
-                color_spec=SgrSequence(new_params),
+                color_spec=SgrSequence(
+                    [v for v in __obj._sgr_.values() if v not in self._sgr_.values()]
+                ),
                 no_reset=__obj.no_reset,
                 ansi_type=self._ansi_type_,
             )
-        if getattr(self, '_rhs_', False):
-            new_kwargs = {
-                'ansi_type': self._ansi_type_,
-                'sgr_params': list(self._sgr_),
-                '_concat_': (getattr(self, '_concat_', '') + f"{__obj}").removesuffix(
-                    '[0m'
-                ),
-                '_rhs_': True,
-                **self._sgr_.rgb_dict,
-            }
-            return color_str_wrapper(**new_kwargs)
         return ColorStr(__obj, color_spec=self._sgr_, ansi_type=self._ansi_type_)
 
     def __add__(self, other):
@@ -426,9 +383,10 @@ class color_str_wrapper:
         return self.__dict__['_concat_'] + str(self._sgr_)
 
     def __repr__(self):
-        return (
-            f"{type(self).__name__}"
-            f"(sgr_params={self._sgr_.values()}, ansi_type={self._ansi_type_.__name__})"
+        return "{.__name__}({!s}, ansi_type={!r})".format(
+            type(self),
+            [int(i) & 0x7F for v in self._sgr_.values() for i in v.split(b';')],
+            self._ansi_type_.__name__.removeprefix('ansicolor').replace('Bit', 'b'),
         )
 
     def __getattr__(self, name):
@@ -438,10 +396,8 @@ class color_str_wrapper:
 
 
 def _style_wrappers():
-    yield from (
-        color_str_wrapper() if x in {38, 48} else color_str_wrapper(sgr_params=[x])
-        for x in SgrParameter
-    )
+    for x in SgrParameter:
+        yield color_str_wrapper(sgr_params=([x] if x not in {38, 48} else []))
 
 
 @_ns_from_iter(_style_wrappers)
@@ -544,18 +500,18 @@ class AnsiFore(ColorNamespace[color_str_wrapper], factory=_fg_wrapper_factory):
         return color_str_wrapper(fg=fg)
 
 
+_COLOR_DICT = {
+    ColorStr(name.casefold(), {'fg': rgb}, ansi_type='24b'): rgb.rgb
+    for name, rgb in ColorNamespace().as_dict().items()
+}
+
+
 class _color_ns_getter:
     mapping = MappingProxyType(
         {k.casefold(): v.rgb for (k, v) in ColorNamespace().as_dict().items()}
     )
 
-    def __get__(self, instance, owner: type = None):
-        if instance:
-            return self
-        dummy = type.__new__(type, (cls_name := type(self).__name__), (), {})
-        dummy_str = f"<attr {cls_name!r} of {owner.__name__!r} objects>"
-        dummy.__str__ = lambda _: dummy_str
-        return dummy()
+    __str__ = lambda self: "{%s}" % ', '.join(f"{k}: {v}" for k, v in _COLOR_DICT.items())
 
     @staticmethod
     @lru_cache
@@ -579,95 +535,104 @@ class _color_ns_getter:
             ) from None
 
 
-def _handle_singleton(__obj: ...):
-    return (__obj,) if isinstance(__obj, (str, int)) else __obj
+_dummy_func = lambda *args, **kwargs: ...
+_dummy_signature = signature(_dummy_func)
 
 
-def _scalar_union(s: set, value: object):
-    return s.union(_handle_singleton(value))
-
-
-# noinspection PyUnresolvedReferences
-class rgb_dispatch[**P, R]:
+class rgb_dispatch[**P, R]:  # noqa
     color_ns = cast(MappingProxyType[str, Int3Tuple], _color_ns_getter())
 
-    def __new__(cls, func: Callable[P, R] = None, /, *, args: Sequence[str | int] = ()):
-        args = _handle_singleton(args)
-        if func is None:
-            return lambda f, **kwargs: (
-                cls(f, args=tuple(_scalar_union(set(args), kwargs.get('args', ()))))
-            )
-        inst = super().__new__(cls)
-        setattr(inst, 'func', func)
-        getattr(inst, '_init_wrapper')(*args)
-        return inst
+    __signature__ = _dummy_signature
 
-    def _init_wrapper(self, *params: *tuple[str | int, ...]):
-        if not callable(self.func):
+    def __init__(self, __f: Callable[P, R] = None, /, *, args: Sequence[str] = ()):
+        if isinstance(args, str):
+            args = (args,)
+        if not callable(__f):
             raise ValueError
+        self._func = __f
         try:
-            argspec = getfullargspec(self.func)
-            sig = signature(self.func)
+            argspec = getfullargspec(self._func)
+            sig = signature(self._func)
         except TypeError:
-            if not (
-                getattr(self.func, '__module__', '') == 'builtins'
-                or inspect.isbuiltin(self.func)
-            ):
+            if not (isbuiltin(self._func) or getattr(self._func, '__module__', '') == 'builtins'):
                 raise
-            generic_spec = lambda *args, **kwargs: ...
-            argspec = getfullargspec(generic_spec)
-            sig = signature(generic_spec)
-        self.variadic = {argspec.varargs, argspec.varkw}
-        self.variadic.discard(None)
-        all_args = self.variadic.union(argspec.args + argspec.kwonlyargs)
-        self.rgb_args = all_args & {
-            *params,
-            *(
-                v
-                for (s, v) in (('*', argspec.varargs), ('**', argspec.varkw))
-                if s in params
-            ),
-        }
-        if not self.rgb_args:
+            argspec = getfullargspec(_dummy_func)
+            sig = self.__signature__
+        self._variadic = {argspec.varargs, argspec.varkw}
+        self._variadic.discard(None)
+        all_args = self._variadic.union(argspec.args + argspec.kwonlyargs)
+        self._rgb_args = all_args.intersection(
+            {'*': argspec.varargs, '**': argspec.varkw}.get(arg) or arg for arg in args
+        )
+        if not self._rgb_args:
             keys = frozenset({'fg', 'bg'})
             for arg in all_args:
                 if (arg[:2] in keys) or (arg[-2:] in keys):
-                    self.rgb_args.add(arg)
-        self.variadic &= self.rgb_args
-        self.signature = sig.replace(
-            parameters=[
-                (
+                    self._rgb_args.add(arg)
+        self._variadic &= self._rgb_args
+        parameters = []
+        for name, param in sig.parameters.items():
+            if name not in self._rgb_args or param.annotation is param.empty:
+                parameters.append(param)
+            else:
+                anno = param.annotation
+                parameters.append(
                     param.replace(
-                        annotation=' | '.join(
-                            {*f"{param.annotation}".split(' | '), 'str'}
-                        )
+                        annotation=str
+                        | eval(getattr(anno, '__name__', str(anno)), getmodule(self._func).__dict__)
                     )
-                    if name in self.rgb_args and param.annotation is not param.empty
-                    else param
                 )
-                for (name, param) in sig.parameters.items()
-            ]
-        )
-        update_wrapper(self, self.func)
+        self.__signature__ = sig.replace(parameters=parameters)
+        update_wrapper(self, self._func)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        bound = self.signature.bind(*args, **kwargs)
+        bound = self.__signature__.bind(*args, **kwargs)
         bound.apply_defaults()
         for arg, value in bound.arguments.items():
-            if arg not in self.rgb_args:
+            if arg not in self._rgb_args:
                 continue
-            if arg in self.variadic:
+            if arg in self._variadic:
                 bound.arguments[arg] = (
                     tuple(self.color_ns[v] if v in self.color_ns else v for v in value)
                     if isinstance(value, tuple)
                     else {
-                        k: self.color_ns[v] if v in self.color_ns else v
-                        for k, v in value.items()
+                        k: self.color_ns[v] if v in self.color_ns else v for k, v in value.items()
                     }
                 )
             elif value in self.color_ns:
                 bound.arguments[arg] = self.color_ns[value]
-        return self.func(*bound.args, **bound.kwargs)
+        return self._func(*bound.args, **bound.kwargs)
+
+
+named_color = cast(
+    ...,
+    {
+        '4b': dict(
+            zip(
+                [
+                    'BLACK',
+                    'RED',
+                    'GREEN',
+                    'YELLOW',
+                    'BLUE',
+                    'MAGENTA',
+                    'CYAN',
+                    'GREY',
+                    'DARK_GREY',
+                    'BRIGHT_RED',
+                    'BRIGHT_GREEN',
+                    'BRIGHT_YELLOW',
+                    'BRIGHT_BLUE',
+                    'BRIGHT_MAGENTA',
+                    'BRIGHT_CYAN',
+                    'WHITE',
+                ],
+                map(Color.from_rgb, ANSI_4BIT_RGB),
+            )
+        ).__getitem__,
+        '24b': ColorNamespace().as_dict().__getitem__,
+    },
+)
 
 
 def display_named_colors():
@@ -683,10 +648,7 @@ def display_ansi256_color_range():
 
     ansi256_range = asarray(range(256)).reshape([16] * 2).tolist()
     return [
-        [
-            ColorStr(obj='###', color_spec=ansi_8bit_to_rgb(v), ansi_type='8b')
-            for v in arr
-        ]
+        [ColorStr(obj='###', color_spec=ansi_8bit_to_rgb(v), ansi_type='8b') for v in arr]
         for arr in ansi256_range
     ]
 
@@ -713,4 +675,5 @@ __all__ = [
     'Style',
     'color_str_wrapper',
     'rgb_dispatch',
+    'named_color',
 ]

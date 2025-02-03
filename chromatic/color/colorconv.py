@@ -23,18 +23,12 @@ __all__ = [
     'xyz2rgb',
 ]
 
-from typing import cast, Final, Literal, SupportsInt
+from operator import mul, truediv
+from typing import Final, Literal, SupportsInt, cast
 
 import numpy as np
 
-from .._typing import (
-    Float3Tuple,
-    FloatSequence,
-    Int3Tuple,
-    RGBPixel,
-    RGBVectorLike,
-    ShapedNDArray,
-)
+from .._typing import Float3Tuple, FloatSequence, Int3Tuple, RGBPixel, RGBVectorLike, ShapedNDArray
 
 
 def is_hex_rgb(value, *, strict: bool = False):
@@ -65,29 +59,27 @@ def hex2rgb(value: int) -> Int3Tuple:
     return (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF
 
 
-def xyz2lab(xyz: Float3Tuple | FloatSequence) -> Float3Tuple:
-    x_ref, y_ref, z_ref = 95.047, 100.0, 108.883
-    f = lambda n: n ** (1 / 3) if n > 0.008856 else (7.787 * n) + (16 / 116)
-    x, y, z = xyz
-    x = f(x / x_ref)
-    y = f(y / y_ref)
-    z = f(z / z_ref)
+def xyz2lab(xyz: FloatSequence) -> Float3Tuple:
+    x, y, z = (
+        n ** (1 / 3) if n > 0.008856 else (7.787 * n) + (16 / 116)
+        for n in map(truediv, xyz, (95.047, 100.0, 108.883))
+    )
     L = (116 * y) - 16
     a = 500 * (x - y)
     b = 200 * (y - z)
     return L, a, b
 
 
-def lab2xyz(lab: Float3Tuple | FloatSequence) -> Float3Tuple:
-    x_ref, y_ref, z_ref = 95.047, 100.0, 108.883
-    f_inv = lambda n: cubic if (cubic := n**3) > 0.008856 else (n - 16 / 116) / 7.787
+def lab2xyz(lab: FloatSequence) -> Float3Tuple:
     L, a, b = lab
-    f_y = (L + 16) / 116
-    f_x = a / 500 + f_y
-    f_z = f_y - b / 200
-    x = x_ref * f_inv(f_x)
-    y = y_ref * f_inv(f_y)
-    z = z_ref * f_inv(f_z)
+    y = (L + 16) / 116
+    x = a / 500 + y
+    z = y - b / 200
+    x, y, z = map(
+        mul,
+        (95.047, 100.0, 108.883),
+        map(lambda n: (lambda c: c if c > 0.008856 else (n - 16 / 116) / 7.787)(n**3), (x, y, z)),
+    )
     return x, y, z
 
 
@@ -95,7 +87,8 @@ M_RGB2XYZ = np.array(
     [[0.4124564, 0.3575761, 0.1804375],
      [0.2126729, 0.7151522, 0.0721750],
      [0.0193339, 0.1191920, 0.9503041]],
-    dtype=np.float64)  # fmt: skip
+    dtype=np.float64
+)  # fmt: skip
 M_XYZ2RGB = np.linalg.inv(M_RGB2XYZ)
 
 
@@ -105,13 +98,11 @@ def rgb2xyz(rgb: RGBPixel) -> Float3Tuple:
 
 
 def xyz2rgb(xyz: ShapedNDArray[tuple[Literal[3]], np.float64]) -> Int3Tuple:
-    r, g, b = (
-        np.clip(M_XYZ2RGB @ np.array(xyz, dtype=np.float64), 0.0, 1.0) * 255.0
-    ).astype(int)
+    r, g, b = (np.clip(M_XYZ2RGB @ np.array(xyz, dtype=np.float64), 0.0, 1.0) * 255.0).astype(int)
     return r, g, b
 
 
-def hsl2rgb(hsl: Float3Tuple | FloatSequence) -> Int3Tuple:
+def hsl2rgb(hsl: FloatSequence) -> Int3Tuple:
     h, s, L = hsl
     h = (h / 360) % 1
     if h < 0:
@@ -167,7 +158,7 @@ def rgb2hsl(rgb: RGBVectorLike) -> Float3Tuple:
     return (360 * h, s, L)
 
 
-def hsv2rgb(hsv: Float3Tuple | FloatSequence) -> Int3Tuple:
+def hsv2rgb(hsv: FloatSequence) -> Int3Tuple:
     h, s, v = hsv
     c = v * s
     x = c * (1 - abs((h / 60) % 2 - 1))
@@ -210,7 +201,7 @@ def rgb2hsv(rgb: RGBVectorLike) -> Float3Tuple:
     return h, s, v
 
 
-def lab2rgb(lab: Float3Tuple | FloatSequence) -> Int3Tuple:
+def lab2rgb(lab: FloatSequence) -> Int3Tuple:
     xyz = lab2xyz(lab)
     return xyz2rgb(np.array(xyz, dtype=np.float64))
 
@@ -264,14 +255,12 @@ def _4b_lookup():
 
     rgb_4b_arr = np.asarray(ANSI_4BIT_RGB)
     quants = np.stack(
-        np.meshgrid(*np.repeat(np.arange(32).reshape([1, -1]), 3, 0), indexing='ij'),
-        axis=-1,
+        np.meshgrid(*np.repeat(np.arange(32).reshape([1, -1]), 3, 0), indexing='ij'), axis=-1
     ).reshape([-1, 3])
     rgb_colors = quants * 8
     nearest_colors = rgb_4b_arr[np.argmin(rgb_dist(rgb_colors, rgb_4b_arr), axis=1)]
     table = {
-        tuple(map(int, color)): tuple(map(int, nearest_colors[i]))
-        for i, color in enumerate(quants)
+        tuple(map(int, color)): tuple(map(int, nearest_colors[i])) for i, color in enumerate(quants)
     }
     return cast(dict[Int3Tuple, Int3Tuple], table)
 

@@ -29,7 +29,6 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import (
     Callable,
-    cast,
     Final,
     Generator,
     Iterable,
@@ -41,9 +40,11 @@ from typing import (
     Sequence,
     SupportsIndex,
     SupportsInt,
-    TypedDict,
+    TypeAlias,
     TypeVar,
+    TypedDict,
     Union,
+    cast,
 )
 
 import numpy as np
@@ -54,9 +55,9 @@ from .._typing import (
     ColorDictKeys,
     Float3Tuple,
     Int3Tuple,
-    is_matching_typed_dict,
     RGBVectorLike,
-    TupleOf2,
+    is_matching_typed_dict,
+    unionize,
 )
 
 os.system('')
@@ -70,9 +71,7 @@ _ANSI16C_I2KV = cast(
     dict[int, tuple[ColorDictKeys, Int3Tuple]],
     {
         v: (k, ansi_4bit_to_rgb(v))
-        for x in (
-            zip(('fg', 'bg'), (j, j + 10)) for i in (30, 90) for j in range(i, i + 8)
-        )
+        for x in (zip(('fg', 'bg'), (j, j + 10)) for i in (30, 90) for j in range(i, i + 8))
         for (k, v) in x
     },
 )
@@ -86,14 +85,14 @@ _ANSI16C_STD = frozenset(x for i in (30, 40) for x in range(i, i + 8))
 # ansi 4bit bright color range
 _ANSI16C_BRIGHT = frozenset(_ANSI16C_I2KV.keys() - _ANSI16C_STD)
 
-# ansi 8bit {color code (bytes) ==> color dict key (str)}
+# ansi 8bit {color code (ascii bytes) ==> color dict key (str)}
 _ANSI256_B2KEY = {b'38': 'fg', b'48': 'bg'}
 
 # ansi 8bit {color dict key (str) ==> color code (int)}
 _ANSI256_KEY2I = {v: int(k) for k, v in _ANSI256_B2KEY.items()}
 
 
-# see also: https://en.wikipedia.org/wiki/ANSI_escape_code#SGR
+# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR
 # int enum {sgr parameter name ==> sgr code (int)}
 class SgrParameter(IntEnum):
     RESET = 0
@@ -292,7 +291,7 @@ class ansicolor4Bit(colorbytes):
         `ESC[107;30m`
     """
 
-    pass
+    ...
 
 
 class ansicolor8Bit(colorbytes):
@@ -322,7 +321,7 @@ class ansicolor8Bit(colorbytes):
         `ESC[38;5;196m`
     """
 
-    pass
+    ...
 
 
 class ansicolor24Bit(colorbytes):
@@ -349,7 +348,7 @@ class ansicolor24Bit(colorbytes):
         `ESC[38;2;255;255;255;48;2;0;170;0m`
     """
 
-    pass
+    ...
 
 
 _SUPPORTS_256 = frozenset(
@@ -402,9 +401,9 @@ def _is_ansi_type(typ: type):
         return False
 
 
-AnsiColorFormat = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
-AnsiColorType = type[AnsiColorFormat]
-AnsiColorParam = AnsiColorAlias | AnsiColorType
+AnsiColorFormat: TypeAlias = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
+AnsiColorType: TypeAlias = type[AnsiColorFormat]
+AnsiColorParam: TypeAlias = AnsiColorAlias | AnsiColorType
 _AnsiColor_co = TypeVar('_AnsiColor_co', bound=colorbytes, covariant=True)
 _ANSI_FORMAT_MAP = cast(
     dict[AnsiColorParam, AnsiColorType],
@@ -412,15 +411,10 @@ _ANSI_FORMAT_MAP = cast(
     | {
         k.__args__[0]: t
         for k, t in zip(
-            sorted(
-                AnsiColorAlias.__args__,
-                key=lambda x: int(x.__args__[0].removesuffix('b')),
-            ),
+            sorted(AnsiColorAlias.__args__, key=lambda x: int(x.__args__[0].removesuffix('b'))),
             sorted(
                 _ANSI_COLOR_TYPES,
-                key=lambda x: (lambda n: int(n[n.index('r') + 1 : n.rindex('B')]))(
-                    x.__name__
-                ),
+                key=lambda x: (lambda n: int(n[n.index('r') + 1 : n.rindex('B')]))(x.__name__),
             ),
         )
     },
@@ -438,7 +432,8 @@ def get_ansi_type(typ):
             f": {'Expected {!r} or type[{}], got {!r} instead'.format(
                 str.__qualname__,
                 ' | '.join(set(map(repr_getter, _ANSI_FORMAT_MAP.values()))),
-                repr_getter(typ))}"
+                repr_getter(typ)
+            )}"
         ) from None
 
 
@@ -457,8 +452,7 @@ def rgb2ansi_color_esc(ret_format, mode, rgb):
         if isinstance(mode, str):
             raise ValueError(f"invalid mode: {mode!r}")
         raise TypeError(
-            f"'mode' argument must be {str.__qualname__}, "
-            f"not {type(mode).__qualname__}"
+            f"'mode' argument must be {str.__qualname__}, " f"not {type(mode).__qualname__}"
         ) from None
 
 
@@ -531,7 +525,7 @@ class SgrParamWrapper:
         cls, other_cls = map(type, (self, other))
         if cls is other_cls or issubclass(other_cls, bytes):
             return hash(self) == hash(other)
-        return False
+        return NotImplemented
 
     def __bytes__(self):
         return self._value_.__bytes__()
@@ -554,7 +548,7 @@ class SgrParamWrapper:
         return isinstance(self._value_, colorbytes)
 
 
-SgrParamWrapper.__name__ = SgrParameter.__name__.lower()
+# SgrParamWrapper.__name__ = SgrParameter.__name__.lower()
 
 
 @lru_cache
@@ -563,9 +557,7 @@ def _get_sgr_bitmask[_T: (bytes, bytearray, Buffer)](__x: _T) -> list[int]:
 
     Bitwise equivalent to `list(map(int, bytes().split(b';')))`.
     """
-    __x = __x.removeprefix(CSI)[
-        : idx if ~(idx := __x.find(0x6D)) else None
-    ].removesuffix(b'm')
+    __x = __x.removeprefix(CSI)[: idx if ~(idx := __x.find(0x6D)) else None].removesuffix(b'm')
     length = len(__x)
     a, b = map(int.from_bytes, (bytes([0x3B] * length), __x))
     buffer = []
@@ -603,9 +595,7 @@ def _iter_normalized_sgr(__iter) -> Iterator[AnsiColorFormat | int]:
                 )
 
 
-def _co_yield_colorbytes(
-    __iter: Iterator[int],
-) -> Generator[bytes | AnsiColorFormat, int, None]:
+def _co_yield_colorbytes(__iter: Iterator[int]) -> Generator[bytes | AnsiColorFormat, int, None]:
     m: dict[int, ColorDictKeys] = {38: 'fg', 48: 'bg'}
     key_pair = m.get
     get_4b = _ANSI16C_I2KV.get
@@ -613,9 +603,7 @@ def _co_yield_colorbytes(
     new_8b = lambda *args: ansicolor8Bit(
         b';'.join(map(b'%d'.__mod__, (args[0], args[1], next(__iter))))
     )
-    new_24b = lambda x: ansicolor24Bit.from_rgb(
-        {x: tuple(next(__iter) for _ in range(3))}
-    )
+    new_24b = lambda x: ansicolor24Bit.from_rgb({x: tuple(next(__iter) for _ in range(3))})
     default = lambda x: ascii(x).encode()
     obj = bytes()
     while True:
@@ -685,12 +673,9 @@ class SgrSequence:
         except ValueError:
             return -1
 
-    def get_color(self, __key: ColorDictKeys):
+    def get_color(self, __key: ColorDictKeys) -> SgrParamWrapper | None:
         if self.is_color():
-            return next(
-                (v for v in self if v.is_color() and __key in v._value_.rgb_dict), None
-            )
-        return None
+            return next((v for v in self if v.is_color() and __key in v._value_.rgb_dict), None)
 
     def index(self, value):
         try:
@@ -725,10 +710,7 @@ class SgrSequence:
                     self.pop(self.index(b'1'))
         elif self.has_bright_colors and v == b'1':
             for p in self._sgr_params_:
-                if (
-                    type(px := p._value_) is not ansicolor4Bit
-                    or int(px) not in _ANSI16C_STD
-                ):
+                if type(px := p._value_) is not ansicolor4Bit or int(px) not in _ANSI16C_STD:
                     continue
                 self._has_bright_colors_ = False
                 break
@@ -743,9 +725,11 @@ class SgrSequence:
             return SgrSequence([*self, *other])
         if isinstance(other, str):
             return str(self) + other
+
         raise TypeError(
-            f"can only concatenate {SgrSequence.__qualname__} "
-            f"(not {type(other).__qualname__!r}) to {SgrSequence.__qualname__}"
+            "can only concatenate {0} (not {1!r}) to {0}".format(
+                *map(op.attrgetter('__qualname__'), (SgrSequence, type(other)))
+            )
         )
 
     def __bool__(self):
@@ -792,13 +776,11 @@ class SgrSequence:
             try:
                 return all(
                     self_param == other_param
-                    for self_param, other_param in zip(
-                        self.values(), other.values(), strict=True
-                    )
+                    for self_param, other_param in zip(self.values(), other.values(), strict=True)
                 )
             except ValueError:
                 return False
-        return False
+        return NotImplemented
 
     def __getitem__(self, item):
         return self._sgr_params_[item]
@@ -806,8 +788,9 @@ class SgrSequence:
     def __iadd__(self, other: 'SgrSequence'):
         if type(self) is not type(other):
             raise TypeError(
-                f"can only concatenate {SgrSequence.__qualname__} "
-                f"(not {type(other).__qualname__!r}) to {SgrSequence.__qualname__}"
+                "can only concatenate {0} (not {1!r}) to {0}".format(
+                    *map(op.attrgetter('__qualname__'), (SgrSequence, type(other)))
+                )
             )
         return SgrSequence(self._sgr_params_ + other._sgr_params_)
 
@@ -836,9 +819,7 @@ class SgrSequence:
         color_dict = dict.fromkeys(['fg', 'bg'], None)
         is_bold = has_bold = False
 
-        def update_colors(
-            __param: SgrParamWrapper, __rgb_dict: Mapping[ColorDictKeys, Int3Tuple]
-        ):
+        def update_colors(__param: SgrParamWrapper, __rgb_dict: Mapping[ColorDictKeys, Int3Tuple]):
             k: ColorDictKeys
             for k, slot in color_dict.items():
                 if v := __rgb_dict.get(k):
@@ -873,9 +854,7 @@ class SgrSequence:
                         if has_bold:
                             self._sgr_params_.pop(
                                 next(
-                                    i
-                                    for i, v in enumerate(self._sgr_params_)
-                                    if v._value_ == b'1'
+                                    i for i, v in enumerate(self._sgr_params_) if v._value_ == b'1'
                                 )
                             )
                             has_bold = False
@@ -898,8 +877,9 @@ class SgrSequence:
         if isinstance(other, str):
             return other + str(self)
         raise TypeError(
-            f"can only concatenate {SgrSequence.__qualname__} "
-            f"(not {type(other).__qualname__!r}) to {SgrSequence.__qualname__}"
+            "can only concatenate {0} (not {1!r}) to {0}".format(
+                *map(op.attrgetter('__qualname__'), (SgrSequence, type(other)))
+            )
         )
 
     def __repr__(self):
@@ -933,11 +913,7 @@ class SgrSequence:
             self._bytes_ = None
 
     @rgb_dict.setter
-    def rgb_dict[
-        _AnsiColorType: type[AnsiColorFormat]
-    ](
-        self, __value: tuple[_AnsiColorType, dict[ColorDictKeys, Union[Color, None]]]
-    ) -> None:
+    def rgb_dict(self, __value: tuple[AnsiColorType, dict[ColorDictKeys, Optional[Color]]]) -> None:
         ansi_type, color_dict = __value
         for k, v in color_dict.items():
             if v is not None:
@@ -954,38 +930,33 @@ class SgrSequence:
 
 
 # type aliases for ColorStr constructor `color_spec` parameter forms
-_CSpecScalar = Union[int, Color, RGBVectorLike]
-_CSpecKVPair = tuple[ColorDictKeys, _CSpecScalar]
-_CSpecTuplePair = Union[TupleOf2[_CSpecScalar], TupleOf2[_CSpecKVPair]]
-_CSpecDict = Mapping[ColorDictKeys, _CSpecScalar]
-_CSpecType = (
-    Union[SgrSequence, str, bytes]
-    | _CSpecScalar
-    | _CSpecTuplePair
-    | _CSpecKVPair
-    | _CSpecDict
-)
-
-_ColorSpec = TypeVar('_ColorSpec', bound=_CSpecType)
+_CSpecScalar: TypeAlias = int | Color | RGBVectorLike
+_CSpecDict: TypeAlias = Mapping[ColorDictKeys, _CSpecScalar]
+_CSpecKVPair: TypeAlias = tuple[ColorDictKeys, _CSpecScalar]
+_CSpecTuplePair: TypeAlias = tuple[_CSpecScalar, _CSpecScalar] | tuple[_CSpecKVPair, _CSpecKVPair]
+_CSpecType: TypeAlias = SgrSequence | _CSpecScalar | _CSpecTuplePair | _CSpecKVPair | _CSpecDict
+_ColorSpec = TypeVar('_ColorSpec', _CSpecType, str, bytes)
 
 
 class _ColorDict(TypedDict, total=False):
-    fg: Union[Color, AnsiColorFormat, None]
-    bg: Union[Color, AnsiColorFormat, None]
+    fg: Optional[Color | AnsiColorFormat]
+    bg: Optional[Color | AnsiColorFormat]
+
+
+_VALID_KEYS: frozenset[str] = unionize(
+    op.attrgetter('__optional_keys__', '__required_keys__')(_ColorDict)
+)
 
 
 def _solve_color_spec[
     _T: (_CSpecType, SgrSequence)
-](color_spec: _T | None, ansi_type: type[AnsiColorFormat]):
-    keys = ['bg', 'fg']
-    valid_keys = set(keys)
+](color_spec: Optional[_T], ansi_type: AnsiColorType):
+    keys: list[str] = ['bg', 'fg']
 
     def resolve(value, *, key=None):
         nonlocal keys
         if key is not None:
-            assert key in valid_keys, 'expected literal keys {}, got {!r}'.format(
-                valid_keys, key
-            )
+            assert key in _VALID_KEYS, 'expected literal keys {}, got {!r}'.format(_VALID_KEYS, key)
             if key in keys:
                 keys.remove(key)
         match value:
@@ -1002,7 +973,7 @@ def _solve_color_spec[
             case {'fg': _, 'bg': _} | {'fg': _} | {'bg': _} as colors:
                 for key, color in colors.items():
                     yield from resolve(color, key=key)
-            case [str() as key, color] if key in valid_keys:
+            case [str() as key, color] if key in _VALID_KEYS:
                 yield from resolve(color, key=key)
             case [_, _] as colors:
                 for color in colors:
@@ -1010,33 +981,27 @@ def _solve_color_spec[
             case _:
                 raise ValueError(repr(value))
 
-    out = dict()
+    out: dict[str, ...] = {}
     try:
         for k, v in resolve(color_spec):
             if k in out:
                 if len(out) > 1 and out[k] != v:
-                    raise ValueError(
-                        f"multiple possible values for {k!r} {(out[k], v)}"
-                    )
+                    raise ValueError(f"multiple possible values for {k!r} {(out[k], v)}")
                 out[keys.pop()] = out.pop(k)
                 keys.append(k)
             out[k] = v
     except Exception as e:
         if type(e) is IndexError:
-            e = ValueError(
-                'too many arguments' if len(out) >= 2 else 'args contain non-RGB values'
-            )
+            e = ValueError('too many arguments' if len(out) >= 2 else 'args contain non-RGB values')
         context = ('invalid color spec', str(e))
         raise ValueError(': '.join(filter(None, context))) from None
     return SgrSequence([ansi_type.from_rgb({k: v}) for k, v in out.items()])
 
 
 def _get_color_str_vars(
-    base_str: Optional[str],
-    color_spec: Optional[_ColorSpec],
-    ansi_type: AnsiColorType = None,
+    base_str: Optional[str], color_spec: Optional[_ColorSpec], ansi_type: AnsiColorType = None
 ) -> tuple[SgrSequence, str]:
-    if color_spec is None:
+    if not color_spec and color_spec != 0:
         return SgrSequence(), base_str or ''
     if ansi_type is None:
         ansi_type = DEFAULT_ANSI
@@ -1046,9 +1011,7 @@ def _get_color_str_vars(
         if csi_count := color_spec.count(CSI):
             if csi_count > 1:
                 color_spec, _, byte_str = (
-                    color_spec.removeprefix(CSI)
-                    .removesuffix(SGR_RESET.encode())
-                    .partition(b'm')
+                    color_spec.removeprefix(CSI).removesuffix(SGR_RESET.encode()).partition(b'm')
                 )
                 if color_spec.count(CSI) > 1:
                     raise ValueError(
@@ -1075,7 +1038,7 @@ class _ColorStrWeakVars(TypedDict, total=False):
 
 class _AnsiBytesGetter:
 
-    def __get__(self, instance: Union['ColorStr', None], objtype=None):
+    def __get__(self, instance: Optional['ColorStr'], objtype=None):
         if instance is None:
             return
         return instance._sgr_.__bytes__()
@@ -1083,7 +1046,7 @@ class _AnsiBytesGetter:
 
 class _SgrParamsGetter:
 
-    def __get__(self, instance: Union['ColorStr', None], objtype=None):
+    def __get__(self, instance: Optional['ColorStr'], objtype=None):
         if instance is None:
             return
         return instance._sgr_._sgr_params_
@@ -1091,7 +1054,7 @@ class _SgrParamsGetter:
 
 class _ColorDictGetter:
 
-    def __get__(self, instance: Union['ColorStr', None], objtype=None):
+    def __get__(self, instance: Optional['ColorStr'], objtype=None):
         if instance is None:
             return
         return {k: Color.from_rgb(v) for k, v in instance._sgr_.rgb_dict.items()}
@@ -1101,9 +1064,7 @@ class ColorStr(str):
 
     def _weak_var_update(self, **kwargs):
         if kwargs.keys().isdisjoint(inst_vars := vars(self)):
-            raise ValueError(
-                f"unexpected keys: {kwargs.keys() - inst_vars.keys()}"
-            ) from None
+            raise ValueError(f"unexpected keys: {kwargs.keys() - inst_vars.keys()}") from None
         sgr = kwargs.get('_sgr_', self._sgr_)
         base_str = kwargs.get('_base_str_', self._base_str_)
         suffix = '' if kwargs.get('_no_reset_', self._no_reset_) else SGR_RESET
@@ -1144,25 +1105,13 @@ class ColorStr(str):
             if new_params == self._sgr_params_:
                 return self
             new_sgr = SgrSequence()
-            for name, value in zip(
-                ('_sgr_params_', '_rgb_dict_'), (new_params, new_rgb)
-            ):
+            for name, value in zip(('_sgr_params_', '_rgb_dict_'), (new_params, new_rgb)):
                 setattr(new_sgr, name, value)
             inst = super().__new__(
                 type(self),
-                ''.join(
-                    [
-                        str(new_sgr),
-                        self._base_str_,
-                        '' if self._no_reset_ else SGR_RESET,
-                    ]
-                ),
+                ''.join([str(new_sgr), self._base_str_, '' if self._no_reset_ else SGR_RESET]),
             )
-            for name, value in {
-                **vars(self),
-                '_sgr_': new_sgr,
-                '_ansi_type_': ansi_type,
-            }.items():
+            for name, value in {**vars(self), '_sgr_': new_sgr, '_ansi_type_': ansi_type}.items():
                 setattr(inst, name, value)
             return cast(ColorStr, inst)
         return self
@@ -1238,9 +1187,9 @@ class ColorStr(str):
         valid, context = is_matching_typed_dict(kwargs, _ColorDict)
         if not valid:
             try:
-                kwargs = {k: Color(v) for k, v in kwargs.items()}
-            except Exception as _:
-                raise ValueError(context) from None
+                kwargs = {k: v if v is None else Color(v) for k, v in kwargs.items()}
+            except Exception as e:
+                raise e from None
         sgr = SgrSequence(self._sgr_)
         if bool(absolute):
             del sgr.rgb_dict
@@ -1250,9 +1199,7 @@ class ColorStr(str):
     def replace(self, __old, __new, __count=-1):
         if isinstance(__new, ColorStr):
             __new = __new.base_str
-        return self._weak_var_update(
-            _base_str_=self.base_str.replace(__old, __new, __count)
-        )
+        return self._weak_var_update(_base_str_=self.base_str.replace(__old, __new, __count))
 
     def translate(self, __table) -> 'ColorStr':
         return self._weak_var_update(_base_str_=self.base_str.translate(__table))
@@ -1328,17 +1275,13 @@ class ColorStr(str):
             else:
                 new_sgr.append(x)
         if new_sgr.is_color():
-            formats: list[AnsiColorType] = [
-                type(p._value_) for p in new_sgr if p.is_color()
-            ]
+            formats: list[AnsiColorType] = [type(p._value_) for p in new_sgr if p.is_color()]
             ansi_type = max(formats, key=formats.count)
         else:
             ansi_type = self.ansi_format
         inst = super().__new__(
             type(self),
-            ''.join(
-                [str(new_sgr), self._base_str_, '' if self._no_reset_ else SGR_RESET]
-            ),
+            ''.join([str(new_sgr), self._base_str_, '' if self._no_reset_ else SGR_RESET]),
         )
         inst.__dict__ |= {**vars(self), '_sgr_': new_sgr, '_ansi_type_': ansi_type}
         return cast(ColorStr, inst)
@@ -1356,10 +1299,10 @@ class ColorStr(str):
         if hasattr(other, '_sgr_'):
             return NotImplemented
         raise TypeError(
-            f"can only concatenate "
-            f"{str.__name__}, {ColorStr.__name__}, or {SgrParameter.__name__} "
-            f"(got {type(other).__qualname__!r}) "
-            f"to {type(self).__name__}"
+            'can only concatenate {0}, {1}, or {2} (got {3!r}) to {1}'.format(
+                *map(op.attrgetter('__name__'), (str, type(self), SgrParameter)),
+                type(other).__qualname__,
+            )
         )
 
     def __contains__(self, __key: str):
@@ -1374,14 +1317,12 @@ class ColorStr(str):
     def __eq__(self, other):
         if type(self) is type(other):
             return hash(self) == hash(other)
-        return False
+        return NotImplemented
 
     def __format__(self, format_spec=''):
-        if ansi_typ := {
-            '4b': ansicolor4Bit,
-            '8b': ansicolor8Bit,
-            '24b': ansicolor24Bit,
-        }.get(format_spec):
+        if ansi_typ := {'4b': ansicolor4Bit, '8b': ansicolor8Bit, '24b': ansicolor24Bit}.get(
+            format_spec
+        ):
             return str(self.as_ansi_type(ansi_typ))
         return str.__format__(self, format_spec)
 
@@ -1447,13 +1388,13 @@ class ColorStr(str):
         ({'fg': (255, 0, 0)}, 'Red text')
 
         >>> cs_from_rgb = ColorStr(color_spec={'fg': (255, 85, 85)}, ansi_type='4b')
-        >>> cs_from_literal = ColorStr(color_spec='\x1b[91m', ansi_type='4b')
+        >>> cs_from_literal = ColorStr(color_spec=f'{CSI}91m', ansi_type='4b')
         >>> cs_from_rgb == cs_from_literal
         True
 
         >>> # ANSI 4-bit sequences of the form `ESC[<1 (bold)>;<{30-37} | {40-47}>...`
         >>> # are equivalent to 'bright' counterparts `ESC[<{90-97} | {100-107}>...`
-        >>> cs_from_literal_alt = ColorStr(color_spec='\x1b[1;31m', ansi_type='4b')
+        >>> cs_from_literal_alt = ColorStr(color_spec=f'{CSI}1;31m', ansi_type='4b')
         >>> cs_from_literal_alt == cs_from_literal
         True
 
@@ -1464,10 +1405,11 @@ class ColorStr(str):
         ...
 
     def __iter__(self):
-        yield from map(lambda c: self._weak_var_update(_base_str_=c), self.base_str)
+        for c in self.base_str:
+            yield self._weak_var_update(_base_str_=c)
 
     def __len__(self):
-        return self.base_str.__len__()
+        return len(self.base_str)
 
     def __matmul__(self, other):
         """Return a new :class:`ColorStr` with the base string of `self` and colors of `other`"""
@@ -1475,7 +1417,7 @@ class ColorStr(str):
             return self._weak_var_update(_sgr_=other._sgr_, _no_reset_=other.no_reset)
         raise TypeError(
             'unsupported operand type(s) for @: '
-            f"{type(self).__qualname__!r} and {type(other).__qualname__!r}"
+            "{!r} and {!r}".format(*(type(x).__qualname__ for x in (self, other)))
         )
 
     def __mod__(self, __value):
@@ -1494,9 +1436,7 @@ class ColorStr(str):
         if ansi_type := kwargs.get('ansi_type'):
             ansi_type = get_ansi_type(ansi_type)
         if type(color_spec) is cls:
-            if ansi_type is not None and any(
-                type(a) is not ansi_type for a in color_spec.ansi
-            ):
+            if ansi_type is not None and any(type(a) is not ansi_type for a in color_spec.ansi):
                 return color_spec.as_ansi_type(ansi_type)
             inst = super().__new__(cls, str(color_spec))
             for name, value in vars(color_spec).items():
@@ -1520,9 +1460,7 @@ class ColorStr(str):
         )
         if ansi_type is None and sgr.is_color():
             d['_ansi_type_'], _ = max(
-                Counter(
-                    type(p._value_) for p in sgr._sgr_params_ if p.is_color()
-                ).items(),
+                Counter(type(p._value_) for p in sgr._sgr_params_ if p.is_color()).items(),
                 key=op.itemgetter(1),
             )
         inst = super().__new__(cls, ''.join([str(sgr), base_str_, suffix]))
@@ -1548,9 +1486,7 @@ class ColorStr(str):
 
         k: Literal['fg', 'bg']
         if vt is Color:
-            diff_dict = {
-                k: _rgb_diff_color(v, other.rgb) for k, v in self.rgb_dict.items()
-            }
+            diff_dict = {k: _rgb_diff_color(v, other.rgb) for k, v in self.rgb_dict.items()}
         else:
             diff_dict = {
                 k: _rgb_diff_color(self.rgb_dict[k], other.rgb_dict[k])
@@ -1612,13 +1548,10 @@ def hsl_gradient(
         step *= 10
     color_vec = _init_gradient_color_vec(num, start, step, stop)
     color_iter = iter(color_vec)
-    type_map: dict[type[Color | int], ...] = {
-        Color: lambda x: x.rgb,
-        int: lambda x: hex2rgb(x),
-    }
-    get_rgb_iter_idx: Callable[[Color | int, SupportsIndex], int] = (
-        lambda x, ix: rgb2hsl(type_map[type(x)](x))[ix]
-    )
+    type_map: dict[type[Color | int], ...] = {Color: lambda x: x.rgb, int: lambda x: hex2rgb(x)}
+    get_rgb_iter_idx: Callable[[Color | int, SupportsIndex], int] = lambda x, ix: rgb2hsl(
+        type_map[type(x)](x)
+    )[ix]
     next_rgb_iter = None
     prev_output = None
     while ncycles > 0:
@@ -1697,10 +1630,7 @@ def _init_gradient_color_vec(
         h_diff = min(abs_h, 360 - abs_h)
         dist = math.sqrt(h_diff**2 + (stop_s - start_s) ** 2 + (stop_l - start_l) ** 2)
         num_samples = max(int(dist / float(step)), 1)
-    color_vec = [
-        np.linspace(*bounds, num=num_samples, dtype=float)
-        for bounds in zip(start, stop)
-    ]
+    color_vec = [np.linspace(*bounds, num=num_samples, dtype=float) for bounds in zip(start, stop)]
     color_vec = list(zip(*color_vec))
     return color_vec
 

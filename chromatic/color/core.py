@@ -2,6 +2,7 @@ __all__ = [
     'CSI',
     'Color',
     'ColorStr',
+    'SGR_RESET',
     'SgrParameter',
     'SgrSequence',
     'ansicolor24Bit',
@@ -11,15 +12,15 @@ __all__ = [
     'get_ansi_type',
     'hsl_gradient',
     'randcolor',
-    'rgb2ansi_color_esc',
     'rgb_luma_transform',
-    'SGR_RESET',
+    'rgb2ansi_escape',
 ]
 
 import math
 import operator as op
 import os
 import random
+import sys
 from collections import Counter
 from collections.abc import Buffer
 from copy import deepcopy
@@ -218,7 +219,7 @@ class colorbytes(bytes):
 
         fmt: AnsiColorType = cls if cls is not colorbytes else DEFAULT_ANSI
         try:
-            inst = bytes.__new__(fmt, rgb2ansi_color_esc(fmt, *rgb.copy().popitem()))
+            inst = bytes.__new__(fmt, rgb2ansi_escape(fmt, *rgb.copy().popitem()))
         except TypeError:
             print(vars())
             raise
@@ -247,7 +248,7 @@ class colorbytes(bytes):
             case _:
                 raise ValueError
         if typ is not cls:
-            __ansi = rgb2ansi_color_esc(
+            __ansi = rgb2ansi_escape(
                 cls if is_subtype else typ, mode=cast(ColorDictKeys, k), rgb=rgb
             )
         inst = bytes.__new__(typ, __ansi)
@@ -352,7 +353,7 @@ class ansicolor24Bit(colorbytes):
 
 
 _SUPPORTS_256 = frozenset(
-    {
+    [
         'ANSICON',
         'COLORTERM',
         'ConEmuANSI',
@@ -361,7 +362,7 @@ _SUPPORTS_256 = frozenset(
         'TERMINAL_EMULATOR',
         'TERM_PROGRAM',
         'WT_SESSION',
-    }
+    ]
 )
 
 
@@ -385,11 +386,8 @@ def is_vt_proc_enabled():
     return True
 
 
-def get_term_ansi_default():
-    return ansicolor8Bit if is_vt_proc_enabled() else ansicolor4Bit
+DEFAULT_ANSI = ansicolor8Bit if is_vt_proc_enabled() else ansicolor4Bit
 
-
-DEFAULT_ANSI = get_term_ansi_default()
 _ANSI_COLOR_TYPES = frozenset(colorbytes.__subclasses__())
 
 
@@ -437,7 +435,7 @@ def get_ansi_type(typ):
         ) from None
 
 
-def rgb2ansi_color_esc(ret_format, mode, rgb):
+def rgb2ansi_escape(ret_format, mode, rgb):
     ret_format = get_ansi_type(ret_format)
     assert len(rgb) == 3, 'length of RGB value is not 3'
     try:
@@ -522,8 +520,7 @@ class SgrParamWrapper:
         return hash(self._value_)
 
     def __eq__(self, other):
-        cls, other_cls = map(type, (self, other))
-        if cls is other_cls or issubclass(other_cls, bytes):
+        if type(self) is type(other) or isinstance(other, bytes):
             return hash(self) == hash(other)
         return NotImplemented
 
@@ -534,10 +531,8 @@ class SgrParamWrapper:
         return f"{type(self).__name__}({self._value_})"
 
     def is_same_kind(self, other):
-        if self == other:
-            return True
         try:
-            return next(_iter_sgr(other)) == self._value_
+            return self == other or self._value_ == next(_iter_sgr(other))
         except (TypeError, StopIteration, RuntimeError):
             return False
 
@@ -546,9 +541,6 @@ class SgrParamWrapper:
 
     def is_color(self):
         return isinstance(self._value_, colorbytes)
-
-
-# SgrParamWrapper.__name__ = SgrParameter.__name__.lower()
 
 
 @lru_cache
@@ -575,7 +567,9 @@ def _get_sgr_bitmask[_T: (bytes, bytearray, Buffer)](__x: _T) -> list[int]:
     return allocated
 
 
-def _iter_normalized_sgr(__iter) -> Iterator[AnsiColorFormat | int]:
+def _iter_normalized_sgr[
+    _T: (Buffer, SgrParamWrapper, int)
+](__iter: Buffer | Iterable[_T]) -> Iterator[AnsiColorFormat | int]:
     if isinstance(__iter, Buffer):
         yield from _get_sgr_bitmask(__iter)
     else:
@@ -635,13 +629,13 @@ def _gen_colorbytes(__iter: Iterable[int]) -> Iterator[bytes | AnsiColorFormat]:
             break
 
 
-def _iter_sgr(__x):
+def _iter_sgr[_T: (Buffer, int)](__x: _T | Iterable[_T]):
     if isinstance(__x, int):
         __x = [__x]
     return _gen_colorbytes(_iter_normalized_sgr(__x))
 
 
-class SgrSequence:
+class SgrSequence(Sequence[SgrParamWrapper]):
 
     def append(self, __value):
         if __value not in _SGR_PARAM_VALUES:
@@ -677,9 +671,11 @@ class SgrSequence:
         if self.is_color():
             return next((v for v in self if v.is_color() and __key in v._value_.rgb_dict), None)
 
-    def index(self, value):
+    def index(self, value, start: SupportsIndex = 0, stop: SupportsIndex = sys.maxsize):
         try:
-            return next(i for i, p in enumerate(self) if p.is_same_kind(value))
+            return op.index(start) + next(
+                i for i, p in enumerate(self[start:stop]) if p.is_same_kind(value)
+            )
         except StopIteration:
             raise ValueError(f"{value!r} not in sequence") from None
 
@@ -722,7 +718,7 @@ class SgrSequence:
 
     def __add__(self, other):
         if type(self) is type(other):
-            return SgrSequence([*self, *other])
+            return SgrSequence(x for xs in (self, other) for x in xs)
         if isinstance(other, str):
             return str(self) + other
 
@@ -795,10 +791,10 @@ class SgrSequence:
         return SgrSequence(self._sgr_params_ + other._sgr_params_)
 
     def __init__(self, __iter=None, *, ansi_type=None) -> None:
-        cls = type(self)
-        if type(__iter) is cls:
+        if type(self) is type(__iter):
+            __iter: SgrSequence
             other = __iter.__copy__()
-            for attr in cls.__slots__:
+            for attr in type(self).__slots__:
                 setattr(self, attr, getattr(other, attr))
             return
 
@@ -871,9 +867,12 @@ class SgrSequence:
     def __iter__(self):
         return iter(self._sgr_params_)
 
+    def __len__(self):
+        return len(self._sgr_params_)
+
     def __radd__(self, other):
         if type(self) is type(other):
-            return SgrSequence([*other, *self])
+            return SgrSequence(x for xs in (other, self) for x in xs)
         if isinstance(other, str):
             return other + str(self)
         raise TypeError(
@@ -916,13 +915,13 @@ class SgrSequence:
     def rgb_dict(self, __value: tuple[AnsiColorType, dict[ColorDictKeys, Optional[Color]]]) -> None:
         ansi_type, color_dict = __value
         for k, v in color_dict.items():
+            if self._rgb_dict_.get(k):
+                try:
+                    self.pop(self.index(self.get_color(k)))
+                except ValueError as e:
+                    e.add_note(repr(self))
+                    raise e
             if v is not None:
-                if self._rgb_dict_.get(k):
-                    try:
-                        self.pop(self.index(self.get_color(k)))
-                    except ValueError as e:
-                        e.add_note(repr(self))
-                        raise e
                 color_bytes = ansi_type.from_rgb({k: v})
                 self._rgb_dict_ |= color_bytes._rgb_dict_
                 self._sgr_params_.append(SgrParamWrapper(color_bytes))
@@ -995,7 +994,7 @@ def _solve_color_spec[
             e = ValueError('too many arguments' if len(out) >= 2 else 'args contain non-RGB values')
         context = ('invalid color spec', str(e))
         raise ValueError(': '.join(filter(None, context))) from None
-    return SgrSequence([ansi_type.from_rgb({k: v}) for k, v in out.items()])
+    return SgrSequence(ansi_type.from_rgb({k: v}) for k, v in out.items())
 
 
 def _get_color_str_vars(

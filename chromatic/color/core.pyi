@@ -10,14 +10,12 @@ __all__ = [
     'ansicolor8Bit',
     'colorbytes',
     'get_ansi_type',
-    'hsl_gradient',
     'randcolor',
-    'rgb_luma_transform',
     'rgb2ansi_escape',
 ]
 
-from collections.abc import Buffer, Callable, Iterable, Iterator, Mapping, Sequence
 import sys
+from collections.abc import Buffer, Iterable, Iterator, Mapping, Sequence
 from enum import IntEnum
 from types import MappingProxyType
 from typing import (
@@ -41,7 +39,6 @@ from chromatic._typing import (
     Ansi8BitAlias,
     AnsiColorAlias,
     ColorDictKeys,
-    Float3Tuple,
     Int3Tuple,
     RGBVectorLike,
     TupleOf3,
@@ -55,29 +52,10 @@ def get_ansi_type(typ: Ansi4BitAlias) -> type[ansicolor4Bit]: ...
 def get_ansi_type(typ: Ansi8BitAlias) -> type[ansicolor8Bit]: ...
 @overload
 def get_ansi_type(typ: Ansi24BitAlias) -> type[ansicolor24Bit]: ...
-def hsl_gradient(
-    start: Int3Tuple | Float3Tuple,
-    stop: Int3Tuple | Float3Tuple,
-    step: SupportsIndex,
-    num: SupportsIndex = None,
-    ncycles: int | float = float('inf'),
-    replace_idx: tuple[SupportsIndex | Iterable[SupportsIndex], Iterator[Color]] = None,
-    dtype: type[Color] | Callable[[Int3Tuple], int] = Color,
-): ...
 def randcolor() -> Color: ...
 def rgb2ansi_escape(
     ret_format: AnsiColorAlias | AnsiColorType, mode: ColorDictKeys, rgb: Int3Tuple
 ) -> bytes: ...
-def rgb_luma_transform(
-    rgb: Int3Tuple,
-    start: SupportsIndex = None,
-    num: SupportsIndex = 50,
-    step: SupportsIndex = 1,
-    cycle: bool | Literal['wave'] = False,
-    ncycles: int | float = float('inf'),
-    gradient: Int3Tuple = None,
-    dtype: type[Color] = None,
-) -> Iterator[Int3Tuple | int | Color]: ...
 
 class ansicolor4Bit(colorbytes): ...
 class ansicolor8Bit(colorbytes): ...

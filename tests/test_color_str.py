@@ -25,7 +25,8 @@ from chromatic.color.colorconv import (
     nearest_ansi_4bit_rgb,
     rgb_to_ansi_8bit
 )
-from chromatic.color.core import randcolor, rgb_luma_transform
+from chromatic.color.core import randcolor
+from chromatic.color.iterators import rgb_luma_transform
 from chromatic.color.palette import ColorNamespace
 
 

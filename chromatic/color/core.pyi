@@ -8,6 +8,7 @@ __all__ = [
     'ansicolor24Bit',
     'ansicolor4Bit',
     'ansicolor8Bit',
+    'color_chain',
     'colorbytes',
     'get_ansi_type',
     'randcolor',
@@ -138,6 +139,36 @@ class ColorStr(str):
     def no_reset(self) -> bool: ...
     @property
     def rgb_dict(self) -> dict[ColorDictKeys, Int3Tuple]: ...
+
+class _ColorChainKwargs(TypedDict, total=False):
+    ansi_type: AnsiColorAlias | type[AnsiColorFormat]
+    sgr_params: Sequence[SgrParameter]
+    fg: int | Color | Int3Tuple
+    bg: int | Color | Int3Tuple
+
+class color_chain:
+    @classmethod
+    def _from_masks_unchecked(
+        cls, masks: Iterable[tuple[SgrSequence, str]], ansi_type: type[AnsiColorFormat]
+    ) -> Self: ...
+    def extend[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> None: ...
+    @classmethod
+    def from_masks(
+        cls, masks: Sequence[tuple[SgrSequence, str]], ansi_type: type[AnsiColorFormat] = None
+    ) -> Self: ...
+    def __add__[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> color_chain: ...
+    def __call__(self, __obj=None) -> str: ...
+    def __iadd__[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> None: ...
+    def __init__(self, **kwargs: Unpack[_ColorChainKwargs]) -> None: ...
+    def __radd__[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> color_chain: ...
+    def __repr__(self) -> str: ...
+    def __str__(self) -> str: ...
+
+    _ansi_type_: type[AnsiColorFormat]
+    _masks_: list[tuple[SgrSequence, str]]
+
+    @property
+    def masks(self) -> tuple[tuple[SgrSequence, str], ...]: ...
 
 class SgrParameter(IntEnum):
     RESET = 0

@@ -1,19 +1,11 @@
-__all__ = [
-    'Back',
-    'ColorNamespace',
-    'Fore',
-    'Style',
-    'color_str_wrapper',
-    'rgb_dispatch',
-    'named_color',
-]
+__all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']
 
 import inspect
 from collections.abc import Sequence
 from types import MappingProxyType
-from typing import Callable, Iterator, Literal, TypeVar, TypedDict, Union, Unpack, overload
+from typing import Callable, Iterator, Literal, TypeAlias, TypeVar, Union, overload
 
-from chromatic.color.core import AnsiColorFormat, Color, ColorStr, SgrParameter, SgrSequence
+from .core import Color, ColorStr, color_chain
 from .._typing import Int3Tuple
 
 _ColorLike: TypeAlias = int | Color | Int3Tuple
@@ -21,17 +13,17 @@ _ColorLike: TypeAlias = int | Color | Int3Tuple
 # def display_ansi256_color_range() -> list[list[ColorStr]]: ...
 def named_color_idents() -> list[ColorStr]: ...
 
-class AnsiBack(ColorNamespace[color_str_wrapper]):
-    RESET: color_str_wrapper
+class AnsiBack(ColorNamespace[color_chain]):
+    RESET: color_chain
 
-    def __call__(self, bg: _ColorLike) -> color_str_wrapper: ...
+    def __call__(self, bg: _ColorLike) -> color_chain: ...
 
-class AnsiFore(ColorNamespace[color_str_wrapper]):
-    RESET: color_str_wrapper
+class AnsiFore(ColorNamespace[color_chain]):
+    RESET: color_chain
 
-    def __call__(self, fg: _ColorLike) -> color_str_wrapper: ...
+    def __call__(self, fg: _ColorLike) -> color_chain: ...
 
-class AnsiStyle[StyleStr: color_str_wrapper](DynamicNamespace[StyleStr]):
+class AnsiStyle[StyleStr: color_chain](DynamicNamespace[StyleStr]):
     RESET: StyleStr
     BOLD: StyleStr
     FAINT: StyleStr
@@ -106,16 +98,6 @@ class AnsiStyle[StyleStr: color_str_wrapper](DynamicNamespace[StyleStr]):
     MAGENTA_BRIGHT_BG: StyleStr
     CYAN_BRIGHT_BG: StyleStr
     WHITE_BRIGHT_BG: StyleStr
-
-class color_str_wrapper:
-    def __add__(self, other) -> ColorStr: ...
-    def __call__(self, __obj=None) -> color_str_wrapper | ColorStr: ...
-    def __init__(self, **kwargs: Unpack[_ColorStrWrapperKwargs]) -> None: ...
-    def __repr__(self) -> str: ...
-    def __str__(self) -> str: ...
-
-    _ansi_type_: type[AnsiColorFormat]
-    _sgr_: SgrSequence
 
 class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
     def as_dict(self) -> dict[str, _VT]: ...
@@ -315,12 +297,6 @@ named_color: Union[
     dict[Literal['4b'], Callable[[_ColorName4Bit], Color]],
     dict[Literal['24b'], Callable[[_ColorName], Color]],
 ]
-
-class _ColorStrWrapperKwargs(TypedDict, total=False):
-    ansi_type: Union[AnsiColorAlias, type[AnsiColorFormat]]
-    bg: _ColorLike
-    fg: _ColorLike
-    sgr_params: Sequence[Union[int, SgrParameter]]
 
 class rgb_dispatch[**P, R]:
     color_ns: MappingProxyType[str, Int3Tuple]

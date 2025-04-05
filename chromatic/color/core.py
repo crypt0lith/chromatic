@@ -8,6 +8,7 @@ __all__ = [
     'ansicolor24Bit',
     'ansicolor4Bit',
     'ansicolor8Bit',
+    'color_chain',
     'colorbytes',
     'get_ansi_type',
     'randcolor',
@@ -1598,8 +1599,139 @@ class ColorStr(str):
         return {k: v.rgb for k, v in self._color_dict_.items()}
 
 
+def _color_str_to_mask(cs: ColorStr) -> tuple[SgrSequence, str]:
+    return cs._sgr_, cs.base_str
 
 
+class color_chain:
 
+    def extend(self, other):
+        if isinstance(other, color_chain):
+            self._masks_.extend(other._masks_[:])
+        elif isinstance(other, ColorStr):
+            self._masks_.append(_color_str_to_mask(other))
+        elif isinstance(other, str):
+            self._masks_.append((SgrSequence(), other))
+        else:  #
+            raise TypeError
 
+    @classmethod
+    def from_masks(cls, masks, ansi_type=None):
+        if isinstance(masks, Sequence) and all(
+            isinstance(x, tuple)
+            and len(x) == 2
+            and isinstance(x[0], SgrSequence)
+            and isinstance(x[1], str)
+            for x in masks
+        ):
+            return cls._from_masks_unchecked(masks, get_ansi_type(ansi_type or DEFAULT_ANSI))
+        raise TypeError
 
+    @classmethod
+    def _from_masks_unchecked(cls, masks, ansi_type):
+        inst = object.__new__(cls)
+        prev_fg = prev_bg = None
+        inst._masks_ = []
+        for sgr, s in masks:
+            if prev_fg is not None and prev_fg == sgr.fg:
+                sgr.rgb_dict = (ansi_type, {'fg': None})
+            if prev_bg is not None and prev_bg == sgr.bg:
+                sgr.rgb_dict = (ansi_type, {'bg': None})
+            inst._masks_.append((sgr, s))
+            prev_fg, prev_bg = sgr.fg, sgr.bg
+        inst._ansi_type_ = ansi_type
+        return inst
+
+    def __add__(self, other):
+        if isinstance(other, (color_chain, ColorStr)):
+            other_masks: tuple[tuple[SgrSequence, str], ...] = (
+                other.masks if isinstance(other, color_chain) else (_color_str_to_mask(other),)
+            )
+            if self._masks_ and other_masks:
+                match [
+                    (self._masks_[-1][0].fg, self._masks_[-1][0].bg),
+                    (other_masks[0][0].fg, other_masks[0][0].bg),
+                ]:
+                    case [(None, tuple() as bg), (tuple() as fg, None)] | (
+                        [(tuple() as fg, None), (None, tuple() as bg)]
+                    ):
+                        return self._from_masks_unchecked(
+                            [
+                                *self._masks_[:-1],
+                                (
+                                    color_chain(fg=fg, bg=bg)._masks_.pop()[0],
+                                    self._masks_[-1][1] + other_masks[0][1],
+                                ),
+                                *other_masks[1:],
+                            ],
+                            ansi_type=self._ansi_type_,
+                        )
+                    case _:
+                        return self._from_masks_unchecked(
+                            self.masks + other_masks, ansi_type=self._ansi_type_
+                        )
+        elif isinstance(other, str):
+            if len(self._masks_) > 0:
+                return self._from_masks_unchecked(
+                    [*self.masks[:-1], (self._masks_[-1][0], self._masks_[-1][1] + other)],
+                    ansi_type=self._ansi_type_,
+                )
+            return self._from_masks_unchecked(
+                [*self.masks, (SgrSequence(), other)], ansi_type=self._ansi_type_
+            )
+        return NotImplemented
+
+    def __call__(self, __obj=None):
+        return "%s%s" % (self, __obj)
+
+    def __iadd__(self, other):
+        self.extend(other)
+        return self
+
+    def __init__(self, **kwargs):
+        self._ansi_type_ = get_ansi_type(kwargs.get('ansi_type', DEFAULT_ANSI))
+        if kwargs.get('sgr_params') is not None:
+            sgr = SgrSequence(kwargs.get('sgr_params'))
+        else:
+            sgr = SgrSequence()
+        v: Int3Tuple | Color | int
+        for k in kwargs.keys() & {'fg', 'bg'}:
+            if (v := kwargs[k]) is None:
+                continue
+            elif isinstance(v, int):
+                v = hex2rgb(v)
+            sgr += SgrSequence(self._ansi_type_.from_rgb({k: v}))
+        self._masks_ = [(sgr, '')]
+
+    def __radd__(self, other):
+        if isinstance(other, ColorStr):
+            return color_chain._from_masks_unchecked(
+                (_color_str_to_mask(other),) + self.masks, ansi_type=other.ansi_format
+            )
+        elif isinstance(other, str):
+            if (parsed := _split_ansi_escape(other)) is not None:
+                return color_chain._from_masks_unchecked(
+                    parsed + self._masks_[:], ansi_type=self._ansi_type_
+                )
+            else:
+                return color_chain._from_masks_unchecked(
+                    [(SgrSequence(), other), *self.masks], ansi_type=self._ansi_type_
+                )
+        return NotImplemented
+
+    def __repr__(self):
+        return "{.__name__}([{!s}], ansi_type={.__name__!r})".format(
+            type(self),
+            ', '.join('(%s, %r)' % (bytes(sgr), s) for sgr, s in self._masks_),
+            self._ansi_type_,
+        )
+
+    def __str__(self):
+        return ''.join(
+            str(ColorStr(base_str, color_spec=sgr, ansi_type=self._ansi_type_, no_reset=True))
+            for sgr, base_str in self.masks
+        )
+
+    @property
+    def masks(self):
+        return tuple(self._masks_)

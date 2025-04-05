@@ -1,30 +1,11 @@
 from functools import lru_cache, update_wrapper
 from inspect import getfullargspec, getmodule, isbuiltin, signature
 from types import FunctionType, MappingProxyType
-from typing import (
-    Callable,
-    Iterable,
-    Iterator,
-    Sequence,
-    TYPE_CHECKING,
-    TypedDict,
-    Union,
-    Unpack,
-    cast,
-    dataclass_transform,
-)
+from typing import Callable, Iterator, Sequence, TYPE_CHECKING, Union, cast, dataclass_transform
 
-from .colorconv import ANSI_4BIT_RGB, hex2rgb
-from .core import (
-    AnsiColorFormat,
-    Color,
-    ColorStr,
-    DEFAULT_ANSI,
-    SgrParameter,
-    SgrSequence,
-    get_ansi_type,
-)
-from .._typing import AnsiColorAlias, Int3Tuple
+from .colorconv import ANSI_4BIT_RGB
+from .core import Color, ColorStr, SgrParameter, color_chain
+from .._typing import Int3Tuple
 
 null = object()
 
@@ -311,97 +292,13 @@ class ColorNamespace[NamedColor: Color](DynamicNamespace[NamedColor]):
     PINK: NamedColor
 
 
-# noinspection PyTypedDict
-class _ColorStrWrapperKwargs(TypedDict, total=False):
-    ansi_type: Union[AnsiColorAlias, type[AnsiColorFormat]]
-    bg: Union[Color, tuple[int, int, int], int]
-    fg: Union[Color, tuple[int, int, int], int]
-    sgr_params: Sequence[Union[int, SgrParameter]]
-
-
-class color_str_wrapper:  # noqa
-
-    def __init__(self, **kwargs: Unpack[_ColorStrWrapperKwargs]):
-        self._rhs_ = kwargs.get('_rhs_', False)
-        self._concat_ = kwargs.get('_concat_', '')
-        if typ := kwargs.get('ansi_type'):
-            self._ansi_type_ = get_ansi_type(typ)
-        else:
-            self._ansi_type_ = DEFAULT_ANSI
-        if params := kwargs.get('sgr_params'):
-            self._sgr_ = SgrSequence(params)
-        else:
-            self._sgr_ = SgrSequence()
-        for k in kwargs.keys() & {'fg', 'bg'}:
-            if v := kwargs[k]:
-                if not isinstance(v, Iterable):
-                    v = hex2rgb(v)
-                self._sgr_ += SgrSequence(self._ansi_type_.from_rgb({k: v}))
-
-    def __call__(self, __obj=None):
-        if type(self) is type(__obj):
-            new_sgr = self._sgr_ + __obj._sgr_
-            return color_str_wrapper(
-                **dict(
-                    ansi_type=self._ansi_type_,
-                    sgr_params=[int(v._value_) for v in new_sgr if ~v.is_color()],
-                    _concat_=getattr(self, '_concat_', '').replace(str(self._sgr_), new_sgr),
-                    _rhs_=getattr(self, '_rhs_', False),
-                )
-                | new_sgr.rgb_dict
-            )
-        if getattr(self, '_rhs_', False):
-            return color_str_wrapper(
-                **dict(
-                    ansi_type=self._ansi_type_,
-                    sgr_params=list(self._sgr_),
-                    _concat_=f"{getattr(self, '_concat_', '')}{__obj}".removesuffix('[0m'),
-                    _rhs_=False if isinstance(__obj, ColorStr) else True,
-                )
-                | self._sgr_.rgb_dict
-            )
-        if isinstance(__obj, ColorStr):
-            return ColorStr(
-                __obj.base_str,
-                color_spec=SgrSequence(
-                    [v for v in __obj._sgr_.values() if v not in self._sgr_.values()]
-                ),
-                no_reset=__obj.no_reset,
-                ansi_type=self._ansi_type_,
-            )
-        return ColorStr(__obj, color_spec=self._sgr_, ansi_type=self._ansi_type_)
-
-    def __add__(self, other):
-        return self.__call__(other)
-
-    def __radd__(self, other):
-        if getattr(self, '_rhs_') is False and type(other) is ColorStr:
-            setattr(self, '_rhs_', True)
-        return self.__call__(other)
-
-    def __str__(self):
-        return self.__dict__['_concat_'] + str(self._sgr_)
-
-    def __repr__(self):
-        return "{.__name__}({!s}, ansi_type={!r})".format(
-            type(self),
-            [int(i) & 0x7F for v in self._sgr_.values() for i in v.split(b';')],
-            self._ansi_type_.__name__.removeprefix('ansicolor').replace('Bit', 'b'),
-        )
-
-    def __getattr__(self, name):
-        if hasattr(str, name):
-            return getattr(self.__str__(), name)
-        raise AttributeError
-
-
 def _style_wrappers():
     for x in SgrParameter:
-        yield color_str_wrapper(sgr_params=([x] if x not in {38, 48} else []))
+        yield color_chain(sgr_params=([x] if x not in {38, 48} else []))
 
 
 @_ns_from_iter(_style_wrappers)
-class AnsiStyle[StyleStr: color_str_wrapper](DynamicNamespace[StyleStr]):
+class AnsiStyle[StyleStr: color_chain](DynamicNamespace[StyleStr]):
     RESET: StyleStr
     BOLD: StyleStr
     FAINT: StyleStr
@@ -479,25 +376,25 @@ class AnsiStyle[StyleStr: color_str_wrapper](DynamicNamespace[StyleStr]):
 
 
 def _bg_wrapper_factory(__x: Color):
-    return color_str_wrapper(bg=__x, ansi_type='24b')
+    return color_chain(bg=__x, ansi_type='24b')
 
 
 def _fg_wrapper_factory(__x: Color):
-    return color_str_wrapper(fg=__x, ansi_type='24b')
+    return color_chain(fg=__x, ansi_type='24b')
 
 
-class AnsiBack(ColorNamespace[color_str_wrapper], factory=_bg_wrapper_factory):
+class AnsiBack(ColorNamespace[color_chain], factory=_bg_wrapper_factory):
     RESET = getattr(AnsiStyle(), 'DEFAULT_BG_COLOR')
 
     def __call__(self, bg: Union[Color, int, tuple[int, int, int]]):
-        return color_str_wrapper(bg=bg)
+        return color_chain(bg=bg)
 
 
-class AnsiFore(ColorNamespace[color_str_wrapper], factory=_fg_wrapper_factory):
+class AnsiFore(ColorNamespace[color_chain], factory=_fg_wrapper_factory):
     RESET = getattr(AnsiStyle(), 'DEFAULT_FG_COLOR')
 
     def __call__(self, fg: Union[Color, int, tuple[int, int, int]]):
-        return color_str_wrapper(fg=fg)
+        return color_chain(fg=fg)
 
 
 _COLOR_DICT: dict[ColorStr, Int3Tuple] = {
@@ -652,12 +549,4 @@ if TYPE_CHECKING:
     Fore: AnsiFore
     Style: AnsiStyle
 
-__all__ = [
-    'Back',
-    'ColorNamespace',
-    'Fore',
-    'Style',
-    'color_str_wrapper',
-    'rgb_dispatch',
-    'named_color',
-]
+__all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']

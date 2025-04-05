@@ -229,7 +229,7 @@ class colorbytes(bytes):
             ) from None
         if (is_subtype := cls is not colorbytes) and type(__ansi) is cls:
             return cast(AnsiColorFormat, __ansi)
-        match __ansi.removeprefix(CSI).removesuffix(b'm').split(b';'):
+        match _unwrap_ansi_escape(__ansi):
             case [color]:
                 typ = ansicolor4Bit
                 k, rgb = _ANSI16C_I2KV[int(color)]
@@ -393,6 +393,75 @@ def _is_ansi_type(typ: type):
         return typ in _ANSI_COLOR_TYPES
     except TypeError:
         return False
+
+
+@lru_cache
+def _sgr_re_pattern():
+    import re
+
+    def group(*choices: *tuple[str, ...]):
+        return '(?:' + '|'.join(choices) + ')'
+
+    def params(*choices: *tuple[str, ...]):
+        return ';'.join(choices)
+
+    u8_no_leading_zeros = group(r'25[0-5]', r'2[0-4]\d', r'1\d\d', r'[1-9]\d', r'\d')
+    pat = group(
+        group(
+            params(
+                '[3-4]8',
+                group(
+                    params('2', *(u8_no_leading_zeros for _ in range(3))),
+                    params('5', u8_no_leading_zeros),
+                ),
+            )
+        ),
+        group('10', '9', '4', '3') + '[1-7]',
+        group('10', '9', '[1-6]') + '0',
+        '6[1-3]',
+        '5[2-5]',
+        '[2-4]9',
+        '28',
+        '2[0-6]',
+        r'1\d',
+        r'\d',
+    )
+    return re.compile(rf'\x1b\[{pat[:-1]}(?:;{pat})*)?m')
+
+
+def _split_ansi_escape(__s: str) -> Optional[list[tuple['SgrSequence', str]]]:
+    out = []
+    i = 0
+    for m in _sgr_re_pattern().finditer(__s):
+        text = __s[i : (j := m.start())]
+        if i != j:
+            out.append(text)
+        ansi = _unwrap_ansi_escape(__s[j : (i := m.end())].encode())
+        if any(ansi):
+            out.append(SgrSequence(map(int, ansi)))
+    if i + 1 < len(__s):
+        out.append(__s[i:])
+    if not any(isinstance(x, SgrSequence) for x in out):
+        return
+    n = len(out)
+    tmp = []
+    for idx, x in enumerate(out):
+        if idx + 1 < n and type(x) is type(out[idx + 1]):
+            out[idx + 1] = x + out[idx + 1]
+        else:
+            tmp.append(x)
+    out = tmp
+    if out and len(out) % 2 != 0:
+        out.append({SgrSequence: str, str: SgrSequence}[type(out[-1])]())
+    return [(a, b) if isinstance(a, SgrSequence) else (b, a) for a, b in zip(out[::2], out[1::2])]
+
+
+def _unwrap_ansi_escape(__b: bytes):
+    return __b.removeprefix(CSI).removesuffix(b'm').split(b';')
+
+
+def _concat_ansi_escape(__it: Iterable[bytes]):
+    return b'\x1b[%sm' % b';'.join(__it)
 
 
 AnsiColorFormat: TypeAlias = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
@@ -730,7 +799,7 @@ class SgrSequence(Sequence[SgrParamWrapper]):
     def __bytes__(self):
         if self._bytes_ is None:
             if self._sgr_params_:
-                self._bytes_ = b'\x1b[%sm' % b';'.join(self.values())
+                self._bytes_ = _concat_ansi_escape(self.values())
             else:
                 self._bytes_ = bytes()
         return self._bytes_
@@ -858,7 +927,7 @@ class SgrSequence(Sequence[SgrParamWrapper]):
             self._has_bright_colors_ = False
             self._sgr_params_ = [self._sgr_params_.pop()]
             self._rgb_dict_ = {}
-        self._bytes_ = b'\x1b[%sm' % b';'.join(map(bytes, self._sgr_params_))
+        self._bytes_ = _concat_ansi_escape(map(bytes, self._sgr_params_))
 
     def __iter__(self):
         return iter(self._sgr_params_)

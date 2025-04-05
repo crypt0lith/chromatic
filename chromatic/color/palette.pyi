@@ -13,10 +13,10 @@ from collections.abc import Sequence
 from types import MappingProxyType
 from typing import Callable, Iterator, Literal, TypeVar, TypedDict, Union, Unpack, overload
 
-from chromatic._typing import AnsiColorAlias, Int3Tuple
 from chromatic.color.core import AnsiColorFormat, Color, ColorStr, SgrParameter, SgrSequence
+from .._typing import Int3Tuple
 
-type _ColorLike = Union[Color, Int3Tuple, int]
+_ColorLike: TypeAlias = int | Color | Int3Tuple
 
 # def display_ansi256_color_range() -> list[list[ColorStr]]: ...
 def named_color_idents() -> list[ColorStr]: ...
@@ -328,7 +328,7 @@ class rgb_dispatch[**P, R]:
     __signature__: inspect.Signature
 
     @overload
-    def __new__(cls, __f, /, *, args: Sequence[str] = ()):
+    def __new__(cls, __f: Callable[P, R], /, *, args: Sequence[str] = ()):
         return __f
 
     @property

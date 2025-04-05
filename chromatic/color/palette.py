@@ -500,18 +500,16 @@ class AnsiFore(ColorNamespace[color_str_wrapper], factory=_fg_wrapper_factory):
         return color_str_wrapper(fg=fg)
 
 
-_COLOR_DICT = {
-    ColorStr(name.casefold(), {'fg': rgb}, ansi_type='24b'): rgb.rgb
-    for name, rgb in ColorNamespace().as_dict().items()
+_COLOR_DICT: dict[ColorStr, Int3Tuple] = {
+    ColorStr(name.casefold(), {'fg': color}, ansi_type='24b'): color.rgb
+    for name, color in ColorNamespace().as_dict().items()
 }
 
 
 class _color_ns_getter:
-    mapping = MappingProxyType(
-        {k.casefold(): v.rgb for (k, v) in ColorNamespace().as_dict().items()}
-    )
+    mapping = MappingProxyType({k.base_str: v for k, v in _COLOR_DICT.items()})
 
-    __str__ = lambda self: "{%s}" % ', '.join(f"{k}: {v}" for k, v in _COLOR_DICT.items())
+    __str__ = lambda self: str(_COLOR_DICT)
 
     @staticmethod
     @lru_cache
@@ -604,35 +602,21 @@ class rgb_dispatch[**P, R]:  # noqa
         return self._func(*bound.args, **bound.kwargs)
 
 
+# fmt: off
 named_color = cast(
     ...,
     {
         '4b': dict(
             zip(
-                [
-                    'BLACK',
-                    'RED',
-                    'GREEN',
-                    'YELLOW',
-                    'BLUE',
-                    'MAGENTA',
-                    'CYAN',
-                    'GREY',
-                    'DARK_GREY',
-                    'BRIGHT_RED',
-                    'BRIGHT_GREEN',
-                    'BRIGHT_YELLOW',
-                    'BRIGHT_BLUE',
-                    'BRIGHT_MAGENTA',
-                    'BRIGHT_CYAN',
-                    'WHITE',
-                ],
+                ['BLACK', 'RED', 'GREEN', 'YELLOW', 'BLUE', 'MAGENTA', 'CYAN', 'GREY',
+                 'DARK_GREY', 'BRIGHT_RED', 'BRIGHT_GREEN', 'BRIGHT_YELLOW', 'BRIGHT_BLUE',
+                 'BRIGHT_MAGENTA', 'BRIGHT_CYAN', 'WHITE'],
                 map(Color.from_rgb, ANSI_4BIT_RGB),
             )
         ).__getitem__,
         '24b': ColorNamespace().as_dict().__getitem__,
     },
-)
+)  # fmt: on
 
 
 def named_color_idents():

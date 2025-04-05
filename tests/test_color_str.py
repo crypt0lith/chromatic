@@ -17,24 +17,28 @@ from chromatic import (
     ansicolor24Bit,
     ansicolor4Bit,
     ansicolor8Bit,
-    colorbytes
+    colorbytes,
 )
 from chromatic.color.colorconv import (
     ansi_4bit_to_rgb,
     ansi_8bit_to_rgb,
     nearest_ansi_4bit_rgb,
-    rgb_to_ansi_8bit
+    rgb_to_ansi_8bit,
 )
 from chromatic.color.core import randcolor
 from chromatic.color.iterators import rgb_luma_transform
 from chromatic.color.palette import ColorNamespace
 
 
-def coerce_argspec[** P, R](f: Callable[P, R] | FunctionType | type,
-                            args: P.args = None,
-                            kwargs: P.kwargs = None,
-                            *,
-                            retfunc: bool = False) -> Callable[[], R] | tuple[P.args, P.kwargs]:
+def coerce_argspec[
+    **P, R
+](
+    f: Callable[P, R] | FunctionType | type,
+    args: P.args = None,
+    kwargs: P.kwargs = None,
+    *,
+    retfunc: bool = False,
+) -> (Callable[[], R] | tuple[P.args, P.kwargs]):
     if args is None:
         args = tuple()
     if kwargs is None:
@@ -56,13 +60,15 @@ def coerce_argspec[** P, R](f: Callable[P, R] | FunctionType | type,
     return args, kwargs
 
 
-class cprofile_wrapper[** P, R]:
+class cprofile_wrapper[**P, R]:
 
-    def __init__(self,
-                 func: Callable[P, R] | FunctionType | type = None,
-                 *,
-                 number=10000,
-                 use_perf_counter=False):
+    def __init__(
+        self,
+        func: Callable[P, R] | FunctionType | type = None,
+        *,
+        number=10000,
+        use_perf_counter=False,
+    ):
         self.func = func
         self.number = number
         self.use_perf_counter = use_perf_counter
@@ -113,10 +119,9 @@ ANSI_4BIT_RGB: list[tuple[int, int, int]] = [
 ]
 
 
-def test_luma_transformer(test_color1: Color,
-                          test_color2: Color = None,
-                          *,
-                          base_str='亮度和颜色梯度算法测试！！！'):
+def test_luma_transformer(
+    test_color1: Color, test_color2: Color = None, *, base_str='亮度和颜色梯度算法测试！！！'
+):
     test_color2_rgb: Optional[tuple[int, int, int]] = getattr(test_color2, 'rgb', None)
     color_gen = rgb_luma_transform(
         test_color1.rgb,
@@ -125,7 +130,8 @@ def test_luma_transformer(test_color1: Color,
         cycle='wave',
         ncycles=4,
         gradient=test_color2_rgb,
-        dtype=Color)
+        dtype=Color,
+    )
     return '\n'.join(ColorStr(obj=base_str, color_spec=col) for col in color_gen)
 
 
@@ -135,7 +141,7 @@ def test_pattern_generator():
     pattern_str = []
     for i, p in enumerate(color_strings):
         try:
-            s_map = map(lambda x: color_strings[i:64:max(x, 1)], range(64))
+            s_map = map(lambda x: color_strings[i : 64 : max(x, 1)], range(64))
             s_range = [elem for arr in s_map for elem in arr][:64]
             if not s_range:
                 break
@@ -162,15 +168,31 @@ def _rand_color_str_array(n_rows=10, n_cols=10):
         for col in range(n_cols):
             char = random.choice(printable_chars) if next(rand_bin_iter) else None
             current.append(
-                ColorStr(
-                    obj=char, color_spec=randcolor(), ansi_type=ansicolor24Bit) if char else ' ')
+                ColorStr(obj=char, color_spec=randcolor(), ansi_type=ansicolor24Bit)
+                if char
+                else ' '
+            )
         output.append(
             '{}{}{}'.format(
                 *map(
-                    ''.join, (current, *(
-                        (ColorStr(color_spec=c, ansi_type=t)
-                         if isinstance(c, ColorStr) else c for c in current)
-                        for t in (ansicolor8Bit, ansicolor4Bit))))))
+                    ''.join,
+                    (
+                        current,
+                        *(
+                            (
+                                (
+                                    ColorStr(color_spec=c, ansi_type=t)
+                                    if isinstance(c, ColorStr)
+                                    else c
+                                )
+                                for c in current
+                            )
+                            for t in (ansicolor8Bit, ansicolor4Bit)
+                        ),
+                    ),
+                )
+            )
+        )
     return '\n'.join(output)
 
 

@@ -635,7 +635,7 @@ named_color = cast(
 )
 
 
-def display_named_colors():
+def named_color_idents():
     return [
         ColorStr(name.replace('_', ' ').lower(), color_spec=color, ansi_type='24b')
         for name, color in ColorNamespace().as_dict().items()

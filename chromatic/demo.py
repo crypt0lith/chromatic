@@ -122,11 +122,11 @@ def goblin_virus_truecolor():
 
 
 def named_colors():
-    from chromatic.color.palette import display_named_colors, ColorNamespace
+    from chromatic.color.palette import named_color_idents, ColorNamespace
     from chromatic.color.colorconv import rgb2hsv, rgb2lab
 
     print(f"{'.'.join([ColorNamespace.__module__, ColorNamespace.__name__])}:")
-    named = display_named_colors()
+    named = named_color_idents()
     whites = [0]
     for idx, n in enumerate(named):
         hsv = rgb2hsv(n.fg.rgb)

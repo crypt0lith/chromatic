@@ -642,15 +642,15 @@ def named_color_idents():
     ]
 
 
-def display_ansi256_color_range():
-    from numpy import asarray
-    from chromatic.color.colorconv import ansi_8bit_to_rgb
-
-    ansi256_range = asarray(range(256)).reshape([16] * 2).tolist()
-    return [
-        [ColorStr(obj='###', color_spec=ansi_8bit_to_rgb(v), ansi_type='8b') for v in arr]
-        for arr in ansi256_range
-    ]
+# def display_ansi256_color_range():
+#     from numpy import asarray
+#     from chromatic.color.colorconv import ansi_8bit_to_rgb
+#
+#     ansi256_range = asarray(range(256)).reshape([16] * 2).tolist()
+#     return [
+#         [ColorStr(obj='###', color_spec=ansi_8bit_to_rgb(v), ansi_type='8b') for v in arr]
+#         for arr in ansi256_range
+#     ]
 
 
 def __getattr__(name: ...) -> ...:

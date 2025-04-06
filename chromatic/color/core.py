@@ -2,24 +2,23 @@ __all__ = [
     'CSI',
     'Color',
     'ColorStr',
+    'SGR_RESET',
     'SgrParameter',
     'SgrSequence',
     'ansicolor24Bit',
     'ansicolor4Bit',
     'ansicolor8Bit',
+    'color_chain',
     'colorbytes',
     'get_ansi_type',
-    'hsl_gradient',
     'randcolor',
-    'rgb2ansi_color_esc',
-    'rgb_luma_transform',
-    'SGR_RESET',
+    'rgb2ansi_escape',
 ]
 
-import math
 import operator as op
 import os
 import random
+import sys
 from collections import Counter
 from collections.abc import Buffer
 from copy import deepcopy
@@ -53,7 +52,6 @@ from .colorconv import *
 from .._typing import (
     AnsiColorAlias,
     ColorDictKeys,
-    Float3Tuple,
     Int3Tuple,
     RGBVectorLike,
     is_matching_typed_dict,
@@ -218,7 +216,7 @@ class colorbytes(bytes):
 
         fmt: AnsiColorType = cls if cls is not colorbytes else DEFAULT_ANSI
         try:
-            inst = bytes.__new__(fmt, rgb2ansi_color_esc(fmt, *rgb.copy().popitem()))
+            inst = bytes.__new__(fmt, rgb2ansi_escape(fmt, *rgb.copy().popitem()))
         except TypeError:
             print(vars())
             raise
@@ -232,7 +230,7 @@ class colorbytes(bytes):
             ) from None
         if (is_subtype := cls is not colorbytes) and type(__ansi) is cls:
             return cast(AnsiColorFormat, __ansi)
-        match __ansi.removeprefix(CSI).removesuffix(b'm').split(b';'):
+        match _unwrap_ansi_escape(__ansi):
             case [color]:
                 typ = ansicolor4Bit
                 k, rgb = _ANSI16C_I2KV[int(color)]
@@ -247,7 +245,7 @@ class colorbytes(bytes):
             case _:
                 raise ValueError
         if typ is not cls:
-            __ansi = rgb2ansi_color_esc(
+            __ansi = rgb2ansi_escape(
                 cls if is_subtype else typ, mode=cast(ColorDictKeys, k), rgb=rgb
             )
         inst = bytes.__new__(typ, __ansi)
@@ -352,7 +350,7 @@ class ansicolor24Bit(colorbytes):
 
 
 _SUPPORTS_256 = frozenset(
-    {
+    [
         'ANSICON',
         'COLORTERM',
         'ConEmuANSI',
@@ -361,7 +359,7 @@ _SUPPORTS_256 = frozenset(
         'TERMINAL_EMULATOR',
         'TERM_PROGRAM',
         'WT_SESSION',
-    }
+    ]
 )
 
 
@@ -385,11 +383,8 @@ def is_vt_proc_enabled():
     return True
 
 
-def get_term_ansi_default():
-    return ansicolor8Bit if is_vt_proc_enabled() else ansicolor4Bit
+DEFAULT_ANSI = ansicolor8Bit if is_vt_proc_enabled() else ansicolor4Bit
 
-
-DEFAULT_ANSI = get_term_ansi_default()
 _ANSI_COLOR_TYPES = frozenset(colorbytes.__subclasses__())
 
 
@@ -399,6 +394,75 @@ def _is_ansi_type(typ: type):
         return typ in _ANSI_COLOR_TYPES
     except TypeError:
         return False
+
+
+@lru_cache
+def _sgr_re_pattern():
+    import re
+
+    def group(*choices: *tuple[str, ...]):
+        return '(?:' + '|'.join(choices) + ')'
+
+    def params(*choices: *tuple[str, ...]):
+        return ';'.join(choices)
+
+    u8_no_leading_zeros = group(r'25[0-5]', r'2[0-4]\d', r'1\d\d', r'[1-9]\d', r'\d')
+    pat = group(
+        group(
+            params(
+                '[3-4]8',
+                group(
+                    params('2', *(u8_no_leading_zeros for _ in range(3))),
+                    params('5', u8_no_leading_zeros),
+                ),
+            )
+        ),
+        group('10', '9', '4', '3') + '[1-7]',
+        group('10', '9', '[1-6]') + '0',
+        '6[1-3]',
+        '5[2-5]',
+        '[2-4]9',
+        '28',
+        '2[0-6]',
+        r'1\d',
+        r'\d',
+    )
+    return re.compile(rf'\x1b\[{pat[:-1]}(?:;{pat})*)?m')
+
+
+def _split_ansi_escape(__s: str) -> Optional[list[tuple['SgrSequence', str]]]:
+    out = []
+    i = 0
+    for m in _sgr_re_pattern().finditer(__s):
+        text = __s[i : (j := m.start())]
+        if i != j:
+            out.append(text)
+        ansi = _unwrap_ansi_escape(__s[j : (i := m.end())].encode())
+        if any(ansi):
+            out.append(SgrSequence(map(int, ansi)))
+    if i + 1 < len(__s):
+        out.append(__s[i:])
+    if not any(isinstance(x, SgrSequence) for x in out):
+        return
+    n = len(out)
+    tmp = []
+    for idx, x in enumerate(out):
+        if idx + 1 < n and type(x) is type(out[idx + 1]):
+            out[idx + 1] = x + out[idx + 1]
+        else:
+            tmp.append(x)
+    out = tmp
+    if out and len(out) % 2 != 0:
+        out.append({SgrSequence: str, str: SgrSequence}[type(out[-1])]())
+    return [(a, b) if isinstance(a, SgrSequence) else (b, a) for a, b in zip(out[::2], out[1::2])]
+
+
+def _unwrap_ansi_escape(__b: bytes):
+    return __b.removeprefix(CSI).removesuffix(b'm').split(b';')
+
+
+def _concat_ansi_escape(__it: Iterable[bytes]):
+    return b'\x1b[%sm' % b';'.join(__it)
 
 
 AnsiColorFormat: TypeAlias = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
@@ -437,7 +501,7 @@ def get_ansi_type(typ):
         ) from None
 
 
-def rgb2ansi_color_esc(ret_format, mode, rgb):
+def rgb2ansi_escape(ret_format, mode, rgb):
     ret_format = get_ansi_type(ret_format)
     assert len(rgb) == 3, 'length of RGB value is not 3'
     try:
@@ -522,8 +586,7 @@ class SgrParamWrapper:
         return hash(self._value_)
 
     def __eq__(self, other):
-        cls, other_cls = map(type, (self, other))
-        if cls is other_cls or issubclass(other_cls, bytes):
+        if type(self) is type(other) or isinstance(other, bytes):
             return hash(self) == hash(other)
         return NotImplemented
 
@@ -534,10 +597,8 @@ class SgrParamWrapper:
         return f"{type(self).__name__}({self._value_})"
 
     def is_same_kind(self, other):
-        if self == other:
-            return True
         try:
-            return next(_iter_sgr(other)) == self._value_
+            return self == other or self._value_ == next(_iter_sgr(other))
         except (TypeError, StopIteration, RuntimeError):
             return False
 
@@ -546,9 +607,6 @@ class SgrParamWrapper:
 
     def is_color(self):
         return isinstance(self._value_, colorbytes)
-
-
-# SgrParamWrapper.__name__ = SgrParameter.__name__.lower()
 
 
 @lru_cache
@@ -575,7 +633,9 @@ def _get_sgr_bitmask[_T: (bytes, bytearray, Buffer)](__x: _T) -> list[int]:
     return allocated
 
 
-def _iter_normalized_sgr(__iter) -> Iterator[AnsiColorFormat | int]:
+def _iter_normalized_sgr[
+    _T: (Buffer, SgrParamWrapper, int)
+](__iter: Buffer | Iterable[_T]) -> Iterator[AnsiColorFormat | int]:
     if isinstance(__iter, Buffer):
         yield from _get_sgr_bitmask(__iter)
     else:
@@ -635,13 +695,13 @@ def _gen_colorbytes(__iter: Iterable[int]) -> Iterator[bytes | AnsiColorFormat]:
             break
 
 
-def _iter_sgr(__x):
+def _iter_sgr[_T: (Buffer, int)](__x: _T | Iterable[_T]):
     if isinstance(__x, int):
         __x = [__x]
     return _gen_colorbytes(_iter_normalized_sgr(__x))
 
 
-class SgrSequence:
+class SgrSequence(Sequence[SgrParamWrapper]):
 
     def append(self, __value):
         if __value not in _SGR_PARAM_VALUES:
@@ -677,9 +737,11 @@ class SgrSequence:
         if self.is_color():
             return next((v for v in self if v.is_color() and __key in v._value_.rgb_dict), None)
 
-    def index(self, value):
+    def index(self, value, start: SupportsIndex = 0, stop: SupportsIndex = sys.maxsize):
         try:
-            return next(i for i, p in enumerate(self) if p.is_same_kind(value))
+            return op.index(start) + next(
+                i for i, p in enumerate(self[start:stop]) if p.is_same_kind(value)
+            )
         except StopIteration:
             raise ValueError(f"{value!r} not in sequence") from None
 
@@ -722,7 +784,7 @@ class SgrSequence:
 
     def __add__(self, other):
         if type(self) is type(other):
-            return SgrSequence([*self, *other])
+            return SgrSequence(x for xs in (self, other) for x in xs)
         if isinstance(other, str):
             return str(self) + other
 
@@ -738,7 +800,7 @@ class SgrSequence:
     def __bytes__(self):
         if self._bytes_ is None:
             if self._sgr_params_:
-                self._bytes_ = b'\x1b[%sm' % b';'.join(self.values())
+                self._bytes_ = _concat_ansi_escape(self.values())
             else:
                 self._bytes_ = bytes()
         return self._bytes_
@@ -795,10 +857,10 @@ class SgrSequence:
         return SgrSequence(self._sgr_params_ + other._sgr_params_)
 
     def __init__(self, __iter=None, *, ansi_type=None) -> None:
-        cls = type(self)
-        if type(__iter) is cls:
+        if type(self) is type(__iter):
+            __iter: SgrSequence
             other = __iter.__copy__()
-            for attr in cls.__slots__:
+            for attr in type(self).__slots__:
                 setattr(self, attr, getattr(other, attr))
             return
 
@@ -866,14 +928,17 @@ class SgrSequence:
             self._has_bright_colors_ = False
             self._sgr_params_ = [self._sgr_params_.pop()]
             self._rgb_dict_ = {}
-        self._bytes_ = b'\x1b[%sm' % b';'.join(map(bytes, self._sgr_params_))
+        self._bytes_ = _concat_ansi_escape(map(bytes, self._sgr_params_))
 
     def __iter__(self):
         return iter(self._sgr_params_)
 
+    def __len__(self):
+        return len(self._sgr_params_)
+
     def __radd__(self, other):
         if type(self) is type(other):
-            return SgrSequence([*other, *self])
+            return SgrSequence(x for xs in (other, self) for x in xs)
         if isinstance(other, str):
             return other + str(self)
         raise TypeError(
@@ -916,13 +981,13 @@ class SgrSequence:
     def rgb_dict(self, __value: tuple[AnsiColorType, dict[ColorDictKeys, Optional[Color]]]) -> None:
         ansi_type, color_dict = __value
         for k, v in color_dict.items():
+            if self._rgb_dict_.get(k):
+                try:
+                    self.pop(self.index(self.get_color(k)))
+                except ValueError as e:
+                    e.add_note(repr(self))
+                    raise e
             if v is not None:
-                if self._rgb_dict_.get(k):
-                    try:
-                        self.pop(self.index(self.get_color(k)))
-                    except ValueError as e:
-                        e.add_note(repr(self))
-                        raise e
                 color_bytes = ansi_type.from_rgb({k: v})
                 self._rgb_dict_ |= color_bytes._rgb_dict_
                 self._sgr_params_.append(SgrParamWrapper(color_bytes))
@@ -995,7 +1060,7 @@ def _solve_color_spec[
             e = ValueError('too many arguments' if len(out) >= 2 else 'args contain non-RGB values')
         context = ('invalid color spec', str(e))
         raise ValueError(': '.join(filter(None, context))) from None
-    return SgrSequence([ansi_type.from_rgb({k: v}) for k, v in out.items()])
+    return SgrSequence(ansi_type.from_rgb({k: v}) for k, v in out.items())
 
 
 def _get_color_str_vars(
@@ -1534,159 +1599,139 @@ class ColorStr(str):
         return {k: v.rgb for k, v in self._color_dict_.items()}
 
 
-def hsl_gradient(
-    start: Int3Tuple | Float3Tuple,
-    stop: Int3Tuple | Float3Tuple,
-    step: SupportsIndex,
-    num: SupportsIndex = None,
-    ncycles: int | float = float('inf'),
-    replace_idx: tuple[SupportsIndex | Iterable[SupportsIndex], Iterator[Color]] = None,
-    dtype: type[Color] | Callable[[Int3Tuple], int] = Color,
-):
-    replace_idx, rgb_iter = _resolve_replacement_indices(replace_idx)
-    while abs(float(step)) < 1:
-        step *= 10
-    color_vec = _init_gradient_color_vec(num, start, step, stop)
-    color_iter = iter(color_vec)
-    type_map: dict[type[Color | int], ...] = {Color: lambda x: x.rgb, int: lambda x: hex2rgb(x)}
-    get_rgb_iter_idx: Callable[[Color | int, SupportsIndex], int] = lambda x, ix: rgb2hsl(
-        type_map[type(x)](x)
-    )[ix]
-    next_rgb_iter = None
-    prev_output = None
-    while ncycles > 0:
-        try:
-            cur_iter = next(color_iter)
-            if cur_iter != prev_output:
-                for idx in replace_idx:
-                    try:
-                        next_rgb_iter = next(rgb_iter)
-                        cur_iter = list(cur_iter)
-                        cur_iter[idx] = get_rgb_iter_idx(next_rgb_iter, idx)
-                    except StopIteration:
-                        raise GeneratorExit
-                    except KeyError:
-                        raise TypeError(
-                            f"Expected iterator to return "
-                            f"{repr(Color.__qualname__)} or {repr(int.__qualname__)}, "
-                            f"got {repr(type(next_rgb_iter).__qualname__)} instead"
-                        ) from None
-                output = hsl2rgb(cast(Float3Tuple, cur_iter))
-                if callable(dtype):
-                    output = dtype(output)
-                yield output
-            prev_output = cur_iter
-        except StopIteration:
-            ncycles -= 1
-            color_vec.reverse()
-            color_iter = iter(color_vec)
-        except GeneratorExit:
-            break
+def _color_str_to_mask(cs: ColorStr) -> tuple[SgrSequence, str]:
+    return cs._sgr_, cs.base_str
 
 
-def _resolve_replacement_indices(
-    replace_idx: tuple[SupportsIndex | Sequence[SupportsIndex], Iterator[Color]] = None,
-):
-    if replace_idx is not None:
-        replace_idx, rgb_iter = replace_idx
-        if not isinstance(rgb_iter, Iterator):
-            raise TypeError(
-                f"Expected 'replace_idx[1]' to be an iterator, got {type(rgb_iter).__name__} "
-                f"instead"
+class color_chain:
+
+    def extend(self, other):
+        if isinstance(other, color_chain):
+            self._masks_.extend(other._masks_[:])
+        elif isinstance(other, ColorStr):
+            self._masks_.append(_color_str_to_mask(other))
+        elif isinstance(other, str):
+            self._masks_.append((SgrSequence(), other))
+        else:  #
+            raise TypeError
+
+    @classmethod
+    def from_masks(cls, masks, ansi_type=None):
+        if isinstance(masks, Sequence) and all(
+            isinstance(x, tuple)
+            and len(x) == 2
+            and isinstance(x[0], SgrSequence)
+            and isinstance(x[1], str)
+            for x in masks
+        ):
+            return cls._from_masks_unchecked(masks, get_ansi_type(ansi_type or DEFAULT_ANSI))
+        raise TypeError
+
+    @classmethod
+    def _from_masks_unchecked(cls, masks, ansi_type):
+        inst = object.__new__(cls)
+        prev_fg = prev_bg = None
+        inst._masks_ = []
+        for sgr, s in masks:
+            if prev_fg is not None and prev_fg == sgr.fg:
+                sgr.rgb_dict = (ansi_type, {'fg': None})
+            if prev_bg is not None and prev_bg == sgr.bg:
+                sgr.rgb_dict = (ansi_type, {'bg': None})
+            inst._masks_.append((sgr, s))
+            prev_fg, prev_bg = sgr.fg, sgr.bg
+        inst._ansi_type_ = ansi_type
+        return inst
+
+    def __add__(self, other):
+        if isinstance(other, (color_chain, ColorStr)):
+            other_masks: tuple[tuple[SgrSequence, str], ...] = (
+                other.masks if isinstance(other, color_chain) else (_color_str_to_mask(other),)
             )
-        if not isinstance(replace_idx, Sequence):
-            replace_idx = {replace_idx}
+            if self._masks_ and other_masks:
+                match [
+                    (self._masks_[-1][0].fg, self._masks_[-1][0].bg),
+                    (other_masks[0][0].fg, other_masks[0][0].bg),
+                ]:
+                    case [(None, tuple() as bg), (tuple() as fg, None)] | (
+                        [(tuple() as fg, None), (None, tuple() as bg)]
+                    ):
+                        return self._from_masks_unchecked(
+                            [
+                                *self._masks_[:-1],
+                                (
+                                    color_chain(fg=fg, bg=bg)._masks_.pop()[0],
+                                    self._masks_[-1][1] + other_masks[0][1],
+                                ),
+                                *other_masks[1:],
+                            ],
+                            ansi_type=self._ansi_type_,
+                        )
+                    case _:
+                        return self._from_masks_unchecked(
+                            self.masks + other_masks, ansi_type=self._ansi_type_
+                        )
+        elif isinstance(other, str):
+            if len(self._masks_) > 0:
+                return self._from_masks_unchecked(
+                    [*self.masks[:-1], (self._masks_[-1][0], self._masks_[-1][1] + other)],
+                    ansi_type=self._ansi_type_,
+                )
+            return self._from_masks_unchecked(
+                [*self.masks, (SgrSequence(), other)], ansi_type=self._ansi_type_
+            )
+        return NotImplemented
+
+    def __call__(self, __obj=None):
+        return "%s%s" % (self, __obj)
+
+    def __iadd__(self, other):
+        self.extend(other)
+        return self
+
+    def __init__(self, **kwargs):
+        self._ansi_type_ = get_ansi_type(kwargs.get('ansi_type', DEFAULT_ANSI))
+        if kwargs.get('sgr_params') is not None:
+            sgr = SgrSequence(kwargs.get('sgr_params'))
         else:
-            replace_idx = set(replace_idx)
-        valid_idx_range = range(3)
-        if any(idx_diff := replace_idx.difference(valid_idx_range)):
-            raise ValueError(f"Invalid replacement indices: {idx_diff}")
-        if replace_idx == set(valid_idx_range):
-            raise ValueError(f"All 3 indexes selected for replacement: {replace_idx=}")
-    else:
-        rgb_iter = None
-        replace_idx = []
-    return replace_idx, rgb_iter
+            sgr = SgrSequence()
+        v: Int3Tuple | Color | int
+        for k in kwargs.keys() & {'fg', 'bg'}:
+            if (v := kwargs[k]) is None:
+                continue
+            elif isinstance(v, int):
+                v = hex2rgb(v)
+            sgr += SgrSequence(self._ansi_type_.from_rgb({k: v}))
+        self._masks_ = [(sgr, '')]
 
+    def __radd__(self, other):
+        if isinstance(other, ColorStr):
+            return color_chain._from_masks_unchecked(
+                (_color_str_to_mask(other),) + self.masks, ansi_type=other.ansi_format
+            )
+        elif isinstance(other, str):
+            if (parsed := _split_ansi_escape(other)) is not None:
+                return color_chain._from_masks_unchecked(
+                    parsed + self._masks_[:], ansi_type=self._ansi_type_
+                )
+            else:
+                return color_chain._from_masks_unchecked(
+                    [(SgrSequence(), other), *self.masks], ansi_type=self._ansi_type_
+                )
+        return NotImplemented
 
-def _init_gradient_color_vec(
-    num: SupportsIndex,
-    start: Int3Tuple | Float3Tuple,
-    step: SupportsIndex,
-    stop: Int3Tuple | Float3Tuple,
-):
-    def convert_bounds(rgb: Int3Tuple):
-        if all(0 <= n <= 255 for n in rgb):
-            return rgb2hsl(rgb)
-        raise ValueError
-
-    start, stop = tuple(map(convert_bounds, (start, stop)))
-    start_h, start_s, start_l = start
-    stop_h, stop_s, stop_l = stop
-    if num:
-        num_samples = num
-    else:
-        abs_h = abs(stop_h - start_h)
-        h_diff = min(abs_h, 360 - abs_h)
-        dist = math.sqrt(h_diff**2 + (stop_s - start_s) ** 2 + (stop_l - start_l) ** 2)
-        num_samples = max(int(dist / float(step)), 1)
-    color_vec = [np.linspace(*bounds, num=num_samples, dtype=float) for bounds in zip(start, stop)]
-    color_vec = list(zip(*color_vec))
-    return color_vec
-
-
-def rgb_luma_transform(
-    rgb: Int3Tuple,
-    start: SupportsIndex = None,
-    num: SupportsIndex = 50,
-    step: SupportsIndex = 1,
-    cycle: bool | Literal['wave'] = False,
-    ncycles: int | float = float('inf'),
-    gradient: Int3Tuple = None,
-    dtype: type[Color] = None,
-) -> Iterator[Int3Tuple | int | Color]:
-    if dtype is None:
-        ret_type = tuple
-    elif issubclass(dtype, int):
-        ret_type = lambda x: dtype(rgb2hex(x))
-    is_cycle = bool(cycle is not False)
-    is_oscillator = cycle == 'wave'
-    if is_oscillator:
-        ncycles *= 2
-    h, s, luma = rgb2hsl(rgb)
-    luma_linspace = [*np.linspace(start=0, stop=1, num=num)][::step]
-    if start:
-        start = min(max(float(start), 0), 1)
-        luma = min(luma_linspace, key=lambda x: abs(x - start))
-        start_idx = luma_linspace.index(luma)
-        remaining_indices = luma_linspace[start_idx:]
-        luma_iter = iter(remaining_indices)
-    else:
-        luma_iter = iter(luma_linspace)
-
-    def _generator():
-        nonlocal luma_iter, ncycles
-        if step == 0:
-            yield rgb
-            return
-        prev_output = None
-        while ncycles > 0:
-            try:
-                output = hsl2rgb((h, s, next(luma_iter)))
-                if output != prev_output:
-                    yield ret_type(output)
-                prev_output = output
-            except StopIteration as STOP_IT:
-                if not is_cycle:
-                    raise STOP_IT
-                ncycles -= 1
-                if is_oscillator:
-                    luma_linspace.reverse()
-                luma_iter = iter(luma_linspace)
-
-    if gradient is not None:
-        _gradient = hsl_gradient(
-            start=rgb, stop=gradient, step=step, num=num, replace_idx=(2, _generator())
+    def __repr__(self):
+        return "{.__name__}([{!s}], ansi_type={.__name__!r})".format(
+            type(self),
+            ', '.join('(%s, %r)' % (bytes(sgr), s) for sgr, s in self._masks_),
+            self._ansi_type_,
         )
-        return iter(_gradient)
-    return iter(_generator())
+
+    def __str__(self):
+        return ''.join(
+            str(ColorStr(base_str, color_spec=sgr, ansi_type=self._ansi_type_, no_reset=True))
+            for sgr, base_str in self.masks
+        )
+
+    @property
+    def masks(self):
+        return tuple(self._masks_)

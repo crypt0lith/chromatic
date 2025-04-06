@@ -2,22 +2,21 @@ __all__ = [
     'CSI',
     'Color',
     'ColorStr',
+    'SGR_RESET',
     'SgrParameter',
     'SgrSequence',
     'ansicolor24Bit',
     'ansicolor4Bit',
     'ansicolor8Bit',
+    'color_chain',
     'colorbytes',
     'get_ansi_type',
-    'hsl_gradient',
     'randcolor',
-    'rgb2ansi_color_esc',
-    'rgb_luma_transform',
-    'SGR_RESET',
-    'DEFAULT_ANSI',
+    'rgb2ansi_escape',
 ]
 
-from collections.abc import Buffer, Callable, Iterable, Iterator, Mapping, Sequence
+import sys
+from collections.abc import Buffer, Iterable, Iterator, Mapping, Sequence
 from enum import IntEnum
 from types import MappingProxyType
 from typing import (
@@ -41,7 +40,6 @@ from chromatic._typing import (
     Ansi8BitAlias,
     AnsiColorAlias,
     ColorDictKeys,
-    Float3Tuple,
     Int3Tuple,
     RGBVectorLike,
     TupleOf3,
@@ -55,39 +53,14 @@ def get_ansi_type(typ: Ansi4BitAlias) -> type[ansicolor4Bit]: ...
 def get_ansi_type(typ: Ansi8BitAlias) -> type[ansicolor8Bit]: ...
 @overload
 def get_ansi_type(typ: Ansi24BitAlias) -> type[ansicolor24Bit]: ...
-def get_term_ansi_default() -> type[ansicolor8Bit | ansicolor4Bit]: ...
-def hsl_gradient(
-    start: Int3Tuple | Float3Tuple,
-    stop: Int3Tuple | Float3Tuple,
-    step: SupportsIndex,
-    num: SupportsIndex = None,
-    ncycles: int | float = float('inf'),
-    replace_idx: tuple[SupportsIndex | Iterable[SupportsIndex], Iterator[Color]] = None,
-    dtype: type[Color] | Callable[[Int3Tuple], int] = Color,
-): ...
 def randcolor() -> Color: ...
-def rgb2ansi_color_esc(
+def rgb2ansi_escape(
     ret_format: AnsiColorAlias | AnsiColorType, mode: ColorDictKeys, rgb: Int3Tuple
 ) -> bytes: ...
-def rgb_luma_transform(
-    rgb: Int3Tuple,
-    start: SupportsIndex = None,
-    num: SupportsIndex = 50,
-    step: SupportsIndex = 1,
-    cycle: bool | Literal['wave'] = False,
-    ncycles: int | float = float('inf'),
-    gradient: Int3Tuple = None,
-    dtype: type[Color] = None,
-) -> Iterator[Int3Tuple | int | Color]: ...
 
-class ansicolor24Bit(colorbytes):
-    pass
-
-class ansicolor4Bit(colorbytes):
-    pass
-
-class ansicolor8Bit(colorbytes):
-    pass
+class ansicolor4Bit(colorbytes): ...
+class ansicolor8Bit(colorbytes): ...
+class ansicolor24Bit(colorbytes): ...
 
 class Color(int):
     @classmethod
@@ -166,6 +139,36 @@ class ColorStr(str):
     def no_reset(self) -> bool: ...
     @property
     def rgb_dict(self) -> dict[ColorDictKeys, Int3Tuple]: ...
+
+class _ColorChainKwargs(TypedDict, total=False):
+    ansi_type: AnsiColorAlias | type[AnsiColorFormat]
+    sgr_params: Sequence[SgrParameter]
+    fg: int | Color | Int3Tuple
+    bg: int | Color | Int3Tuple
+
+class color_chain:
+    @classmethod
+    def _from_masks_unchecked(
+        cls, masks: Iterable[tuple[SgrSequence, str]], ansi_type: type[AnsiColorFormat]
+    ) -> Self: ...
+    def extend[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> None: ...
+    @classmethod
+    def from_masks(
+        cls, masks: Sequence[tuple[SgrSequence, str]], ansi_type: type[AnsiColorFormat] = None
+    ) -> Self: ...
+    def __add__[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> color_chain: ...
+    def __call__(self, __obj=None) -> str: ...
+    def __iadd__[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> None: ...
+    def __init__(self, **kwargs: Unpack[_ColorChainKwargs]) -> None: ...
+    def __radd__[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> color_chain: ...
+    def __repr__(self) -> str: ...
+    def __str__(self) -> str: ...
+
+    _ansi_type_: type[AnsiColorFormat]
+    _masks_: list[tuple[SgrSequence, str]]
+
+    @property
+    def masks(self) -> tuple[tuple[SgrSequence, str], ...]: ...
 
 class SgrParameter(IntEnum):
     RESET = 0
@@ -254,11 +257,11 @@ class SgrParamWrapper:
 
     _value_: Union[bytes, AnsiColorFormat]
 
-class SgrSequence:
+class SgrSequence(Sequence[SgrParamWrapper]):
     def append(self, __value: int) -> None: ...
     def find(self, value: ...) -> int: ...
     def get_color(self, __key: ColorDictKeys): ...
-    def index(self, value: ...) -> int: ...
+    def index(self, value, start: SupportsIndex = 0, stop: SupportsIndex = sys.maxsize) -> int: ...
     def is_color(self) -> bool: ...
     def is_reset(self) -> bool: ...
     def pop(self, __index: SupportsIndex = -1) -> SgrParamWrapper: ...
@@ -270,20 +273,20 @@ class SgrSequence:
     def __copy__(self) -> SgrSequence: ...
     def __deepcopy__(self) -> SgrSequence: ...
     def __eq__(self, other: ...) -> bool: ...
-    def __getitem__(self, item): ...
+    @overload
+    def __getitem__(self, item: SupportsIndex) -> SgrParamWrapper: ...
+    @overload
+    def __getitem__(self, item: slice) -> list[SgrParamWrapper]: ...
     def __init__[
-        _T: (Buffer, int), _AnsiType: type[AnsiColorFormat]
-    ](
-        self,
-        __iter: Union[Sequence[_T], Sequence[SgrParamWrapper], SgrSequence] = None,
-        *,
-        ansi_type: _AnsiType = None,
-    ) -> None: ...
+        _T: (SgrParamWrapper, Buffer, int), _AnsiType: type[AnsiColorFormat]
+    ](self, __iter: Iterable[_T] = None, *, ansi_type: _AnsiType = None) -> None: ...
     def __iter__(self) -> Iterator[SgrParamWrapper]: ...
+    def __len__(self) -> int: ...
     def __radd__[_T: (SgrSequence, str)](self, other: _T) -> _T: ...
     def __str__(self) -> str: ...
 
     __slots__ = '_bytes_', '_has_bright_colors_', '_rgb_dict_', '_sgr_params_'
+
     _bytes_: Optional[bytes]
     _has_bright_colors_: bool
     _rgb_dict_: dict[ColorDictKeys, Int3Tuple]
@@ -324,6 +327,7 @@ class _ColorStrWeakVars(TypedDict, total=False):
 CSI: Final[bytes] = b'['
 SGR_RESET: Final[str] = '[0m'
 DEFAULT_ANSI: Final[type[ansicolor8Bit | ansicolor4Bit]]
+
 _ANSI16C_BRIGHT: Final[frozenset[int]]
 _ANSI16C_I2KV: Final[dict[int, tuple[ColorDictKeys, Int3Tuple]]]
 _ANSI16C_KV2I: Final[dict[tuple[Literal['fg', 'bg'], tuple[int, int, int]], int]]

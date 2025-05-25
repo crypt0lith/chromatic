@@ -1,5 +1,29 @@
 from __future__ import annotations
 
+__all__ = [
+    'ansi2img',
+    'ansify',
+    'ansi_quantize',
+    'ascii2img',
+    'contrast_stretch',
+    'equalize_white_point',
+    'get_font_key',
+    'get_font_object',
+    'img2ansi',
+    'img2ascii',
+    'read_ans',
+    'render_ans',
+    'render_font_char',
+    'render_font_str',
+    'reshape_ansi',
+    'scale_saturation',
+    'shuffle_char_set',
+    '_scaled_hu_moments',
+    'to_sgr_array',
+    'AnsiImage',
+    '_otsu_mask',
+]
+
 import math
 import os.path
 import random
@@ -61,29 +85,6 @@ from ..data import UserFont
 
 if TYPE_CHECKING:
     from _typeshed import AnyStr_co
-
-__all__ = [
-    'ansi2img',
-    'ansi_quantize',
-    'ascii2img',
-    'contrast_stretch',
-    'equalize_white_point',
-    'get_font_key',
-    'get_font_object',
-    'img2ansi',
-    'img2ascii',
-    'read_ans',
-    'render_ans',
-    'render_font_char',
-    'render_font_str',
-    'reshape_ansi',
-    'scale_saturation',
-    'shuffle_char_set',
-    '_scaled_hu_moments',
-    'to_sgr_array',
-    'AnsiImage',
-    '_otsu_mask',
-]
 
 
 def get_font_key(font: FreeTypeFont):
@@ -666,7 +667,7 @@ def img2ansi(
     """
     if ansi_type is not DEFAULT_ANSI:
         ansi_type = get_ansi_type(ansi_type)
-    bg_wrapper = ColorStr('{}', color_spec={'bg': bg}, ansi_type=ansi_type, no_reset=True)
+    bg_wrapper = ColorStr('{}', color_spec={'bg': bg}, ansi_type=ansi_type, reset=False)
     base_ascii, color_arr = img2ascii(__img, __font, factor, char_set, sort_glyphs, ret_img=True)
     lines = base_ascii.splitlines()
     h, w = map(len, (lines, lines[0]))
@@ -804,7 +805,7 @@ def ansi2img(
         x_offset = 0
         for color_str in row:
             text_width = font.getbbox(color_str.base_str)[2]
-            if color_str._sgr_.is_reset():
+            if getattr(color_str, '_sgr_').is_reset():
                 fg_default = None
                 bg_default = input_bg
             if fg_color := getattr(color_str.fg, 'rgb', fg_default):
@@ -822,6 +823,38 @@ def ansi2img(
             x_offset += text_width
         y_offset += row_height
     return img
+
+
+def ansify(
+    __img: RGBImageLike | PathLike[str] | str,
+    /,
+    *,
+    font: FontArgType = UserFont.IBM_VGA_437_8X16,
+    font_size: int = 16,
+    factor: int = 200,
+    char_set: Iterable[str] = None,
+    sort_glyphs: bool | type[reversed] = True,
+    ansi_type: AnsiColorParam = DEFAULT_ANSI,
+    equalize: bool | Literal['white_point'] = True,
+    fg: Int3Tuple | str = (170, 170, 170),
+    bg: Int3Tuple | str | Literal['auto'] = (0, 0, 0),
+):
+    return ansi2img(
+        img2ansi(
+            __img,
+            font,
+            factor=factor,
+            char_set=char_set,
+            ansi_type=ansi_type,
+            sort_glyphs=sort_glyphs,
+            equalize=equalize,
+            bg=bg,
+        ),
+        font,
+        font_size=font_size,
+        fg_default=fg,
+        bg_default=bg,
+    )
 
 
 def _is_array(__obj: Any) -> TypeGuard[ndarray]:
@@ -914,6 +947,7 @@ def to_sgr_array(__str: str, ansi_type: AnsiColorParam = DEFAULT_ANSI):
     resets = frozenset(resets_btok)
     pad_esc = {0x1B: '\x00\x1b'}
     x = []
+    sgr: SgrSequence | None
     for line in __str.splitlines():
         xs = []
         ansi_meta = {}
@@ -928,7 +962,7 @@ def to_sgr_array(__str: str, ansi_type: AnsiColorParam = DEFAULT_ANSI):
             else:
                 cs = new_cs(s)
             if sgr is None:
-                sgr = cs._sgr_
+                sgr: SgrSequence = getattr(cs, '_sgr_')
             if sgr.is_reset():
                 ansi_meta.clear()
             for k in resets.intersection(sgr.values()):
@@ -948,7 +982,7 @@ def to_sgr_array(__str: str, ansi_type: AnsiColorParam = DEFAULT_ANSI):
                     if not ansi_meta.get('bright'):
                         ansi_meta['bright'] = True
                     new_sgr = SgrSequence(
-                        sgr.values() + [p._value_ for p in prev._sgr_ if p.is_color()]
+                        sgr.values() + [p._value_ for p in getattr(prev, '_sgr_') if p.is_color()]
                     )
                     prev = cs = new_cs(cs.base_str, new_sgr)
             xs.append(cs.as_ansi_type(ansi_typ))
@@ -1010,9 +1044,10 @@ def read_ans[AnyStr: (str, bytes)](__path: PathLike[AnyStr] | AnyStr, encoding='
 class AnsiImage:
 
     @classmethod
-    def open[
-        AnyStr: (str, bytes)
-    ](
+    def open[AnyStr: (
+        str,
+        bytes,
+    )](
         cls,
         fp: PathLike[AnyStr] | AnyStr,
         shape: TupleOf2[int],
@@ -1077,7 +1112,7 @@ class AnsiImage:
         if not __table:
             return self
         table = {
-            k: (v if v not in frozenset(x for c in ' \t\n\r\v\f' for x in (c, ord(c))) else ' ')
+            k: v if v not in frozenset(x for c in ' \t\n\r\v\f' for x in (c, ord(c))) else ' '
             for (k, v) in __table.items()
             if k != ord('\n')
         }
@@ -1099,8 +1134,8 @@ class AnsiImage:
             return getattr(self, attr_name)[0]
         lines = []
         for line in self.data:
-            buffer = []
             if line:
+                buffer = []
                 initial = line[0]
                 for s in line[1:]:
                     if s.ansi_partition()[::2] == initial.ansi_partition()[::2]:
@@ -1110,7 +1145,7 @@ class AnsiImage:
                         initial = s
                 buffer.append(initial)
                 lines.append(''.join(buffer))
-        setattr(self, attr_name, ('\n'.join(lines) + SGR_RESET, self.shape))
+        setattr(self, attr_name, ('\n'.join(lines) + SGR_RESET.decode(), self.shape))
         return getattr(self, attr_name)[0]
 
 

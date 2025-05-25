@@ -109,16 +109,18 @@ def _check_if_ns_member(cls: type) -> Callable[[str], bool]:
         return lambda x: member_type == anno_dict.get(x)
 
 
-def _ns_from_iter[
-    _KT, _VT
-](__iter: Iterator[_KT] | Callable[[], Iterator[_KT]], member_type: _VT = null) -> Callable[
-    [type[DynamicNamespace[_VT]]], type[DynamicNamespace[_VT]]
-]:
+def _ns_from_iter[_KT, _VT](
+    __iter: Iterator[_KT] | Callable[[], Iterator[_KT]], member_type: type[_VT] = object
+) -> Callable[[type[DynamicNamespace[_VT]]], type[DynamicNamespace[_VT]]]:
     def decorator(cls: type[DynamicNamespace[_VT]]):
         anno = cls.__annotations__
         type_params = cls.__type_params__
         m_iter = __iter() if callable(__iter) else iter(__iter)
-        members: Iterator[_KT] = m_iter if member_type == null else map(member_type, m_iter)
+        members: Iterator[_KT] = (
+            m_iter
+            if (member_type is object or not isinstance(member_type, type))
+            else map(member_type, m_iter)
+        )
         d = dict(zip((k for k, v in anno.items() if v in type_params), members))
         cls.__init__ = update_wrapper(
             lambda *args, **kwargs: cls.__base__.__init__(*args, **(kwargs | d)), cls.__init__

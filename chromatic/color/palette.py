@@ -1,4 +1,4 @@
-from functools import lru_cache, update_wrapper
+from functools import lru_cache, update_wrapper, wraps
 from inspect import getfullargspec, getmodule, isbuiltin, signature
 from types import FunctionType, MappingProxyType
 from typing import Callable, Iterator, Sequence, TYPE_CHECKING, Union, cast, dataclass_transform
@@ -430,73 +430,73 @@ class _color_ns_getter:
             ) from None
 
 
-_dummy_func = lambda *args, **kwargs: ...
-_dummy_signature = signature(_dummy_func)
+def rgb_dispatch[**P, R](
+    __f: Callable[P, R] = None, /, *, var_names: Sequence[str] = ()
+) -> Callable[P, R]:
+    dummy_func = lambda *args, **kwargs: ...
+    [rgb_args, variadic] = [set[str]() for _ in range(2)]
 
-
-class rgb_dispatch[**P, R]:  # noqa
-    color_ns = cast(MappingProxyType[str, Int3Tuple], _color_ns_getter())
-
-    __signature__ = _dummy_signature
-
-    def __init__(self, __f: Callable[P, R] = None, /, *, args: Sequence[str] = ()):
-        if isinstance(args, str):
-            args = (args,)
+    def fix_signature():
+        nonlocal var_names, rgb_args, variadic
+        if isinstance(var_names, str):
+            var_names = (var_names,)
         if not callable(__f):
             raise ValueError
-        self._func = __f
         try:
-            argspec = getfullargspec(self._func)
-            sig = signature(self._func)
+            argspec = getfullargspec(__f)
+            sig = signature(__f)
         except TypeError:
-            if not (isbuiltin(self._func) or getattr(self._func, '__module__', '') == 'builtins'):
+            if not (isbuiltin(__f) or getattr(__f, '__module__', '') == 'builtins'):
                 raise
-            argspec = getfullargspec(_dummy_func)
-            sig = self.__signature__
-        self._variadic = {argspec.varargs, argspec.varkw}
-        self._variadic.discard(None)
-        all_args = self._variadic.union(argspec.args + argspec.kwonlyargs)
-        self._rgb_args = all_args.intersection(
-            {'*': argspec.varargs, '**': argspec.varkw}.get(arg) or arg for arg in args
+            argspec = getfullargspec(dummy_func)
+            sig = signature(dummy_func)
+        variadic = {argspec.varargs, argspec.varkw}
+        variadic.discard(None)
+        all_args = variadic.union(argspec.args + argspec.kwonlyargs)
+        rgb_args = all_args.intersection(
+            {'*': argspec.varargs, '**': argspec.varkw}.get(arg) or arg for arg in var_names
         )
-        if not self._rgb_args:
+        if not rgb_args:
             keys = frozenset({'fg', 'bg'})
             for arg in all_args:
                 if (arg[:2] in keys) or (arg[-2:] in keys):
-                    self._rgb_args.add(arg)
-        self._variadic &= self._rgb_args
+                    rgb_args.add(arg)
+        variadic &= rgb_args
         parameters = []
         for name, param in sig.parameters.items():
-            if name not in self._rgb_args or param.annotation is param.empty:
+            if name not in rgb_args or param.annotation is param.empty:
                 parameters.append(param)
             else:
                 anno = param.annotation
                 parameters.append(
                     param.replace(
                         annotation=str
-                        | eval(getattr(anno, '__name__', str(anno)), getmodule(self._func).__dict__)
+                        | eval(getattr(anno, '__name__', str(anno)), getmodule(__f).__dict__)
                     )
                 )
-        self.__signature__ = sig.replace(parameters=parameters)
-        update_wrapper(self, self._func)
+        return sig.replace(parameters=parameters)
 
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        bound = self.__signature__.bind(*args, **kwargs)
+    __f.__signature__ = fix_signature()
+    color_ns = cast(MappingProxyType[str, Int3Tuple], _color_ns_getter())
+
+    @wraps(__f)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        bound = getattr(__f, '__signature__').bind(*args, **kwargs)
         bound.apply_defaults()
         for arg, value in bound.arguments.items():
-            if arg not in self._rgb_args:
+            if arg not in rgb_args:
                 continue
-            if arg in self._variadic:
+            if arg in variadic:
                 bound.arguments[arg] = (
-                    tuple(self.color_ns[v] if v in self.color_ns else v for v in value)
+                    tuple(color_ns[v] if v in color_ns else v for v in value)
                     if isinstance(value, tuple)
-                    else {
-                        k: self.color_ns[v] if v in self.color_ns else v for k, v in value.items()
-                    }
+                    else {k: color_ns[v] if v in color_ns else v for k, v in value.items()}
                 )
-            elif value in self.color_ns:
-                bound.arguments[arg] = self.color_ns[value]
-        return self._func(*bound.args, **bound.kwargs)
+            elif value in color_ns:
+                bound.arguments[arg] = color_ns[value]
+        return __f(*bound.args, **bound.kwargs)
+
+    return wrapper
 
 
 # fmt: off

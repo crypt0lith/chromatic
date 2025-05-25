@@ -597,6 +597,7 @@ def img2ascii(
     return ascii_str
 
 
+@rgb_dispatch
 def img2ansi(
     __img: RGBImageLike | PathLike[str] | str,
     __font: FontArgType = 'arial.ttf',
@@ -605,7 +606,7 @@ def img2ansi(
     ansi_type: AnsiColorParam = DEFAULT_ANSI,
     sort_glyphs: bool | type[reversed] = True,
     equalize: bool | Literal['white_point'] = True,
-    bg: Color | Int3Tuple = (0, 0, 0),
+    bg: Color | Int3Tuple | str = (0, 0, 0),
 ):
     """Convert an image to an ANSI array.
 
@@ -697,7 +698,7 @@ def ascii2img(
     font_size=24,
     *,
     fg: Int3Tuple | str = (0, 0, 0),
-    bg: Int3Tuple | str = (255, 255, 255),
+    bg: Int3Tuple | str = (0xFF, 0xFF, 0xFF),
 ):
     """Render a literal string as an image.
 

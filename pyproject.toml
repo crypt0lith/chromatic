@@ -4,17 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chromatic-python"
-dependencies = [
-    "fonttools~=4.51.0",
-    "networkx~=3.4.2",
-    "numpy~=2.1.1",
-    "opencv-python~=4.10.0.84",
-    "pillow~=10.4.0",
-    "scikit-image~=0.25.0rc1",
-    "scikit-learn~=1.5.2",
-    "scipy~=1.14.1"
-]
-dynamic = ["version"]
+dynamic = ["version", "dependencies"]
 requires-python = ">=3.12"
 authors = [{name = "crypt0lith"}]
 description = "ANSI art image processing and colored terminal text"
@@ -35,6 +25,9 @@ Homepage = "https://github.com/crypt0lith/chromatic"
 [tool.setuptools_scm]
 write_to = "chromatic/_version.py"
 
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["chromatic*"]
@@ -47,4 +40,4 @@ preview = true
 line-length = 100
 skip-magic-trailing-comma = true
 skip-string-normalization = true
-target-version = ["py312"]
+target-version = ["py313"]

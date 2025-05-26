@@ -1,9 +1,8 @@
 __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']
 
-import inspect
 from collections.abc import Sequence
-from types import MappingProxyType
-from typing import Callable, Iterator, Literal, TypeAlias, TypeVar, Union, overload
+from types import FunctionType
+from typing import Callable, Iterator, Literal, TypeAlias, TypeVar, Union
 
 from .core import Color, ColorStr, color_chain
 from .._typing import Int3Tuple
@@ -298,17 +297,7 @@ named_color: Union[
     dict[Literal['24b'], Callable[[_ColorName], Color]],
 ]
 
-class rgb_dispatch[**P, R]:
-    color_ns: MappingProxyType[str, Int3Tuple]
-
-    __signature__: inspect.Signature
-
-    @overload
-    def __new__(cls, __f: Callable[P, R], /, *, args: Sequence[str] = ()):
-        return __f
-
-    @property
-    def __wrapped__(self) -> Callable[P, R]: ...
+def rgb_dispatch[F: (type, FunctionType)](__f: F, /, *, var_names: Sequence[str] = ()) -> F: ...
 
 Back = AnsiBack()
 Fore = AnsiFore()

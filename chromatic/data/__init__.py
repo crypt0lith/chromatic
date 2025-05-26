@@ -36,12 +36,8 @@ def _build_config():
     f: SupportsWrite
     d: dict[Literal['fonts', 'images'] | Literal['__hash__'], dict[str, str] | str]
     d = {'fonts': {}, 'images': {}, '__hash__': ''}
-    printable = ''.join(
-        c for c in printable if any((c.isalnum(), c.isidentifier(), c == '.'))
-    )
-    for font_fp in (
-        (Path(fonts) / x).absolute() for x in filter(_is_ttf_ext, os.listdir(fonts))
-    ):
+    printable = ''.join(c for c in printable if any((c.isalnum(), c.isidentifier(), c == '.')))
+    for font_fp in ((Path(fonts) / x).absolute() for x in filter(_is_ttf_ext, os.listdir(fonts))):
         font_name = font_fp.stem
         for c in set(font_name):
             if c not in printable:
@@ -71,9 +67,7 @@ def _validate(**kwargs):
         s1, s2 = (
             set(
                 str(fp.relative_to(data_root))
-                for fp in (
-                    (Path(subdir) / x).absolute() for x in filter(f, os.listdir(subdir))
-                )
+                for fp in ((Path(subdir) / x).absolute() for x in filter(f, os.listdir(subdir)))
             )
             for f, subdir in zip((_is_ttf_ext, _is_img_ext), (fonts, images))
         )
@@ -119,9 +113,7 @@ def _create_font_enum() -> type['UserFont']:
     def path(self):
         return data_root / Path(_font_data_[self.name])
 
-    enum_cls = IntEnum(
-        'UserFont', {k: i for (i, k) in enumerate(sorted(_font_data_.keys()))}
-    )
+    enum_cls = IntEnum('UserFont', {k: i for (i, k) in enumerate(sorted(_font_data_.keys()))})
     enum_cls.path = property(path)
     return enum_cls
 
@@ -156,9 +148,7 @@ def register_user_font[AnyStr: (str, bytes)](__path: AnyStr | os.PathLike[AnyStr
     if path_obj.is_symlink():
         path_obj = path_obj.readlink()
     if path_obj.suffix != '.ttf':
-        raise ValueError(
-            f"Expected '.ttf' file, " f"got filetype {path_obj.suffix!r} instead"
-        )
+        raise ValueError(f"Expected '.ttf' file, " f"got filetype {path_obj.suffix!r} instead")
     from PIL.ImageFont import FreeTypeFont
 
     try:

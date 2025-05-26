@@ -99,7 +99,7 @@ class ColorStr(str):
     def __hash__(self) -> int: ...
     def __init__(
         self,
-        obj: object = None,
+        obj: object = ...,
         color_spec: Union[_ColorSpec, ColorStr] = None,
         **kwargs: Unpack[_ColorStrKwargs],
     ) -> None: ...
@@ -111,7 +111,7 @@ class ColorStr(str):
     def __invert__(self) -> ColorStr: ...
     def __new__(
         cls,
-        obj: object = None,
+        obj: object = ...,
         color_spec: Union[_ColorSpec, ColorStr] = None,
         **kwargs: Unpack[_ColorStrKwargs],
     ) -> ColorStr: ...
@@ -136,7 +136,7 @@ class ColorStr(str):
     @property
     def fg(self) -> Optional[Color]: ...
     @property
-    def no_reset(self) -> bool: ...
+    def reset(self) -> bool: ...
     @property
     def rgb_dict(self) -> dict[ColorDictKeys, Int3Tuple]: ...
 
@@ -277,9 +277,13 @@ class SgrSequence(Sequence[SgrParamWrapper]):
     def __getitem__(self, item: SupportsIndex) -> SgrParamWrapper: ...
     @overload
     def __getitem__(self, item: slice) -> list[SgrParamWrapper]: ...
-    def __init__[
-        _T: (SgrParamWrapper, Buffer, int), _AnsiType: type[AnsiColorFormat]
-    ](self, __iter: Iterable[_T] = None, *, ansi_type: _AnsiType = None) -> None: ...
+    def __init__[_T: (
+        SgrParamWrapper,
+        Buffer,
+        int,
+    ), _AnsiType: type[AnsiColorFormat]](
+        self, __iter: Iterable[_T] = None, *, ansi_type: _AnsiType = None
+    ) -> None: ...
     def __iter__(self) -> Iterator[SgrParamWrapper]: ...
     def __len__(self) -> int: ...
     def __radd__[_T: (SgrSequence, str)](self, other: _T) -> _T: ...
@@ -307,9 +311,9 @@ class SgrSequence(Sequence[SgrParamWrapper]):
 
     # noinspection PyUnresolvedReferences
     @rgb_dict.setter
-    def rgb_dict[
-        _AnsiColorType: type[AnsiColorFormat]
-    ](self, __value: tuple[_AnsiColorType, dict[ColorDictKeys, Optional[Color]]]) -> None: ...
+    def rgb_dict[_AnsiColorType: type[AnsiColorFormat]](
+        self, __value: tuple[_AnsiColorType, dict[ColorDictKeys, Optional[Color]]]
+    ) -> None: ...
 
 class _ColorDict(TypedDict, total=False):
     bg: Optional[Color | AnsiColorFormat]
@@ -317,15 +321,16 @@ class _ColorDict(TypedDict, total=False):
 
 class _ColorStrKwargs(TypedDict, total=False):
     ansi_type: Optional[AnsiColorAlias | type[AnsiColorFormat]]
-    no_reset: bool
+    reset: bool
 
 class _ColorStrWeakVars(TypedDict, total=False):
     _base_str_: str
-    _no_reset_: bool
+    _reset_: bool
     _sgr_: SgrSequence
 
-CSI: Final[bytes] = b'['
-SGR_RESET: Final[str] = '[0m'
+CSI: Final[bytes]
+SGR_RESET: Final[bytes]
+SGR_RESET_S: Final[str]
 DEFAULT_ANSI: Final[type[ansicolor8Bit | ansicolor4Bit]]
 
 _ANSI16C_BRIGHT: Final[frozenset[int]]

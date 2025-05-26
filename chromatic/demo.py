@@ -143,7 +143,7 @@ def named_colors():
         )
         buffer.append(xs)
     for ln in buffer:
-        print(' | '.join(ln))
+        print(' | '.join(map(str, ln)))
 
 
 def color_table():
@@ -174,12 +174,12 @@ def color_table():
         for c in colors
     ]
     bg_colors = [ColorStr().recolor(bg=None)] + [c.recolor(fg=None, bg=c.fg) for c in fg_colors]
-    pad = spacing - 1
-    print('|'.join([f"{'4bit': ^{pad}}", f"{'8bit': ^{pad}}", f"{'24bit': >{pad}}"]))
+    print('|'.join(f"{'%dbit' % n: {'>' if n > 9 else '^'}{spacing - 1}}" for n in (4, 8, 24)))
+    suffix = '\x1b[0m' if sys.stdout.isatty() else ''
     for row in fg_colors:
         for col in bg_colors:
             for typ in ansi_types:
-                print(row.as_ansi_type(typ).recolor(bg=col.bg), end='\x1b[0m')
+                print(row.as_ansi_type(typ).recolor(bg=col.bg), end=suffix)
         print()
     print('\nstyles:')
     print()
@@ -195,7 +195,7 @@ def color_table():
     for style in style_params:
         print(
             ColorStr('.'.join([SgrParameter.__qualname__, style.name])).update_sgr(style),
-            end='\x1b[0m' + (' ' * 4),
+            end=suffix + (' ' * 4),
         )
     print()
 

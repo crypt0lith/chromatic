@@ -504,7 +504,8 @@ def get_ansi_type(typ):
 
 def rgb2ansi_escape(ret_format, mode, rgb):
     ret_format = get_ansi_type(ret_format)
-    assert len(rgb) == 3, 'length of RGB value is not 3'
+    if len(rgb) != 3:
+        raise ValueError('length of RGB value is not 3')
     try:
         if ret_format is ansicolor4Bit:
             return b'%d' % _ANSI16C_KV2I[mode, nearest_ansi_4bit_rgb(rgb)]
@@ -634,9 +635,11 @@ def _get_sgr_bitmask[_T: (bytes, bytearray, Buffer)](__x: _T) -> list[int]:
     return allocated
 
 
-def _iter_normalized_sgr[
-    _T: (Buffer, SgrParamWrapper, int)
-](__iter: Buffer | Iterable[_T]) -> Iterator[AnsiColorFormat | int]:
+def _iter_normalized_sgr[_T: (
+    Buffer,
+    SgrParamWrapper,
+    int,
+)](__iter: Buffer | Iterable[_T]) -> Iterator[AnsiColorFormat | int]:
     if isinstance(__iter, Buffer):
         yield from _get_sgr_bitmask(__iter)
     else:
@@ -895,7 +898,8 @@ class SgrSequence(Sequence[SgrParamWrapper]):
         if ansi_type is None:
             is_diff_ansi_typ = lambda _: False
         else:
-            assert ansi_type in _ANSI_COLOR_TYPES
+            if ansi_type not in _ANSI_COLOR_TYPES:
+                raise TypeError
             is_diff_ansi_typ = lambda v: type(v) is not ansi_type
 
         for x in _iter_sgr(__iter):
@@ -1014,15 +1018,17 @@ _VALID_KEYS: frozenset[str] = unionize(
 )
 
 
-def _solve_color_spec[
-    _T: (_CSpecType, SgrSequence)
-](color_spec: Optional[_T], ansi_type: AnsiColorType):
+def _solve_color_spec[_ColorSpec: (
+    _CSpecType,
+    SgrSequence,
+)](color_spec: Optional[_ColorSpec], ansi_type: AnsiColorType):
     keys: list[str] = ['bg', 'fg']
 
     def resolve(value, *, key=None):
         nonlocal keys
         if key is not None:
-            assert key in _VALID_KEYS, 'expected literal keys {}, got {!r}'.format(_VALID_KEYS, key)
+            if key not in _VALID_KEYS:
+                raise ValueError(f"expected one of {_VALID_KEYS}, got {key!r}")
             if key in keys:
                 keys.remove(key)
         match value:
@@ -1032,7 +1038,8 @@ def _solve_color_spec[
                 r, g, b = (x & 0xFF for x in rgb)
                 yield (key or keys.pop(), (r, g, b))
             case np.ndarray() as colors:
-                assert not colors.shape[-1] % 3, 'array does not contain RGB values'
+                if colors.shape[-1] % 3 != 0:
+                    raise ValueError('array does not contain RGB values')
                 it = np.uint8(colors).flat
                 for _ in range(colors.ndim):
                     yield (key or keys.pop(), tuple(int(next(it)) for _ in range(3)))
@@ -1094,12 +1101,6 @@ def _get_color_str_vars(
         sgr_params = color_spec
     base_str = base_str or ''
     return sgr_params, base_str
-
-
-class _ColorStrWeakVars(TypedDict, total=False):
-    _base_str_: str
-    _sgr_: SgrSequence
-    _no_reset_: bool
 
 
 class _AnsiBytesGetter:
@@ -1559,7 +1560,6 @@ class ColorStr(str):
 
     _ansi_ = _AnsiBytesGetter()
     _color_dict_ = _ColorDictGetter()
-    _sgr_params_ = _SgrParamsGetter()
 
     @property
     def ansi(self):

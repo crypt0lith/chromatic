@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import inspect
+import operator as op
 import re
 import types
 from collections import OrderedDict, namedtuple
 from collections.abc import Callable as ABC_Callable
 from functools import reduce, wraps
 from numbers import Number
-from operator import attrgetter, or_ as bitwise_or
 from typing import (
     Any,
     Callable,
@@ -79,7 +79,7 @@ FontArgType: TypeAlias = FreeTypeFont | UserFont | str | int
 
 def type_error_msg(err_obj, *expected, context: str = '', obj_repr=False):
     n_expected = len(expected)
-    name_slots = [f"{{{n}.__qualname__!r}}" for n in range(n_expected)]
+    name_slots = ['{%d.__qualname__!r}' % n for n in range(n_expected)]
     if name_slots and n_expected > 1:
         name_slots[-1] = f"or {name_slots[-1]}"
     names = (', ' if n_expected > 2 else ' ').join([context.strip()] + name_slots).format(*expected)
@@ -183,7 +183,7 @@ class SupportsUnion(Protocol[_T_contra, _T_co]):
 
 
 def unionize(__iterable: Iterable[SupportsUnion[_T_contra, _T_co]]) -> _T_co:
-    return reduce(bitwise_or, __iterable)
+    return reduce(op.or_, __iterable)
 
 
 _GenericAlias = type(Type[...]) | types.GenericAlias
@@ -213,7 +213,7 @@ class _BoundedDict[_KT, _VT](OrderedDict[_KT, _VT]):
 
 
 _SUBTYPE_CACHE: _BoundedDict[int, ...] = _BoundedDict()
-_ATTR_GETTERS: _BoundedDict[..., tuple[Callable[[Iterable], NamedTuple], attrgetter]] = (
+_ATTR_GETTERS: _BoundedDict[..., tuple[Callable[[Iterable], NamedTuple], op.attrgetter]] = (
     _BoundedDict()
 )
 
@@ -247,7 +247,10 @@ def _unique_attrs(obj) -> Optional['NamedTuple']:
         + 'Attrs'
     ).strip('_')
     UniqueAttrs = cast(NamedTuple, namedtuple(tup_name, field_names))
-    _ATTR_GETTERS[tp] = constructor, getter = UniqueAttrs._make, attrgetter(*attr_names)  # noqa
+    _ATTR_GETTERS[tp] = [constructor, getter] = [
+        UniqueAttrs._make,
+        op.attrgetter(*attr_names),  # noqa
+    ]
     return constructor(getter(obj))
 
 

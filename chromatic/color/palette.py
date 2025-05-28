@@ -1,7 +1,15 @@
 from functools import lru_cache, update_wrapper, wraps
 from inspect import getfullargspec, getmodule, isbuiltin, signature
 from types import FunctionType, MappingProxyType
-from typing import Callable, Iterator, Sequence, TYPE_CHECKING, Union, cast, dataclass_transform
+from typing import (
+    Callable,
+    Iterator,
+    Sequence,
+    TYPE_CHECKING,
+    Union,
+    cast,
+    dataclass_transform,
+)
 
 from .colorconv import ANSI_4BIT_RGB
 from .core import Color, ColorStr, SgrParameter, color_chain
@@ -39,7 +47,9 @@ class Member[_T]:
 @dataclass_transform()
 class DynamicNSMeta[_VT](type):
 
-    def __new__(mcls, clsname: str, bases: tuple[type, ...], mapping: dict[str, ...], **kwargs):
+    def __new__(
+        mcls, clsname: str, bases: tuple[type, ...], mapping: dict[str, ...], **kwargs
+    ):
         slot_names: dict[str, ...] = mapping.get('__annotations__', {})
         member: Member[_VT]
         for offset, name in enumerate(slot_names):
@@ -55,7 +65,9 @@ class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
     def __new__(cls, *args, **kwargs):
         inst = super().__new__(cls)
         if hasattr(cls, '__annotations__'):
-            slots = kwargs.pop('slots', list(filter(_check_if_ns_member(cls), cls.__annotations__)))
+            slots = kwargs.pop(
+                'slots', list(filter(_check_if_ns_member(cls), cls.__annotations__))
+            )
             empty_slots = [null] * len(slots)
             object.__setattr__(inst, '__members__', empty_slots)
         return inst
@@ -69,7 +81,8 @@ class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
         if DynamicNamespace in cls.__bases__ or not callable(factory):
             return super().__new__(cls)
         base: type[DynamicNamespace] = cast(
-            type[...], next((typ for typ in cls.mro() if DynamicNamespace in typ.__bases__), null)
+            type[...],
+            next((typ for typ in cls.mro() if DynamicNamespace in typ.__bases__), null),
         )
         if base is null:
             raise TypeError(
@@ -83,13 +96,16 @@ class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
             lambda *args, **kwds: _new(*args, **(kwds | dict(slots=d))), cls.__new__
         )
         cls.__init__ = update_wrapper(
-            lambda *args, **kwds: DynamicNamespace.__init__(*args, **(kwds | d)), cls.__init__
+            lambda *args, **kwds: DynamicNamespace.__init__(*args, **(kwds | d)),
+            cls.__init__,
         )
 
     def __setattr__(self, name, value):
         cls = type(self)
         if hasattr(cls, '__annotations__') and name not in cls.__annotations__:
-            raise AttributeError(f'{cls.__name__!r} object has no attribute {name!r}') from None
+            raise AttributeError(
+                f'{cls.__name__!r} object has no attribute {name!r}'
+            ) from None
         super().__setattr__(name, value)
 
     def as_dict(self):
@@ -123,7 +139,8 @@ def _ns_from_iter[_KT, _VT](
         )
         d = dict(zip((k for k, v in anno.items() if v in type_params), members))
         cls.__init__ = update_wrapper(
-            lambda *args, **kwargs: cls.__base__.__init__(*args, **(kwargs | d)), cls.__init__
+            lambda *args, **kwargs: cls.__base__.__init__(*args, **(kwargs | d)),
+            cls.__init__,
         )
         return cls
 
@@ -456,7 +473,8 @@ def rgb_dispatch[**P, R](
         variadic.discard(None)
         all_args = variadic.union(argspec.args + argspec.kwonlyargs)
         rgb_args = all_args.intersection(
-            {'*': argspec.varargs, '**': argspec.varkw}.get(arg) or arg for arg in var_names
+            {'*': argspec.varargs, '**': argspec.varkw}.get(arg) or arg
+            for arg in var_names
         )
         if not rgb_args:
             keys = frozenset({'fg', 'bg'})
@@ -473,7 +491,10 @@ def rgb_dispatch[**P, R](
                 parameters.append(
                     param.replace(
                         annotation=str
-                        | eval(getattr(anno, '__name__', str(anno)), getmodule(__f).__dict__)
+                        | eval(
+                            getattr(anno, '__name__', str(anno)),
+                            getmodule(__f).__dict__,
+                        )
                     )
                 )
         return sig.replace(parameters=parameters)
@@ -492,7 +513,9 @@ def rgb_dispatch[**P, R](
                 bound.arguments[arg] = (
                     tuple(color_ns[v] if v in color_ns else v for v in value)
                     if isinstance(value, tuple)
-                    else {k: color_ns[v] if v in color_ns else v for k, v in value.items()}
+                    else {
+                        k: color_ns[v] if v in color_ns else v for k, v in value.items()
+                    }
                 )
             elif value in color_ns:
                 bound.arguments[arg] = color_ns[value]

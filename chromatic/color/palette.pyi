@@ -297,7 +297,10 @@ named_color: Union[
     dict[Literal['24b'], Callable[[_ColorName], Color]],
 ]
 
-def rgb_dispatch[F: (type, FunctionType)](__f: F, /, *, var_names: Sequence[str] = ()) -> F: ...
+def rgb_dispatch[F: (
+    type,
+    FunctionType,
+)](__f: F, /, *, var_names: Sequence[str] = ()) -> F: ...
 
 Back = AnsiBack()
 Fore = AnsiFore()

@@ -69,13 +69,17 @@ CP437_TRANS_TABLE = MappingProxyType(
 
 
 @overload
-def translate_cp437[_T: (int, str)](__x: str, *, ignore: _T | Iterable[_T] = ...) -> str: ...
+def translate_cp437[_T: (
+    int,
+    str,
+)](__x: str, *, ignore: _T | Iterable[_T] = ...) -> str: ...
 
 
 @overload
-def translate_cp437[
-    _T: (int, str)
-](__iter: Iterable[str], *, ignore: _T | Iterable[_T] = ...) -> Iterator[str]: ...
+def translate_cp437[_T: (
+    int,
+    str,
+)](__iter: Iterable[str], *, ignore: _T | Iterable[_T] = ...) -> Iterator[str]: ...
 
 
 def translate_cp437(

@@ -18,7 +18,9 @@ def escher_dragon_ascii():
     font = UserFont.IBM_VGA_437_8X16
     char_set = r"  ._-~+<vX♦'^Vx>|πΦ0Ω#$║╫"
 
-    ascii_str = img2ascii(input_img, font, factor=240, char_set=char_set, sort_glyphs=True)
+    ascii_str = img2ascii(
+        input_img, font, factor=240, char_set=char_set, sort_glyphs=True
+    )
 
     ascii_img = ascii2img(ascii_str, font, font_size=16, fg='white', bg='black')
 
@@ -55,7 +57,9 @@ def butterfly_16color():
 
     char_set = r"'·,•-_→+<>ⁿ*%⌂7√Iï∞πbz£9yîU{}1αHSw♥æ?GX╕╒éà⌡MF╝╩ΘûÇƒQ½☻Å¶┤▄╪║▒█"
 
-    ansi_array = img2ansi(input_img, font, factor=200, char_set=char_set, ansi_type=ansicolor4Bit)
+    ansi_array = img2ansi(
+        input_img, font, factor=200, char_set=char_set, ansi_type=ansicolor4Bit
+    )
 
     ansi_img = ansi2img(ansi_array, font, font_size=16)
 
@@ -71,7 +75,9 @@ def butterfly_truecolor():
 
     font = UserFont.IBM_VGA_437_8X16
 
-    ansi_array = img2ansi(input_img, font, factor=200, ansi_type='24b', equalize='white_point')
+    ansi_array = img2ansi(
+        input_img, font, factor=200, ansi_type='24b', equalize='white_point'
+    )
 
     ansi_img = ansi2img(ansi_array, font, font_size=16)
 
@@ -87,7 +93,9 @@ def butterfly_randcolor():
 
     font = UserFont.IBM_VGA_437_8X16
 
-    ansi_array = img2ansi(input_img, font, factor=200, ansi_type='8b', equalize='white_point')
+    ansi_array = img2ansi(
+        input_img, font, factor=200, ansi_type='8b', equalize='white_point'
+    )
 
     for row in range(len(ansi_array)):
         for idx, cs in enumerate(ansi_array[row]):
@@ -130,7 +138,9 @@ def named_colors():
     whites = [0]
     for idx, n in enumerate(named):
         hsv = rgb2hsv(n.fg.rgb)
-        if all(map(lambda i, x: math.isclose(hsv[i], x, abs_tol=0.16), (-1, 1), (1, 0))):
+        if all(
+            map(lambda i, x: math.isclose(hsv[i], x, abs_tol=0.16), (-1, 1), (1, 0))
+        ):
             if idx - whites[-1] < 4:
                 whites.pop()
             whites.append(idx)
@@ -151,7 +161,13 @@ def color_table():
 
     A handful of stylistic SGR parameters are displayed as well.
     """
-    from chromatic.color import ColorStr, SgrParameter, ansicolor24Bit, ansicolor4Bit, ansicolor8Bit
+    from chromatic.color import (
+        ColorStr,
+        SgrParameter,
+        ansicolor24Bit,
+        ansicolor4Bit,
+        ansicolor8Bit,
+    )
     from chromatic.color.palette import ColorNamespace
 
     color_ns = ColorNamespace()
@@ -170,11 +186,21 @@ def color_table():
     colors_dict = {v.name.title(): v for v in colors}
     spacing = max(map(len, colors_dict)) + 1
     fg_colors = [
-        ColorStr(f"{c.name.title(): ^{spacing}}", color_spec=dict(fg=c), ansi_type=ansicolor24Bit)
+        ColorStr(
+            f"{c.name.title(): ^{spacing}}",
+            color_spec=dict(fg=c),
+            ansi_type=ansicolor24Bit,
+        )
         for c in colors
     ]
-    bg_colors = [ColorStr().recolor(bg=None)] + [c.recolor(fg=None, bg=c.fg) for c in fg_colors]
-    print('|'.join(f"{'%dbit' % n: {'>' if n > 9 else '^'}{spacing - 1}}" for n in (4, 8, 24)))
+    bg_colors = [ColorStr().recolor(bg=None)] + [
+        c.recolor(fg=None, bg=c.fg) for c in fg_colors
+    ]
+    print(
+        '|'.join(
+            f"{'%dbit' % n: {'>' if n > 9 else '^'}{spacing - 1}}" for n in (4, 8, 24)
+        )
+    )
     suffix = '\x1b[0m' if sys.stdout.isatty() else ''
     for row in fg_colors:
         for col in bg_colors:
@@ -194,7 +220,9 @@ def color_table():
     ]
     for style in style_params:
         print(
-            ColorStr('.'.join([SgrParameter.__qualname__, style.name])).update_sgr(style),
+            ColorStr('.'.join([SgrParameter.__qualname__, style.name])).update_sgr(
+                style
+            ),
             end=suffix + (' ' * 4),
         )
     print()
@@ -344,7 +372,10 @@ def main():
                 )
                 for n in names
             )
-            print('\n' + '\n\n'.join(['Run one of the following demo functions:', *docstrings]))
+            print(
+                '\n'
+                + '\n\n'.join(['Run one of the following demo functions:', *docstrings])
+            )
             exit()
         selection = _check_user_input(key)
     if selection is None:

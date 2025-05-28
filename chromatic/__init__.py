@@ -52,7 +52,9 @@ try:
         from setuptools import find_packages
         from pkgutil import iter_modules
 
-        tree: dict[str, dict | ModuleType] = {__name__: {'__module__': sys.modules[__name__]}}
+        tree: dict[str, dict | ModuleType] = {
+            __name__: {'__module__': sys.modules[__name__]}
+        }
         children = set()
         for pkg in find_packages(path):
             children.add(pkg)
@@ -93,7 +95,11 @@ try:
 
                 @wraps(submodule.__dir__)
                 def wrapped():
-                    s = set(attr for attr in init_dir if is_local(getattr(submodule, attr, None)))
+                    s = set(
+                        attr
+                        for attr in init_dir
+                        if is_local(getattr(submodule, attr, None))
+                    )
                     if hasattr(submodule, '__all__'):
                         s.update(submodule.__all__)
                     return list(s)

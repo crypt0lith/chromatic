@@ -15,6 +15,7 @@ __all__ = [
     'rgb2ansi_escape',
 ]
 
+import re
 import sys
 from collections.abc import Buffer, Iterable, Iterator, Mapping, Sequence
 from enum import IntEnum
@@ -57,6 +58,7 @@ def randcolor() -> Color: ...
 def rgb2ansi_escape(
     ret_format: AnsiColorAlias | AnsiColorType, mode: ColorDictKeys, rgb: Int3Tuple
 ) -> bytes: ...
+def sgr_re_pattern() -> re.Pattern[str]: ...
 
 class ansicolor4Bit(colorbytes): ...
 class ansicolor8Bit(colorbytes): ...
@@ -86,9 +88,14 @@ class ColorStr(str):
     def as_ansi_type(self, __ansi_type: AnsiColorParam) -> ColorStr: ...
     def format(self, *args, **kwargs) -> ColorStr: ...
     def recolor(
-        self, __value: ColorStr = None, absolute: bool = False, **kwargs: Unpack[_ColorDict]
+        self,
+        __value: ColorStr = None,
+        absolute: bool = False,
+        **kwargs: Unpack[_ColorDict],
     ) -> ColorStr: ...
-    def replace(self, __old: str, __new: str, __count: SupportsIndex = -1) -> ColorStr: ...
+    def replace(
+        self, __old: str, __new: str, __count: SupportsIndex = -1
+    ) -> ColorStr: ...
     def split(self, sep=None, maxsplit=-1) -> list[ColorStr]: ...
     def update_sgr(self, *p: *tuple[Union[int, SgrParameter], ...]) -> ColorStr: ...
     def __add__[_T: (str, ColorStr, SgrParameter)](self, other: _T) -> ColorStr: ...
@@ -115,16 +122,7 @@ class ColorStr(str):
         color_spec: Union[_ColorSpec, ColorStr] = None,
         **kwargs: Unpack[_ColorStrKwargs],
     ) -> ColorStr: ...
-    def __sub__(self, other: Union[Color, ColorStr]) -> ColorStr: ...
-
-    _ansi_: bytes
-    _ansi_type_: AnsiColorType
-    _base_str_: str
-    _color_dict_: MappingProxyType[ColorDictKeys, Color]
-    _no_reset_: bool
-    _sgr_: SgrSequence
-    _sgr_params_: list[SgrParamWrapper]
-
+    def __xor__(self, other: Union[Color, ColorStr]) -> ColorStr: ...
     @property
     def ansi(self) -> bytes: ...
     @property
@@ -143,24 +141,46 @@ class ColorStr(str):
 class _ColorChainKwargs(TypedDict, total=False):
     ansi_type: AnsiColorAlias | type[AnsiColorFormat]
     sgr_params: Sequence[SgrParameter]
-    fg: int | Color | Int3Tuple
-    bg: int | Color | Int3Tuple
+    fg: Int3Tuple | Color | int
+    bg: Int3Tuple | Color | int
 
 class color_chain:
     @classmethod
     def _from_masks_unchecked(
         cls, masks: Iterable[tuple[SgrSequence, str]], ansi_type: type[AnsiColorFormat]
     ) -> Self: ...
-    def extend[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> None: ...
+    def extend[_T: (
+        color_chain,
+        SgrSequence,
+        ColorStr,
+        str,
+    )](self, other: _T) -> None: ...
     @classmethod
     def from_masks(
-        cls, masks: Sequence[tuple[SgrSequence, str]], ansi_type: type[AnsiColorFormat] = None
+        cls,
+        masks: Sequence[tuple[SgrSequence, str]],
+        ansi_type: type[AnsiColorFormat] = None,
     ) -> Self: ...
-    def __add__[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> color_chain: ...
+    def __add__[_T: (
+        color_chain,
+        SgrSequence,
+        ColorStr,
+        str,
+    )](self, other: _T) -> color_chain: ...
     def __call__(self, __obj=None) -> str: ...
-    def __iadd__[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> None: ...
+    def __iadd__[_T: (
+        color_chain,
+        SgrSequence,
+        ColorStr,
+        str,
+    )](self, other: _T) -> None: ...
     def __init__(self, **kwargs: Unpack[_ColorChainKwargs]) -> None: ...
-    def __radd__[_T: (color_chain, SgrSequence, ColorStr, str)](self, other: _T) -> color_chain: ...
+    def __radd__[_T: (
+        color_chain,
+        SgrSequence,
+        ColorStr,
+        str,
+    )](self, other: _T) -> color_chain: ...
     def __repr__(self) -> str: ...
     def __str__(self) -> str: ...
 
@@ -253,7 +273,11 @@ class SgrParamWrapper:
     def __bytes__(self) -> bytes: ...
     def __eq__(self, other: ...) -> bool: ...
     def __hash__(self) -> int: ...
-    def __init__[_T: (bytes, AnsiColorFormat, SgrParamWrapper)](self, value: _T = b'') -> None: ...
+    def __init__[_T: (
+        bytes,
+        AnsiColorFormat,
+        SgrParamWrapper,
+    )](self, value: _T = b'') -> None: ...
 
     _value_: Union[bytes, AnsiColorFormat]
 
@@ -261,7 +285,9 @@ class SgrSequence(Sequence[SgrParamWrapper]):
     def append(self, __value: int) -> None: ...
     def find(self, value: ...) -> int: ...
     def get_color(self, __key: ColorDictKeys): ...
-    def index(self, value, start: SupportsIndex = 0, stop: SupportsIndex = sys.maxsize) -> int: ...
+    def index(
+        self, value, start: SupportsIndex = 0, stop: SupportsIndex = sys.maxsize
+    ) -> int: ...
     def is_color(self) -> bool: ...
     def is_reset(self) -> bool: ...
     def pop(self, __index: SupportsIndex = -1) -> SgrParamWrapper: ...
@@ -312,7 +338,7 @@ class SgrSequence(Sequence[SgrParamWrapper]):
     # noinspection PyUnresolvedReferences
     @rgb_dict.setter
     def rgb_dict[_AnsiColorType: type[AnsiColorFormat]](
-        self, __value: tuple[_AnsiColorType, dict[ColorDictKeys, Optional[Color]]]
+        self, __value: tuple[dict[ColorDictKeys, Optional[Color]], _AnsiColorType]
     ) -> None: ...
 
 class _ColorDict(TypedDict, total=False):
@@ -335,7 +361,7 @@ DEFAULT_ANSI: Final[type[ansicolor8Bit | ansicolor4Bit]]
 
 _ANSI16C_BRIGHT: Final[frozenset[int]]
 _ANSI16C_I2KV: Final[dict[int, tuple[ColorDictKeys, Int3Tuple]]]
-_ANSI16C_KV2I: Final[dict[tuple[Literal['fg', 'bg'], tuple[int, int, int]], int]]
+_ANSI16C_KV2I: Final[dict[tuple[Literal['fg', 'bg'], Int3Tuple], int]]
 _ANSI16C_STD: Final[frozenset[int]]
 _ANSI256_B2KEY: Final[dict[bytes, str]]
 _ANSI256_KEY2I: Final[dict[str, int]]
@@ -350,8 +376,12 @@ AnsiColorParam: TypeAlias = Union[AnsiColorAlias, AnsiColorType]
 _CSpecDict: TypeAlias = Mapping[ColorDictKeys, _CSpecScalar]
 _CSpecKVPair: TypeAlias = tuple[ColorDictKeys, _CSpecScalar]
 _CSpecScalar: TypeAlias = int | Color | RGBVectorLike
-_CSpecTuplePair: TypeAlias = tuple[_CSpecScalar, _CSpecScalar] | tuple[_CSpecKVPair, _CSpecKVPair]
-_CSpecType: TypeAlias = SgrSequence | _CSpecScalar | _CSpecTuplePair | _CSpecKVPair | _CSpecDict
+_CSpecTuplePair: TypeAlias = (
+    tuple[_CSpecScalar, _CSpecScalar] | tuple[_CSpecKVPair, _CSpecKVPair]
+)
+_CSpecType: TypeAlias = (
+    SgrSequence | _CSpecScalar | _CSpecTuplePair | _CSpecKVPair | _CSpecDict
+)
 _ColorSpec = TypeVar('_ColorSpec', _CSpecType, str, bytes)
 _AnsiColor_co = TypeVar('_AnsiColor_co', bound=colorbytes, covariant=True)
 _RGBVectorLike = TypeVar('_RGBVectorLike', bound=RGBVectorLike)

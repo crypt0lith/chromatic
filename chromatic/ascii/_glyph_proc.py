@@ -17,13 +17,17 @@ from .._typing import FontArgType, GlyphArray, GlyphBitmask, ShapedNDArray
 
 @overload
 def get_glyph_masks(
-    __font: FontArgType, char_set: Sequence[str] = ..., dist_transform: Literal[False] = False
+    __font: FontArgType,
+    char_set: Sequence[str] = ...,
+    dist_transform: Literal[False] = False,
 ) -> dict[str, GlyphBitmask]: ...
 
 
 @overload
 def get_glyph_masks(
-    __font: FontArgType, char_set: Sequence[str] = ..., dist_transform: Literal[True] = ...
+    __font: FontArgType,
+    char_set: Sequence[str] = ...,
+    dist_transform: Literal[True] = ...,
 ) -> dict[str, GlyphArray[float64]]: ...
 
 
@@ -89,4 +93,6 @@ def ttf_extract_codepoints(
         for table in font['cmap'].tables:
             codepoints |= table.cmap.keys()
 
-    return np.sort(np.array([i for i in codepoints if chr(i).isprintable()], dtype='<u2'))
+    return np.sort(
+        np.array([i for i in codepoints if chr(i).isprintable()], dtype='<u2')
+    )

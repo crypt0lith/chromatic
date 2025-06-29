@@ -5,7 +5,7 @@ __pycache__/
 /dist/
 /docs/
 /tests/_*
-/chromatic/data/*.json
-/chromatic/data/*.pyi
+/chromatic/data/userfont.json
 /chromatic/_version.py
 /*.egg-info/
+/build/

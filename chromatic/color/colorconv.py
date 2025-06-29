@@ -2,16 +2,16 @@ __all__ = [
     'ANSI_4BIT_RGB',
     'ansi_4bit_to_rgb',
     'ansi_8bit_to_rgb',
-    'hex2rgb',
+    'int2rgb',
     'hexstr2rgb',
     'hsl2rgb',
     'hsv2rgb',
-    'is_hex_rgb',
+    'is_u24',
     'lab2rgb',
     'lab2xyz',
     'nearest_ansi_4bit_rgb',
     'nearest_ansi_8bit_rgb',
-    'rgb2hex',
+    'rgb2int',
     'rgb2hexstr',
     'rgb2hsl',
     'rgb2hsv',
@@ -23,20 +23,13 @@ __all__ = [
     'xyz2rgb',
 ]
 
-from operator import mul, truediv
 from functools import lru_cache
-from typing import Final, Literal, SupportsInt, cast, TypeGuard
+from operator import mul, truediv
+from typing import Final, Literal, SupportsInt, TypeGuard
 
 import numpy as np
 
-from .._typing import (
-    Float3Tuple,
-    FloatSequence,
-    Int3Tuple,
-    RGBPixel,
-    RGBVectorLike,
-    ShapedNDArray,
-)
+from .._typing import Float3Tuple, FloatSequence, Int3Tuple, RGBPixel, RGBVectorLike, ShapedNDArray
 
 
 @lru_cache
@@ -44,32 +37,55 @@ def _supports_int(typ: type) -> TypeGuard[type[SupportsInt]]:
     return issubclass(typ, SupportsInt)
 
 
-def is_hex_rgb(value, *, strict: bool = False):
+def is_u24(value, *, strict: bool = False):
+    """Check if value is an unsigned 24-bit integer.
+
+    Parameters
+    ---------
+    value
+        Input number
+    strict : bool
+        Whether to return False or raise ValueError on failure
+
+    Raises
+    ------
+    ValueError
+        Raised when `strict=True` and value is not u24
+    """
     if _supports_int(type(value)):
-        if 0x0 <= int(value) <= 0xFFFFFF:
+        if 0 <= int(value) <= 0xFFFFFF:
             return True
         elif not strict:
             return False
-    raise TypeError(f"{value!r} is not a valid RGB color") from None
+    raise ValueError(f"{value!r} is not u24")
 
 
 def hexstr2rgb(__str: str) -> Int3Tuple:
-    if is_hex_rgb(value := int(__str, 16), strict=True):
-        return hex2rgb(value)
+    n = len(__str)
+    if n % 4 == 0:  # trunc alpha
+        n *= 3
+        n //= 4
+        __str = __str[:n]
+    if n == 3:  # rgb -> rrggbb
+        __str = ''.join(c * 2 for c in __str)
+    if is_u24(value := int(__str, 16), strict=True):
+        return int2rgb(value)
 
 
 def rgb2hexstr(rgb: RGBVectorLike) -> str:
-    r, g, b = rgb
-    return f"{r:02x}{g:02x}{b:02x}"
+    return "%02x%02x%02x" % tuple(rgb)
 
 
-def rgb2hex(rgb: RGBVectorLike) -> int:
+def rgb2int(rgb: RGBVectorLike) -> int:
     r, g, b = map(int, rgb)
     return r << 16 | g << 8 | b
 
 
-def hex2rgb(value: int) -> Int3Tuple:
-    return (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF
+def int2rgb(__x: int) -> Int3Tuple:
+    try:
+        return getattr(__x, 'rgb')
+    except AttributeError:
+        return (__x >> 16) & 0xFF, (__x >> 8) & 0xFF, __x & 0xFF
 
 
 def xyz2lab(xyz: FloatSequence) -> Float3Tuple:
@@ -91,10 +107,7 @@ def lab2xyz(lab: FloatSequence) -> Float3Tuple:
     x, y, z = map(
         mul,
         (95.047, 100.0, 108.883),
-        map(
-            lambda i: (lambda j: j if j > 0.008856 else (i - 16 / 116) / 7.787)(i**3),
-            (x, y, z),
-        ),
+        map(lambda i: (lambda j: j if j > 0.008856 else (i - 16 / 116) / 7.787)(i**3), (x, y, z)),
     )
     return x, y, z
 
@@ -114,49 +127,36 @@ def rgb2xyz(rgb: RGBPixel) -> Float3Tuple:
 
 
 def xyz2rgb(xyz: ShapedNDArray[tuple[Literal[3]], np.float64]) -> Int3Tuple:
-    r, g, b = (
-        np.clip(M_XYZ2RGB @ np.array(xyz, dtype=np.float64), 0.0, 1.0) * 255.0
-    ).astype(int)
+    r, g, b = (np.clip(M_XYZ2RGB @ np.array(xyz, dtype=np.float64), 0.0, 1.0) * 255.0).astype(int)
     return r, g, b
 
 
 def hsl2rgb(hsl: FloatSequence) -> Int3Tuple:
     h, s, L = hsl
-    h = (h / 360) % 1
+    h /= 360
+    h %= 1
     if h < 0:
         h += 1
-    r = g = b = L
     v = (L * (1.0 + s)) if L <= 0.5 else (L + s - L * s)
-    if v > 0:
+    if v > 0 and 0 <= (sextant := int(h)) <= 5:
         m = L + L - v
         sv = (v - m) / v
         h *= 6.0
-        sextant = int(h)
-        fract = h - sextant
-        vsf = v * sv * fract
+        vsf = v * sv * (h - sextant)
         mid1 = m + vsf
         mid2 = v - vsf
-        if sextant == 0:
-            r, g, b = v, mid1, m
-        elif sextant == 1:
-            r, g, b = mid2, v, m
-        elif sextant == 2:
-            r, g, b = m, v, mid1
-        elif sextant == 3:
-            r, g, b = m, mid2, v
-        elif sextant == 4:
-            r, g, b = mid1, m, v
-        elif sextant == 5:
-            r, g, b = v, m, mid2
-        r, g, b = (round(x * 255) for x in (r, g, b))
+        r, g, b = (
+            round(x * 0xFF)
+            for x in [[v, mid1, m], [mid2, v, m], [m, v, mid1], [m, mid2, v], [mid1, m, v]][sextant]
+        )
     else:
-        r, g, b = (round(L * 255) for _ in range(3))
+        r, g, b = [round(L * 0xFF)] * 3
     return r, g, b
 
 
 def rgb2hsl(rgb: RGBVectorLike) -> Float3Tuple:
     r, g, b = (x / 255.0 for x in rgb)
-    m, v = sorted([r, g, b])[::2]
+    m, _, v = sorted([r, g, b])
     L = (m + v) / 2
     h = s = 0
     if L > 0:
@@ -263,7 +263,7 @@ def ansi_4bit_to_rgb(value: int):
     return ANSI_4BIT_RGB[value]
 
 
-def _4b_lookup():
+def _4b_lookup() -> dict[Int3Tuple, Int3Tuple]:
     def rgb_dist(rgb, ansi):
         r_mean = (rgb[:, 0:1] + ansi[:, 0]) / 2
         r_diff = (rgb[:, 0:1] - ansi[:, 0]) * (2 + r_mean / 256)
@@ -273,16 +273,13 @@ def _4b_lookup():
 
     rgb_4b_arr = np.asarray(ANSI_4BIT_RGB)
     quants = np.stack(
-        np.meshgrid(*np.repeat(np.arange(32).reshape([1, -1]), 3, 0), indexing='ij'),
-        axis=-1,
+        np.meshgrid(*np.repeat(np.arange(32).reshape([1, -1]), 3, 0), indexing='ij'), axis=-1
     ).reshape([-1, 3])
-    rgb_colors = quants * 8
-    nearest_colors = rgb_4b_arr[np.argmin(rgb_dist(rgb_colors, rgb_4b_arr), axis=1)]
-    table = {
-        tuple(map(int, color)): tuple(map(int, nearest_colors[i]))
-        for i, color in enumerate(quants)
+    nearest_colors = rgb_4b_arr[np.argmin(rgb_dist(quants * 8, rgb_4b_arr), axis=1)]
+    table: dict = {
+        tuple(map(int, color)): tuple(map(int, nearest_colors[i])) for i, color in enumerate(quants)
     }
-    return cast(dict[Int3Tuple, Int3Tuple], table)
+    return table
 
 
 ANSI_4BIT_RGB_MAP = _4b_lookup()

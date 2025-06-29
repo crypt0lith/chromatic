@@ -30,15 +30,13 @@ from chromatic.color.iterators import rgb_luma_transform
 from chromatic.color.palette import ColorNamespace
 
 
-def coerce_argspec[
-    **P, R
-](
+def coerce_argspec[**P, R](
     f: Callable[P, R] | FunctionType | type,
     args: P.args = None,
     kwargs: P.kwargs = None,
     *,
     retfunc: bool = False,
-) -> (Callable[[], R] | tuple[P.args, P.kwargs]):
+) -> Callable[[], R] | tuple[P.args, P.kwargs]:
     if args is None:
         args = tuple()
     if kwargs is None:
@@ -132,7 +130,7 @@ def test_luma_transformer(
         gradient=test_color2_rgb,
         dtype=Color,
     )
-    return '\n'.join(ColorStr(obj=base_str, color_spec=col) for col in color_gen)
+    return '\n'.join(ColorStr(base_str, col) for col in color_gen)
 
 
 def test_pattern_generator():
@@ -167,27 +165,16 @@ def _rand_color_str_array(n_rows=10, n_cols=10):
         current = []
         for col in range(n_cols):
             char = random.choice(printable_chars) if next(rand_bin_iter) else None
-            current.append(
-                ColorStr(obj=char, color_spec=randcolor(), ansi_type=ansicolor24Bit)
-                if char
-                else ' '
-            )
+            current.append(ColorStr(char, randcolor(), ansi_type=ansicolor24Bit) if char else ' ')
         output.append(
-            '{}{}{}'.format(
+            '{}{}{}{}'.format(
                 *map(
                     ''.join,
                     (
                         current,
                         *(
-                            (
-                                (
-                                    ColorStr(color_spec=c, ansi_type=t)
-                                    if isinstance(c, ColorStr)
-                                    else c
-                                )
-                                for c in current
-                            )
-                            for t in (ansicolor8Bit, ansicolor4Bit)
+                            ((c.as_ansi_type(t) if isinstance(c, ColorStr) else c) for c in current)
+                            for t in (ansicolor4Bit, ansicolor8Bit, ansicolor24Bit)
                         ),
                     ),
                 )
@@ -256,55 +243,55 @@ class TestAnsiColorBytes(unittest.TestCase):
 class TestColorStr(unittest.TestCase):
 
     def test_color_instances(self):
-        cs = ColorStr('Red text', dict(fg=Color(0xFF0000)))
+        cs = ColorStr('Red text', fg=Color(0xFF0000))
         self.assertEqual(cs.fg.rgb, (255, 0, 0))
 
-        cs_bg = ColorStr('Blue background text', dict(bg=Color(0x0000FF)))
+        cs_bg = ColorStr('Blue background text', bg=Color(0x0000FF))
         self.assertEqual(cs_bg.bg.rgb, (0, 0, 255))
 
     def test_rgb_tuple(self):
-        cs = ColorStr('Red text', dict(fg=(255, 0, 0)))
+        cs = ColorStr('Red text', fg=(255, 0, 0))
         self.assertEqual(cs.fg.rgb, (255, 0, 0))
 
-        cs_bg = ColorStr('Blue background text', dict(bg=(0, 0, 255)))
+        cs_bg = ColorStr('Blue background text', bg=(0, 0, 255))
         self.assertEqual(cs_bg.bg.rgb, (0, 0, 255))
 
     def test_int_hex(self):
-        cs = ColorStr('Red text', dict(fg=0xFF0000))
+        cs = ColorStr('Red text', fg=0xFF0000)
         self.assertEqual(cs.fg.rgb, (255, 0, 0))
 
-        cs_bg = ColorStr('Blue background text', dict(bg=0x0000FF))
+        cs_bg = ColorStr('Blue background text', bg=0x0000FF)
         self.assertEqual(cs_bg.bg.rgb, (0, 0, 255))
 
     def test_ansi_bytes(self):
-        cs = ColorStr(color_spec=b'\x1b[38;5;46mGreen text\x1b[0m')
+        cs = ColorStr(b'\x1b[38;5;46mGreen text\x1b[0m', encoding='utf-8')
         self.assertEqual(cs.fg.rgb, (0, 255, 0))
         self.assertEqual(cs.base_str, 'Green text')
 
-        cs_bg = ColorStr(color_spec=b'\x1b[48;5;46mGreen background\x1b[0m')
+        cs_bg = ColorStr(b'\x1b[48;5;46mGreen background\x1b[0m', encoding='utf-8')
         self.assertIn('bg', cs_bg.rgb_dict)
         self.assertEqual(cs_bg.bg.rgb, (0, 255, 0))
 
     def test_ansi_str(self):
-        cs = ColorStr(color_spec='\x1b[38;5;46mGreen text\x1b[0m')
+        cs = ColorStr('\x1b[38;5;46mGreen text\x1b[0m')
         self.assertEqual(cs.fg.rgb, (0, 255, 0))
         self.assertEqual(cs.base_str, 'Green text')
 
-        cs_bg = ColorStr('Green background', color_spec='\x1b[48;5;46m')
+        cs_bg = ColorStr('\x1b[48;5;46mGreen background')
         self.assertIn('bg', cs_bg.rgb_dict)
         self.assertEqual(cs_bg.bg.rgb, (0, 255, 0))
 
     def test_color_dict(self):
-        cs = ColorStr('Red on Blue text', dict(fg=Color(0xFF0000), bg=Color(0x0000FF)))
+        cs = ColorStr('Red on Blue text', fg=Color(0xFF0000), bg=Color(0x0000FF))
         self.assertEqual(cs.fg.rgb, (255, 0, 0))
         self.assertEqual(cs.bg.rgb, (0, 0, 255))
 
     def test_mixed_color_spec(self):
-        cs = ColorStr('Red on Green text', dict(fg=Color(0xFF0000), bg=(0, 255, 0)))
+        cs = ColorStr('Red on Green text', fg=Color(0xFF0000), bg=(0, 255, 0))
         self.assertEqual(cs.fg.rgb, (255, 0, 0))
         self.assertEqual(cs.bg.rgb, (0, 255, 0))
 
-        cs_mixed = ColorStr('Blue on Yellow text', dict(fg=0x0000FF, bg=(255, 255, 0)))
+        cs_mixed = ColorStr('Blue on Yellow text', fg=0x0000FF, bg=(255, 255, 0))
         self.assertEqual(cs_mixed.fg.rgb, (0, 0, 255))
         self.assertEqual(cs_mixed.bg.rgb, (255, 255, 0))
 
@@ -315,40 +302,42 @@ class TestColorStr(unittest.TestCase):
             b = random.randint(0, 255)
             random_text = ''.join(random.choices(ascii_letters, k=random.randint(5, 15)))
 
-            cs_color = ColorStr(random_text, dict(fg=Color.from_rgb((r, g, b))))
+            cs_color = ColorStr(random_text, fg=Color.from_rgb((r, g, b)))
             self.assertEqual(cs_color.fg.rgb, (r, g, b))
 
-            cs_rgb = ColorStr(random_text, dict(fg=(r, g, b)))
+            cs_rgb = ColorStr(random_text, fg=(r, g, b))
             self.assertEqual(cs_rgb.fg.rgb, (r, g, b))
 
             hex_value = (r << 16) + (g << 8) + b
-            cs_int = ColorStr(random_text, dict(fg=hex_value))
+            cs_int = ColorStr(random_text, fg=hex_value)
             self.assertEqual(cs_int.fg.rgb, (r, g, b))
 
     def test_update_sgr(self):
-        cs = ColorStr(ansi_type='4b', no_reset=True)
+        cs = ColorStr(ansi_type='4b', reset=False)
         self.assertEqual((cs.base_str, cs.ansi), ('', b''))
 
         red_fg = cs.update_sgr(SgrParameter.RED_BRIGHT_FG)
-        self.assertEqual([ansicolor4Bit(b'91')], red_fg._sgr_.values())
+        self.assertEqual([ansicolor4Bit(b'91')], list(red_fg._sgr.values()))
         red_fg += 'iadd'
-        self.assertEqual([ansicolor4Bit(b'91')], red_fg._sgr_.values())
+        self.assertEqual([ansicolor4Bit(b'91')], list(red_fg._sgr.values()))
         self.assertEqual(red_fg.base_str, 'iadd')
 
 
 def main():
     inp_ = None
-    modes = dict(enumerate([unittest.main, test_performance_benchmark]))
+    modes = dict(enumerate([unittest.main, test_performance_benchmark, _rand_color_str_array]))
     while inp_ not in range(len(modes)):
         try:
-            s = '\n'.join(f"[{k}]: {v.__qualname__}" for k, v in modes.items())
-            inp_ = int(input(f'{s}\nSelect testing mode:{" " * 2}'))
+            s = '\n'.join(f"{k}\t{v.__name__.lstrip('_')}" for k, v in modes.items())
+            inp_ = int(input(f'{s}\nselect testing mode> '))
         except KeyboardInterrupt:
             print('\nGoodbye!')
             exit()
     selected = modes[inp_]
     print(f'Running {selected.__qualname__!r}...')
-    selected()
+    out = selected()
+    if out is not None:
+        print(out)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,3 @@
-import functools
 import math
 import os
 import sys
@@ -9,31 +8,41 @@ from types import FunctionType
 from typing import Callable
 
 
+class FunctionNamespace:
+
+    def register[**P, R](self, __func: Callable[P, R] | FunctionType) -> Callable[P, R]:
+        setattr(self, __func.__name__.casefold(), __func)
+        return __func
+
+
+DEMO_FUNCS = FunctionNamespace()
+
+
+@DEMO_FUNCS.register
 def escher_dragon_ascii():
     """Displays the image-to-ASCII transform of 'Dragon' by M.C. Escher."""
-    from chromatic.ascii import ascii2img, img2ascii
-    from chromatic.data import UserFont, escher
+    from chromatic.image import ascii2img, img2ascii
+    from chromatic.data import userfont, escher
 
     input_img = escher()
-    font = UserFont.IBM_VGA_437_8X16
+    font = userfont['vga437']
     char_set = r"  ._-~+<vX♦'^Vx>|πΦ0Ω#$║╫"
 
-    ascii_str = img2ascii(
-        input_img, font, factor=240, char_set=char_set, sort_glyphs=True
-    )
+    ascii_str = img2ascii(input_img, font, factor=240, char_set=char_set, sort_glyphs=True)
 
     ascii_img = ascii2img(ascii_str, font, font_size=16, fg='white', bg='black')
 
     ascii_img.show()
 
 
+@DEMO_FUNCS.register
 def escher_dragon_256color():
     """Displays the image-to-ANSI transform of 'Dragon' by M.C. Escher in 8-bit color."""
-    from chromatic.ascii import ansi2img, img2ansi
-    from chromatic.data import UserFont, escher
+    from chromatic.image import ansi2img, img2ansi
+    from chromatic.data import userfont, escher
 
     input_img = escher()
-    font = UserFont.IBM_VGA_437_8X16
+    font = userfont['vga437']
 
     ansi_array = img2ansi(input_img, font, factor=240, ansi_type='8b', equalize=True)
 
@@ -42,60 +51,57 @@ def escher_dragon_256color():
     ansi_img.show()
 
 
+@DEMO_FUNCS.register
 def butterfly_16color():
     """Displays image-to-ANSI transform of 'Spider Lily & Papilio xuthus' in 4-bit color.
 
     Good ol' C-x M-c M-butterfly...
     """
     from chromatic.color import ansicolor4Bit
-    from chromatic.ascii import ansi2img, img2ansi
-    from chromatic.data import UserFont, butterfly
+    from chromatic.image import ansi2img, img2ansi
+    from chromatic.data import userfont, butterfly
 
     input_img = butterfly()
 
-    font = UserFont.IBM_VGA_437_8X16
+    font = userfont['vga437']
 
     char_set = r"'·,•-_→+<>ⁿ*%⌂7√Iï∞πbz£9yîU{}1αHSw♥æ?GX╕╒éà⌡MF╝╩ΘûÇƒQ½☻Å¶┤▄╪║▒█"
 
-    ansi_array = img2ansi(
-        input_img, font, factor=200, char_set=char_set, ansi_type=ansicolor4Bit
-    )
+    ansi_array = img2ansi(input_img, font, factor=200, char_set=char_set, ansi_type=ansicolor4Bit)
 
     ansi_img = ansi2img(ansi_array, font, font_size=16)
 
     ansi_img.show()
 
 
+@DEMO_FUNCS.register
 def butterfly_truecolor():
     """Displays the image-to-ANSI transform of 'Spider Lily & Papilio xuthus' in 24-bit color."""
-    from chromatic.ascii import ansi2img, img2ansi
-    from chromatic.data import UserFont, butterfly
+    from chromatic.image import ansi2img, img2ansi
+    from chromatic.data import userfont, butterfly
 
     input_img = butterfly()
 
-    font = UserFont.IBM_VGA_437_8X16
+    font = userfont['vga437']
 
-    ansi_array = img2ansi(
-        input_img, font, factor=200, ansi_type='24b', equalize='white_point'
-    )
+    ansi_array = img2ansi(input_img, font, factor=200, ansi_type='24b', equalize='white_point')
 
     ansi_img = ansi2img(ansi_array, font, font_size=16)
 
     ansi_img.show()
 
 
+@DEMO_FUNCS.register
 def butterfly_randcolor():
-    from chromatic.ascii import ansi2img, img2ansi
+    from chromatic.image import ansi2img, img2ansi
     from chromatic.color import randcolor, rgb2hsv, hsv2rgb, Color
-    from chromatic.data import UserFont, butterfly
+    from chromatic.data import userfont, butterfly
 
     input_img = butterfly()
 
-    font = UserFont.IBM_VGA_437_8X16
+    font = userfont['vga437']
 
-    ansi_array = img2ansi(
-        input_img, font, factor=200, ansi_type='8b', equalize='white_point'
-    )
+    ansi_array = img2ansi(input_img, font, factor=200, ansi_type='8b', equalize='white_point')
 
     for row in range(len(ansi_array)):
         for idx, cs in enumerate(ansi_array[row]):
@@ -109,14 +115,15 @@ def butterfly_randcolor():
     ansi_img.show()
 
 
+@DEMO_FUNCS.register
 def goblin_virus_truecolor():
     """`G-O-B-L-I-N VIRUS <https://imgur.com/n0Mng2P>`__"""
-    from chromatic.ascii import ansi2img, img2ansi
-    from chromatic.data import UserFont, goblin_virus
+    from chromatic.image import ansi2img, img2ansi
+    from chromatic.data import userfont, goblin_virus
 
     input_img = goblin_virus()
 
-    font = UserFont.IBM_VGA_437_8X16
+    font = userfont['vga437']
 
     char_set = r'  .-|_⌐¬^:()═+<>v≥≤«*»x└┘π╛╘┴┐┌┬╧╚╙X╒╜╨#0╓╝╩╤╥│╔┤├╞╗╦┼╪║╟╠╫╣╬░▒▓█▄▌▐▀'
 
@@ -129,6 +136,7 @@ def goblin_virus_truecolor():
     ansi_img.show()
 
 
+@DEMO_FUNCS.register
 def named_colors():
     from chromatic.color.palette import named_color_idents, ColorNamespace
     from chromatic.color.colorconv import rgb2hsv, rgb2lab
@@ -138,9 +146,7 @@ def named_colors():
     whites = [0]
     for idx, n in enumerate(named):
         hsv = rgb2hsv(n.fg.rgb)
-        if all(
-            map(lambda i, x: math.isclose(hsv[i], x, abs_tol=0.16), (-1, 1), (1, 0))
-        ):
+        if all(map(lambda i, x: math.isclose(hsv[i], x, abs_tol=0.16), (-1, 1), (1, 0))):
             if idx - whites[-1] < 4:
                 whites.pop()
             whites.append(idx)
@@ -152,10 +158,11 @@ def named_colors():
             key=lambda x: rgb2lab(x.fg.rgb),
         )
         buffer.append(xs)
-    for ln in buffer:
-        print(' | '.join(map(str, ln)))
+    for line in buffer:
+        print(' | '.join(line))
 
 
+@DEMO_FUNCS.register
 def color_table():
     """Print foreground / background combinations in each ANSI format.
 
@@ -163,52 +170,43 @@ def color_table():
     """
     from chromatic.color import (
         ColorStr,
+        Color,
         SgrParameter,
         ansicolor24Bit,
         ansicolor4Bit,
         ansicolor8Bit,
+        ColorNamespace,
     )
-    from chromatic.color.palette import ColorNamespace
 
-    color_ns = ColorNamespace()
     ansi_types = [ansicolor4Bit, ansicolor8Bit, ansicolor24Bit]
-    colors = [
-        color_ns.BLACK,
-        color_ns.WHITE,
-        color_ns.RED,
-        color_ns.ORANGE,
-        color_ns.YELLOW,
-        color_ns.GREEN,
-        color_ns.BLUE,
-        color_ns.INDIGO,
-        color_ns.PURPLE,
-    ]
-    colors_dict = {v.name.title(): v for v in colors}
-    spacing = max(map(len, colors_dict)) + 1
+
+    colors: dict[str, Color] = {
+        name.title(): getattr(ColorNamespace, name)
+        for name in [
+            'BLACK',
+            'WHITE',
+            'RED',
+            'ORANGE',
+            'YELLOW',
+            'GREEN',
+            'BLUE',
+            'INDIGO',
+            'PURPLE',
+        ]
+    }
+    spacing = max(map(len, colors)) + 1
     fg_colors = [
-        ColorStr(
-            f"{c.name.title(): ^{spacing}}",
-            color_spec=dict(fg=c),
-            ansi_type=ansicolor24Bit,
-        )
-        for c in colors
+        ColorStr(f"{name: ^{spacing}}", fg=color, ansi_type=ansicolor24Bit)
+        for name, color in colors.items()
     ]
-    bg_colors = [ColorStr().recolor(bg=None)] + [
-        c.recolor(fg=None, bg=c.fg) for c in fg_colors
-    ]
-    print(
-        '|'.join(
-            f"{'%dbit' % n: {'>' if n > 9 else '^'}{spacing - 1}}" for n in (4, 8, 24)
-        )
-    )
-    suffix = '\x1b[0m' if sys.stdout.isatty() else ''
+    bg_colors = [ColorStr().recolor(bg=None)] + [c.recolor(fg=None, bg=c.fg) for c in fg_colors]
+    print('|'.join(f"{'%dbit' % n: {'>' if n == 24 else '^'}{spacing - 1}}" for n in (4, 8, 24)))
     for row in fg_colors:
         for col in bg_colors:
             for typ in ansi_types:
-                print(row.as_ansi_type(typ).recolor(bg=col.bg), end=suffix)
+                print(row.as_ansi_type(typ).recolor(bg=col.bg), end='\x1b[0m')
         print()
-    print('\nstyles:')
-    print()
+    print('\nstyles:', end='\t')
     style_params = [
         SgrParameter.BOLD,
         SgrParameter.ITALICS,
@@ -218,23 +216,26 @@ def color_table():
         SgrParameter.DOUBLE_UNDERLINE,
         SgrParameter.NEGATIVE,
     ]
-    for style in style_params:
+    for style in style_params[:-1]:
         print(
-            ColorStr('.'.join([SgrParameter.__qualname__, style.name])).update_sgr(
-                style
-            ),
-            end=suffix + (' ' * 4),
+            ColorStr('.'.join([SgrParameter.__qualname__, style.name])).update_sgr(style),
+            end='\x1b[0m'.ljust(8),
         )
-    print()
+    else:
+        print(
+            ColorStr(f"{SgrParameter.__qualname__}.{style_params[-1].name}").update_sgr(
+                style_params[-1]
+            )
+        )
 
 
 def glyph_comparisons(__output_dir: str | PathLike[str] = None):
-    from skimage.metrics import mean_squared_error
-    from numpy import ndarray
-    from chromatic.ascii import cp437_printable
     from chromatic import get_glyph_masks
-    from chromatic.data import UserFont
+    from chromatic.data import userfont
+    from chromatic.image import cp437_printable
+    from numpy import ndarray
     from random import choices as get_random
+    from skimage.metrics import mean_squared_error
 
     def _find_best_matches(
         glyph_masks1: dict[str, ndarray], glyph_masks2: dict[str, ndarray]
@@ -253,7 +254,7 @@ def glyph_comparisons(__output_dir: str | PathLike[str] = None):
 
     if __output_dir and not os.path.isdir(__output_dir):
         raise NotADirectoryError(__output_dir)
-    user_fonts = [pair := (UserFont.IBM_VGA_437_8X16, UserFont.CONSOLAS), pair[::-1]]
+    user_fonts = [pair := (userfont['vga437'], userfont['consolas']), pair[::-1]]
     trans_table = str.maketrans({']': None, '0': ' ', '[': ' '})
     char_set = cp437_printable()
     separator = '#' * 100
@@ -298,102 +299,91 @@ class _time_wrapper[**P, R]:
 
     def __init__(self, func: Callable[P, R] | FunctionType | type = None):
         self.func = func
-        if self.func is not None:
-            functools.update_wrapper(self, self.func)
 
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        if self.func is not None:
-            start = time.perf_counter()
-            result = self.func(*args, **kwargs)
-            stop = time.perf_counter()
-            print(f"Total execution time: {self._delta(start, stop)}")
-            return result
-        else:
-            self.func = args[0]
-            functools.update_wrapper(self, self.func)
-            return self
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> tuple[R, float, str]:
+        start = time.perf_counter()
+        result = self.func(*args, **kwargs)
+        stop = time.perf_counter()
+        delta, fmt = self._delta(start, stop)
+        return result, delta, fmt
 
     @staticmethod
-    def _delta(start: float, stop: float) -> str:
+    def _delta(start: float, stop: float) -> tuple[float, str]:
         delta = stop - start
         mag, fmt = min(
             [(1, 's'), (1e-3, 'ms'), (1e-6, 'μs'), (1e-9, 'ns'), (1e-12, 'ps')],
             key=lambda x: abs(math.log10(x[0]) - math.log10(delta)),
         )
         delta *= 1 / mag
-        return f"{delta:.3f} {fmt}"
+        return round(delta, 3), fmt
+
+
+def print_help(ns: dict[str, FunctionType], choices: dict[int, str]):
+    from textwrap import wrap
+    from shutil import get_terminal_size
+
+    columns = get_terminal_size().columns
+    print("runs a demo function\n")
+    print("options:")
+    indent = max(map(len, (f"\t{k}".expandtabs() for k in choices.values())))
+    print(f"{'\t-h, --help': <{indent}}\t\tprint this message and exit")
+    for idx, k in choices.items():
+        head = f"\t{idx}, {k}"
+        desc = '\n'.join(
+            wrap(ns[k].__doc__ or '', columns, initial_indent='\t\t', subsequent_indent='\t\t')
+        )
+        print(f"{head: <{indent}}{desc}")
+    print()
 
 
 def main():
-    demo_globals = dict(globals())
-    demo_globals.pop('main')
-    from inspect import getargs
+    ns: dict[str, FunctionType] = vars(DEMO_FUNCS)
+    choices = dict(enumerate(sorted(ns)))
 
-    global_func_enum = dict(
-        enumerate(
-            sorted(
-                k
-                for k, v in demo_globals.items()
-                if isinstance(v, FunctionType) and not v.__name__.startswith('_')
-            )
-        )
-    )
-    safe_funcs = {-1: exit}
-    choices = [f'[{x[0]}]: {x[1].name}' for x in safe_funcs.items()]
-    names = []
-    for k, v in global_func_enum.items():
-        if not any(getargs(demo_globals[v].__code__)):
-            if safe_funcs.get(k - 1) is None:
-                k_val = list(safe_funcs).pop() + 1
-            else:
-                k_val = k
-            safe_funcs[k_val] = globals()[v]
-            choices.append(f"[{k_val}]: {v}")
-            names.append(v)
+    def get_choice(__s: str):
+        if __s.isdigit() and int(__s) in choices.keys():
+            return ns[choices[int(__s)]]
+        elif __s.casefold() in ns.keys():
+            return ns[__s.casefold()]
+        raise KeyError(__s)
 
-    def _check_user_input(user_key: str):
-        if user_key.strip('-').isdigit():
-            if (k := int(user_key)) in safe_funcs:
-                return k
-        if (s := user_key.strip().replace(' ', '_').casefold()) in names:
-            return next(i for i, v in enumerate(names) if v == s)
-        return
-
-    selection = None
+    choice: FunctionType | None = None
     if len(sys.argv) > 1:
-        key = sys.argv[1]
-        if key.casefold() == '-h'.casefold():
-            docstrings = (
-                '{}:\n\t{}'.format(
-                    n,
-                    '\n'.join(
-                        ln for ln in (globals()[n].__doc__ or '...').splitlines() if ln
-                    ).strip(),
-                )
-                for n in names
-            )
-            print(
-                '\n'
-                + '\n\n'.join(['Run one of the following demo functions:', *docstrings])
-            )
+        arg = sys.argv[1]
+        if arg.casefold() in {'-h', '--help'}:
+            print_help(ns, choices)
             exit()
-        selection = _check_user_input(key)
-    if selection is None:
-        print('\n'.join(choices))
-    while selection not in safe_funcs:
-        try:
-            selection = _check_user_input(input(f"Select a demo function:\t"))
-        except ValueError:
-            pass
-        except KeyboardInterrupt:
-            exit()
-    try:
-        if selection == -1:
-            exit()
-        print(f"Running {names[selection]!r}...\n")
-    except KeyError:
-        pass
-    _time_wrapper(safe_funcs[selection])()
+        elif len(sys.argv) != 2:
+            print(f"unexpected arguments: " + f"{sys.argv[1:]}".strip('[]'), file=sys.stderr)
+            exit(1)
+        else:
+            try:
+                choice = get_choice(arg.strip())
+            except KeyError as e:
+                print(f"unexpected argument: {e}", file=sys.stderr)
+                exit(1)
+    else:
+        for idx, k in choices.items():
+            print(f"{idx} {k!r}")
+        while True:
+            try:
+                from_user = input("select a demo function> ").strip()
+                if not from_user:
+                    continue
+                if from_user == 'exit':
+                    exit()
+                choice = get_choice(from_user)
+                break
+            except KeyError as e:
+                print(f"invalid option: {e}", file=sys.stderr)
+                time.sleep(0.1)
+            except KeyboardInterrupt:
+                print(f"\n{KeyboardInterrupt.__name__}", file=sys.stderr)
+                exit()
+    if choice is not None:
+        print(f"running {choice.__name__!r}...", end='\n\n')
+        _, delta, fmt = _time_wrapper(choice)()
+        print(f"\ntotal execution time: {delta} {fmt}")
 
 
 if __name__ == '__main__':

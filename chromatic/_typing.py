@@ -14,12 +14,13 @@ from typing import (
     Concatenate,
     Hashable,
     Iterable,
-    Literal,
+    Literal as L,
     NamedTuple,
     Optional,
     ParamSpec,
     Protocol,
     Sequence,
+    TYPE_CHECKING,
     Type,
     TypeAlias,
     TypeAliasType,
@@ -40,7 +41,8 @@ from PIL.ImageFont import FreeTypeFont
 from numpy import dtype, float64, generic, ndarray, number, uint8
 from numpy._typing import NDArray, _ArrayLike
 
-from chromatic.data import UserFont
+if TYPE_CHECKING:
+    from .data import UserFont
 
 _P = ParamSpec('_P')
 _T = TypeVar('_T')
@@ -48,15 +50,11 @@ _T_co = TypeVar('_T_co', covariant=True)
 _T_contra = TypeVar('_T_contra', contravariant=True)
 _AnyNumber_co = TypeVar('_AnyNumber_co', number, Number, covariant=True)
 
-type ArrayReducerFunc[_SCT: generic] = Callable[
-    Concatenate[_ArrayLike[_SCT], _P], NDArray[_SCT]
-]
-type ShapedNDArray[_Shape: tuple[int, ...], _SCT: generic] = ndarray[
-    _Shape, dtype[_SCT]
-]
+type ArrayReducerFunc[_SCT: generic] = Callable[Concatenate[_ArrayLike[_SCT], _P], NDArray[_SCT]]
+type ShapedNDArray[_Shape: tuple[int, ...], _SCT = generic] = ndarray[_Shape, dtype[_SCT]]
 type MatrixLike[_SCT: generic] = ShapedNDArray[TupleOf2[int], _SCT]
 type SquareMatrix[_I: int, _SCT: generic] = ShapedNDArray[TupleOf2[_I], _SCT]
-type GlyphArray[_SCT: generic] = SquareMatrix[Literal[24], _SCT]
+type GlyphArray[_SCT: generic] = SquareMatrix[L[24], _SCT]
 type TupleOf2[_T] = tuple[_T, _T]
 type TupleOf3[_T] = tuple[_T, _T, _T]
 
@@ -68,29 +66,41 @@ GlyphBitmask: TypeAlias = GlyphArray[bool]
 Bitmask: TypeAlias = MatrixLike[bool]
 GreyscaleGlyphArray: TypeAlias = GlyphArray[float64]
 GreyscaleArray: TypeAlias = MatrixLike[float64]
-RGBArray: TypeAlias = ShapedNDArray[tuple[int, int, Literal[3]], uint8]
-RGBPixel: TypeAlias = ShapedNDArray[tuple[Literal[3]], uint8]
+RGBArray: TypeAlias = ShapedNDArray[tuple[int, int, L[3]], uint8]
+RGBPixel: TypeAlias = ShapedNDArray[tuple[L[3]], uint8]
 
 RGBImageLike: TypeAlias = Image | RGBArray
-RGBVectorLike: TypeAlias = Int3Tuple | IntSequence | RGBPixel
-ColorDictKeys = Literal['fg', 'bg']
-Ansi4BitAlias = Literal['4b']
-Ansi8BitAlias = Literal['8b']
-Ansi24BitAlias = Literal['24b']
+RGBVectorLike: TypeAlias = IntSequence | RGBPixel
+ColorDictKeys = L['fg', 'bg']
+Ansi4BitAlias = L['4b']
+Ansi8BitAlias = L['8b']
+Ansi24BitAlias = L['24b']
 AnsiColorAlias = Ansi4BitAlias | Ansi8BitAlias | Ansi24BitAlias
-FontArgType: TypeAlias = FreeTypeFont | UserFont | str | int
+FontArgType: TypeAlias = 'FreeTypeFont | UserFont | str'
+
+
+def eval_annotation(annotation: str, **kwargs) -> Any:
+    globals_ = kwargs.get('globals', {}) | globals()
+    locals_ = kwargs.get('locals', {})
+    try:
+        return subtype(eval(annotation, globals_.copy(), locals_.copy()))
+    except NameError as e:
+        try:
+            import typing
+
+            globals_[e.name] = getattr(typing, e.name)
+            return eval_annotation(annotation, globals=globals_, locals=locals_)
+        except AttributeError:
+            pass
+        raise
 
 
 def type_error_msg(err_obj, *expected, context: str = '', obj_repr=False):
     n_expected = len(expected)
-    name_slots = ['{%d.__qualname__!r}' % n for n in range(n_expected)]
-    if name_slots and n_expected > 1:
+    name_slots = ["{%d.__name__!r}" % n for n in range(n_expected)]
+    if n_expected > 1:
         name_slots[-1] = f"or {name_slots[-1]}"
-    names = (
-        (', ' if n_expected > 2 else ' ')
-        .join([context.strip()] + name_slots)
-        .format(*expected)
-    )
+    names = (', ' if n_expected > 2 else ' ').join([context.strip(), *name_slots]).format(*expected)
     if not obj_repr:
         if not isinstance(err_obj, type):
             err_obj = type(err_obj)
@@ -108,14 +118,11 @@ def is_matching_type(value, typ):
     origin, args = deconstruct_type(typ)
     if origin is Union:
         return any(is_matching_type(value, arg) for arg in args)
-    elif origin is Literal:
+    elif origin is L:
         return value in args
     elif isinstance(typ, TypeVar):
         if typ.__constraints__:
-            return any(
-                is_matching_type(value, constraint)
-                for constraint in typ.__constraints__
-            )
+            return any(is_matching_type(value, constraint) for constraint in typ.__constraints__)
         else:
             return True
     elif origin is type:
@@ -173,9 +180,7 @@ def is_matching_typed_dict(__d: dict, typed_dict: type[dict]) -> tuple[bool, str
         field = __d.get(name)
         if field is None or is_matching_type(field, typ):
             continue
-        return False, type_error_msg(
-            field, typ, context=f'keyword argument {name!r} of type'
-        )
+        return False, type_error_msg(field, typ, context=f'keyword argument {name!r} of type')
     return True, ''
 
 
@@ -201,20 +206,20 @@ def unionize(__iterable: Iterable[SupportsUnion[_T_contra, _T_co]]) -> _T_co:
 
 _GenericAlias = type(Type[...]) | types.GenericAlias
 _UnionGenericType = type(Union[..., None])
-_LiteralGenericType = type(Literal[''])
+_LiteralGenericType = type(L[''])
 _CallableGenericType = type(Callable[[], ...]) | type(ABC_Callable[[], ...])
 _CallableType = type(Callable) | ABC_Callable
 
 
 class _BoundedDict[_KT, _VT](OrderedDict[_KT, _VT]):
+    """Bounded OrderedDict, mimics FIFO behavior of `functools.lru_cache`"""
 
     def __init__(self, *, maxsize: Optional[int] = 128):
-        """Bounded OrderedDict, mimics FIFO behavior of `functools.lru_cache`"""
         super().__init__()
         if maxsize is not None:
             maxsize = max(maxsize, 0)
 
-            @wraps(self.__setitem__)
+            @wraps(_BoundedDict.__setitem__)
             def _fifo(_, key, value):
                 if maxsize <= len(self):
                     self.popitem(last=True)
@@ -226,9 +231,9 @@ class _BoundedDict[_KT, _VT](OrderedDict[_KT, _VT]):
 
 
 _SUBTYPE_CACHE: _BoundedDict[int, ...] = _BoundedDict()
-_ATTR_GETTERS: _BoundedDict[
-    ..., tuple[Callable[[Iterable], NamedTuple], op.attrgetter]
-] = _BoundedDict()
+_ATTR_GETTERS: _BoundedDict[..., tuple[Callable[[Iterable], NamedTuple], op.attrgetter]] = (
+    _BoundedDict()
+)
 
 
 def _unique_attrs(obj) -> Optional['NamedTuple']:
@@ -273,8 +278,7 @@ def _sort_attrs(obj, tp_name, attr_names):
     try:
         sig = inspect.signature(type(obj))
         indices = (
-            dict.fromkeys(field_names, inf)
-            | {p: i for i, p in enumerate(sig.parameters)}
+            dict.fromkeys(field_names, inf) | {p: i for i, p in enumerate(sig.parameters)}
         ).values()
         for names in (attr_names, field_names):
             names.sort(key=dict(zip(names, indices)).__getitem__)
@@ -296,9 +300,7 @@ def _sort_attrs(obj, tp_name, attr_names):
                     while sig_start not in line:
                         line = next(lines)
                     _, _, params = line.partition(sig_start)
-                    params, _, _ = (
-                        s.translate(no_square_parens) for s in params.partition(')')
-                    )
+                    params, _, _ = (s.translate(no_square_parens) for s in params.partition(')'))
                     maybe_sigs.add(params)
                 except StopIteration:
                     break
@@ -306,20 +308,15 @@ def _sort_attrs(obj, tp_name, attr_names):
     if maybe_sigs:
         if len(maybe_sigs) > 1:
             sig = max(
-                maybe_sigs,
-                key=lambda s: sum(1 for sub in s.split(', ') if sub in field_names),
+                maybe_sigs, key=lambda s: sum(1 for sub in s.split(', ') if sub in field_names)
             )
         else:
             sig = maybe_sigs.pop()
         positions = {x: i for i, x in enumerate(sig.split(', ')) if x}
         sorted_field_names = sorted(field_names, key=lambda k: positions.get(k, inf))
-        transitions = {
-            idx: sorted_field_names.index(x) for idx, x in enumerate(field_names)
-        }
+        transitions = {idx: sorted_field_names.index(x) for idx, x in enumerate(field_names)}
         field_names = sorted_field_names
-        attr_names = [
-            attr_names[k] for k in map(transitions.__getitem__, range(len(attr_names)))
-        ]
+        attr_names = [attr_names[k] for k in map(transitions.__getitem__, range(len(attr_names)))]
     for Names in (attr_names, field_names):
         name_attr = next((s for s in Names if s.strip('_') == 'name'), None)
         if name_attr is not None:
@@ -356,9 +353,7 @@ def subtype[_T](typ: _T) -> _T:
             args_list = list(args)
             if (
                 literals := [
-                    idx
-                    for idx, elem in enumerate(args)
-                    if isinstance(elem, _LiteralGenericType)
+                    idx for idx, elem in enumerate(args) if isinstance(elem, _LiteralGenericType)
                 ]
             ) and len(literals) > 1:
 
@@ -368,7 +363,7 @@ def subtype[_T](typ: _T) -> _T:
                     return getattr(value, '__args__', ())
 
                 start = args[literals.pop(0)]
-                args_list[args_list.index(start)] = Literal[
+                args_list[args_list.index(start)] = L[
                     *start.__args__,
                     *dict.fromkeys(arg for idx in literals for arg in _next_args(idx)),
                 ]

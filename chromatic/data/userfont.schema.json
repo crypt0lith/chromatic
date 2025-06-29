@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": {
+    "$ref": "#/definitions/userfont"
+  },
+  "definitions": {
+    "userfont": {
+      "type": "object",
+      "properties": {
+        "font": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "index": {
+          "type": "integer"
+        },
+        "encoding": {
+          "type": "string"
+        }
+      },
+      "required": ["font"],
+      "additionalProperties": false
+    }
+  }
+}

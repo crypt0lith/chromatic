@@ -1,119 +1,139 @@
 __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']
 
-from collections.abc import Sequence
-from types import FunctionType
-from typing import Callable, Iterator, Literal, TypeAlias, TypeVar, Union
+from types import MappingProxyType
+from typing import Any, Callable, ClassVar, Iterable, Literal, Mapping, Self, TypeAlias, overload
 
 from .core import Color, ColorStr, color_chain
 from .._typing import Int3Tuple
 
 _ColorLike: TypeAlias = int | Color | Int3Tuple
 
-# def display_ansi256_color_range() -> list[list[ColorStr]]: ...
 def named_color_idents() -> list[ColorStr]: ...
 
 class AnsiBack(ColorNamespace[color_chain]):
-    RESET: color_chain
+    RESET: ClassVar[color_chain]
 
     def __call__(self, bg: _ColorLike) -> color_chain: ...
 
 class AnsiFore(ColorNamespace[color_chain]):
-    RESET: color_chain
+    RESET: ClassVar[color_chain]
 
     def __call__(self, fg: _ColorLike) -> color_chain: ...
 
-class AnsiStyle[StyleStr: color_chain](DynamicNamespace[StyleStr]):
-    RESET: StyleStr
-    BOLD: StyleStr
-    FAINT: StyleStr
-    ITALICS: StyleStr
-    SINGLE_UNDERLINE: StyleStr
-    SLOW_BLINK: StyleStr
-    RAPID_BLINK: StyleStr
-    NEGATIVE: StyleStr
-    CONCEALED_CHARS: StyleStr
-    CROSSED_OUT: StyleStr
-    PRIMARY: StyleStr
-    FIRST_ALT: StyleStr
-    SECOND_ALT: StyleStr
-    THIRD_ALT: StyleStr
-    FOURTH_ALT: StyleStr
-    FIFTH_ALT: StyleStr
-    SIXTH_ALT: StyleStr
-    SEVENTH_ALT: StyleStr
-    EIGHTH_ALT: StyleStr
-    NINTH_ALT: StyleStr
-    GOTHIC: StyleStr
-    DOUBLE_UNDERLINE: StyleStr
-    RESET_BOLD_AND_FAINT: StyleStr
-    RESET_ITALIC_AND_GOTHIC: StyleStr
-    RESET_UNDERLINES: StyleStr
-    RESET_BLINKING: StyleStr
-    POSITIVE: StyleStr
-    REVEALED_CHARS: StyleStr
-    RESET_CROSSED_OUT: StyleStr
-    BLACK_FG: StyleStr
-    RED_FG: StyleStr
-    GREEN_FG: StyleStr
-    YELLOW_FG: StyleStr
-    BLUE_FG: StyleStr
-    MAGENTA_FG: StyleStr
-    CYAN_FG: StyleStr
-    WHITE_FG: StyleStr
-    ANSI_256_SET_FG: StyleStr
-    DEFAULT_FG_COLOR: StyleStr
-    BLACK_BG: StyleStr
-    RED_BG: StyleStr
-    GREEN_BG: StyleStr
-    YELLOW_BG: StyleStr
-    BLUE_BG: StyleStr
-    MAGENTA_BG: StyleStr
-    CYAN_BG: StyleStr
-    WHITE_BG: StyleStr
-    ANSI_256_SET_BG: StyleStr
-    DEFAULT_BG_COLOR: StyleStr
-    FRAMED: StyleStr
-    ENCIRCLED: StyleStr
-    OVERLINED: StyleStr
-    NOT_FRAMED_OR_CIRCLED: StyleStr
-    IDEOGRAM_UNDER_OR_RIGHT: StyleStr
-    IDEOGRAM_2UNDER_OR_2RIGHT: StyleStr
-    IDEOGRAM_OVER_OR_LEFT: StyleStr
-    IDEOGRAM_2OVER_OR_2LEFT: StyleStr
-    CANCEL: StyleStr
-    BLACK_BRIGHT_FG: StyleStr
-    RED_BRIGHT_FG: StyleStr
-    GREEN_BRIGHT_FG: StyleStr
-    YELLOW_BRIGHT_FG: StyleStr
-    BLUE_BRIGHT_FG: StyleStr
-    MAGENTA_BRIGHT_FG: StyleStr
-    CYAN_BRIGHT_FG: StyleStr
-    WHITE_BRIGHT_FG: StyleStr
-    BLACK_BRIGHT_BG: StyleStr
-    RED_BRIGHT_BG: StyleStr
-    GREEN_BRIGHT_BG: StyleStr
-    YELLOW_BRIGHT_BG: StyleStr
-    BLUE_BRIGHT_BG: StyleStr
-    MAGENTA_BRIGHT_BG: StyleStr
-    CYAN_BRIGHT_BG: StyleStr
-    WHITE_BRIGHT_BG: StyleStr
+class AnsiStyle(DynamicNamespace[color_chain]):
+    RESET: ClassVar[color_chain]
+    BOLD: ClassVar[color_chain]
+    FAINT: ClassVar[color_chain]
+    ITALICS: ClassVar[color_chain]
+    SINGLE_UNDERLINE: ClassVar[color_chain]
+    SLOW_BLINK: ClassVar[color_chain]
+    RAPID_BLINK: ClassVar[color_chain]
+    NEGATIVE: ClassVar[color_chain]
+    CONCEALED_CHARS: ClassVar[color_chain]
+    CROSSED_OUT: ClassVar[color_chain]
+    PRIMARY: ClassVar[color_chain]
+    FIRST_ALT: ClassVar[color_chain]
+    SECOND_ALT: ClassVar[color_chain]
+    THIRD_ALT: ClassVar[color_chain]
+    FOURTH_ALT: ClassVar[color_chain]
+    FIFTH_ALT: ClassVar[color_chain]
+    SIXTH_ALT: ClassVar[color_chain]
+    SEVENTH_ALT: ClassVar[color_chain]
+    EIGHTH_ALT: ClassVar[color_chain]
+    NINTH_ALT: ClassVar[color_chain]
+    GOTHIC: ClassVar[color_chain]
+    DOUBLE_UNDERLINE: ClassVar[color_chain]
+    RESET_BOLD_AND_FAINT: ClassVar[color_chain]
+    RESET_ITALIC_AND_GOTHIC: ClassVar[color_chain]
+    RESET_UNDERLINES: ClassVar[color_chain]
+    RESET_BLINKING: ClassVar[color_chain]
+    POSITIVE: ClassVar[color_chain]
+    REVEALED_CHARS: ClassVar[color_chain]
+    RESET_CROSSED_OUT: ClassVar[color_chain]
+    BLACK_FG: ClassVar[color_chain]
+    RED_FG: ClassVar[color_chain]
+    GREEN_FG: ClassVar[color_chain]
+    YELLOW_FG: ClassVar[color_chain]
+    BLUE_FG: ClassVar[color_chain]
+    MAGENTA_FG: ClassVar[color_chain]
+    CYAN_FG: ClassVar[color_chain]
+    WHITE_FG: ClassVar[color_chain]
+    DEFAULT_FG_COLOR: ClassVar[color_chain]
+    BLACK_BG: ClassVar[color_chain]
+    RED_BG: ClassVar[color_chain]
+    GREEN_BG: ClassVar[color_chain]
+    YELLOW_BG: ClassVar[color_chain]
+    BLUE_BG: ClassVar[color_chain]
+    MAGENTA_BG: ClassVar[color_chain]
+    CYAN_BG: ClassVar[color_chain]
+    WHITE_BG: ClassVar[color_chain]
+    DEFAULT_BG_COLOR: ClassVar[color_chain]
+    FRAMED: ClassVar[color_chain]
+    ENCIRCLED: ClassVar[color_chain]
+    OVERLINED: ClassVar[color_chain]
+    NOT_FRAMED_OR_CIRCLED: ClassVar[color_chain]
+    IDEOGRAM_UNDER_OR_RIGHT: ClassVar[color_chain]
+    IDEOGRAM_2UNDER_OR_2RIGHT: ClassVar[color_chain]
+    IDEOGRAM_OVER_OR_LEFT: ClassVar[color_chain]
+    IDEOGRAM_2OVER_OR_2LEFT: ClassVar[color_chain]
+    CANCEL: ClassVar[color_chain]
+    BLACK_BRIGHT_FG: ClassVar[color_chain]
+    RED_BRIGHT_FG: ClassVar[color_chain]
+    GREEN_BRIGHT_FG: ClassVar[color_chain]
+    YELLOW_BRIGHT_FG: ClassVar[color_chain]
+    BLUE_BRIGHT_FG: ClassVar[color_chain]
+    MAGENTA_BRIGHT_FG: ClassVar[color_chain]
+    CYAN_BRIGHT_FG: ClassVar[color_chain]
+    WHITE_BRIGHT_FG: ClassVar[color_chain]
+    BLACK_BRIGHT_BG: ClassVar[color_chain]
+    RED_BRIGHT_BG: ClassVar[color_chain]
+    GREEN_BRIGHT_BG: ClassVar[color_chain]
+    YELLOW_BRIGHT_BG: ClassVar[color_chain]
+    BLUE_BRIGHT_BG: ClassVar[color_chain]
+    MAGENTA_BRIGHT_BG: ClassVar[color_chain]
+    CYAN_BRIGHT_BG: ClassVar[color_chain]
+    WHITE_BRIGHT_BG: ClassVar[color_chain]
 
 class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
-    def as_dict(self) -> dict[str, _VT]: ...
-    def __init__[_KT](self, **kwargs: dict[_KT, _VT]) -> None: ...
-    def __init_subclass__(cls, **kwargs) -> DynamicNamespace[_VT]: ...
-    def __iter__(self) -> Iterator[_VT]: ...
-    def __new__(cls, *args, **kwargs) -> DynamicNamespace[_VT]: ...
-    def __setattr__(self, name, value) -> None: ...
-
-    __members__: list[_VT]
+    @classmethod
+    def asdict(cls) -> dict[str, _VT]: ...
 
 class DynamicNSMeta[_VT](type):
-    def __new__(
-        mcls, clsname: str, bases: tuple[type, ...], mapping: dict[str, ...], **kwargs
-    ) -> DynamicNSMeta[_VT]: ...
+    __members__: tuple[str, ...]
 
-class ColorNamespace[NamedColor: Color](DynamicNamespace[NamedColor]):
+    @classmethod
+    def __class_getitem__[_T](mcls: _T, _) -> _T: ...
+    @classmethod
+    def __prepare__(
+        mcls, clsname: str, bases: tuple[type, ...], /, **kwds
+    ) -> Mapping[str, object]: ...
+    @overload
+    def __new__(
+        mcls: type[Self], clsname: str, bases: tuple[type, ...], namespace: dict[str, ...], /
+    ) -> Self: ...
+    @overload
+    def __new__(
+        mcls: type[Self],
+        clsname: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, ...],
+        /,
+        *,
+        iterable: Iterable[_VT],
+    ) -> Self: ...
+    @overload
+    def __new__[_T](
+        mcls: type[Self],
+        clsname: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, ...],
+        /,
+        *,
+        member_type: Callable[[_T], _VT],
+    ) -> Self: ...
+    def asdict(cls) -> dict[str, _VT]: ...
+
+class ColorNamespace[NamedColor = Color](DynamicNamespace[NamedColor]):
     BLACK: NamedColor
     DIM_GREY: NamedColor
     GREY: NamedColor
@@ -122,186 +142,145 @@ class ColorNamespace[NamedColor: Color](DynamicNamespace[NamedColor]):
     LIGHT_GREY: NamedColor
     WHITE_SMOKE: NamedColor
     WHITE: NamedColor
-    ROSY_BROWN: NamedColor
-    INDIAN_RED: NamedColor
-    BROWN: NamedColor
-    FIREBRICK: NamedColor
-    LIGHT_CORAL: NamedColor
     MAROON: NamedColor
     DARK_RED: NamedColor
     RED: NamedColor
-    SNOW: NamedColor
+    FIREBRICK: NamedColor
+    BROWN: NamedColor
+    INDIAN_RED: NamedColor
+    LIGHT_CORAL: NamedColor
+    ROSY_BROWN: NamedColor
     MISTY_ROSE: NamedColor
-    SALMON: NamedColor
+    SNOW: NamedColor
+    SIENNA: NamedColor
+    ORANGE_RED: NamedColor
     TOMATO: NamedColor
     BURNT_SIENNA: NamedColor
-    DARK_SALMON: NamedColor
     CORAL: NamedColor
-    ORANGE_RED: NamedColor
+    SALMON: NamedColor
+    DARK_SALMON: NamedColor
     LIGHT_SALMON: NamedColor
-    SIENNA: NamedColor
     SEASHELL: NamedColor
-    CHOCOLATE: NamedColor
     SADDLE_BROWN: NamedColor
+    CHOCOLATE: NamedColor
+    PERU: NamedColor
     SANDY_BROWN: NamedColor
     PEACH_PUFF: NamedColor
-    PERU: NamedColor
     LINEN: NamedColor
-    BISQUE: NamedColor
     DARK_ORANGE: NamedColor
     BURLY_WOOD: NamedColor
+    BISQUE: NamedColor
     ANTIQUE_WHITE: NamedColor
+    ORANGE: NamedColor
     TAN: NamedColor
+    WHEAT: NamedColor
     NAVAJO_WHITE: NamedColor
+    MOCCASIN: NamedColor
     BLANCHED_ALMOND: NamedColor
     PAPAYA_WHIP: NamedColor
-    MOCCASIN: NamedColor
-    ORANGE: NamedColor
-    WHEAT: NamedColor
     OLD_LACE: NamedColor
     FLORAL_WHITE: NamedColor
     DARK_GOLDENROD: NamedColor
     GOLDENROD: NamedColor
     CORNSILK: NamedColor
+    DARK_KHAKI: NamedColor
     GOLD: NamedColor
-    LEMON_CHIFFON: NamedColor
     KHAKI: NamedColor
     PALE_GOLDENROD: NamedColor
-    DARK_KHAKI: NamedColor
     BEIGE: NamedColor
     LIGHT_GOLDENROD_YELLOW: NamedColor
+    LEMON_CHIFFON: NamedColor
     OLIVE: NamedColor
     YELLOW: NamedColor
     LIGHT_YELLOW: NamedColor
     IVORY: NamedColor
-    OLIVE_DRAB: NamedColor
-    YELLOW_GREEN: NamedColor
-    DARK_OLIVE_GREEN: NamedColor
-    GREEN_YELLOW: NamedColor
-    CHARTREUSE: NamedColor
-    LAWN_GREEN: NamedColor
-    DARK_SEA_GREEN: NamedColor
-    FOREST_GREEN: NamedColor
-    LIME_GREEN: NamedColor
-    LIGHT_GREEN: NamedColor
-    PALE_GREEN: NamedColor
     DARK_GREEN: NamedColor
     GREEN: NamedColor
+    DARK_OLIVE_GREEN: NamedColor
+    FOREST_GREEN: NamedColor
+    OLIVE_DRAB: NamedColor
+    LIME_GREEN: NamedColor
+    DARK_SEA_GREEN: NamedColor
     LIME: NamedColor
+    YELLOW_GREEN: NamedColor
+    LAWN_GREEN: NamedColor
+    CHARTREUSE: NamedColor
+    LIGHT_GREEN: NamedColor
+    GREEN_YELLOW: NamedColor
+    PALE_GREEN: NamedColor
     HONEYDEW: NamedColor
     SEA_GREEN: NamedColor
     MEDIUM_SEA_GREEN: NamedColor
     SPRING_GREEN: NamedColor
     MINT_CREAM: NamedColor
-    MEDIUM_SPRING_GREEN: NamedColor
-    MEDIUM_AQUAMARINE: NamedColor
-    AQUAMARINE: NamedColor
-    TURQUOISE: NamedColor
-    LIGHT_SEA_GREEN: NamedColor
-    MEDIUM_TURQUOISE: NamedColor
     DARK_SLATE_GREY: NamedColor
-    PALE_TURQUOISE: NamedColor
     TEAL: NamedColor
     DARK_CYAN: NamedColor
+    LIGHT_SEA_GREEN: NamedColor
+    MEDIUM_TURQUOISE: NamedColor
+    MEDIUM_AQUAMARINE: NamedColor
+    TURQUOISE: NamedColor
+    MEDIUM_SPRING_GREEN: NamedColor
     CYAN: NamedColor
+    PALE_TURQUOISE: NamedColor
+    AQUAMARINE: NamedColor
     LIGHT_CYAN: NamedColor
     AZURE: NamedColor
-    DARK_TURQUOISE: NamedColor
+    STEEL_BLUE: NamedColor
     CADET_BLUE: NamedColor
-    POWDER_BLUE: NamedColor
-    LIGHT_BLUE: NamedColor
     DEEP_SKY_BLUE: NamedColor
+    DARK_TURQUOISE: NamedColor
     SKY_BLUE: NamedColor
     LIGHT_SKY_BLUE: NamedColor
-    STEEL_BLUE: NamedColor
+    LIGHT_BLUE: NamedColor
+    POWDER_BLUE: NamedColor
     ALICE_BLUE: NamedColor
-    DODGER_BLUE: NamedColor
-    SLATE_GREY: NamedColor
-    LIGHT_SLATE_GREY: NamedColor
-    LIGHT_STEEL_BLUE: NamedColor
-    CORNFLOWER_BLUE: NamedColor
-    ROYAL_BLUE: NamedColor
     MIDNIGHT_BLUE: NamedColor
+    ROYAL_BLUE: NamedColor
+    SLATE_GREY: NamedColor
+    DODGER_BLUE: NamedColor
+    LIGHT_SLATE_GREY: NamedColor
+    CORNFLOWER_BLUE: NamedColor
+    LIGHT_STEEL_BLUE: NamedColor
     LAVENDER: NamedColor
     NAVY: NamedColor
     DARK_BLUE: NamedColor
     MEDIUM_BLUE: NamedColor
     BLUE: NamedColor
     GHOST_WHITE: NamedColor
-    SLATE_BLUE: NamedColor
+    INDIGO: NamedColor
+    DARK_VIOLET: NamedColor
     DARK_SLATE_BLUE: NamedColor
-    MEDIUM_SLATE_BLUE: NamedColor
-    MEDIUM_PURPLE: NamedColor
     REBECCA_PURPLE: NamedColor
     BLUE_VIOLET: NamedColor
-    INDIGO: NamedColor
     DARK_ORCHID: NamedColor
-    DARK_VIOLET: NamedColor
+    SLATE_BLUE: NamedColor
     MEDIUM_ORCHID: NamedColor
+    MEDIUM_SLATE_BLUE: NamedColor
+    MEDIUM_PURPLE: NamedColor
     THISTLE: NamedColor
-    PLUM: NamedColor
-    VIOLET: NamedColor
     PURPLE: NamedColor
     DARK_MAGENTA: NamedColor
-    FUCHSIA: NamedColor
-    ORCHID: NamedColor
     MEDIUM_VIOLET_RED: NamedColor
+    FUCHSIA: NamedColor
     DEEP_PINK: NamedColor
+    ORCHID: NamedColor
     HOT_PINK: NamedColor
+    VIOLET: NamedColor
+    PLUM: NamedColor
     LAVENDER_BLUSH: NamedColor
-    PALE_VIOLET_RED: NamedColor
     CRIMSON: NamedColor
-    PINK: NamedColor
+    PALE_VIOLET_RED: NamedColor
     LIGHT_PINK: NamedColor
+    PINK: NamedColor
 
-# fmt: off
-_ColorName = TypeVar(
-    '_ColorName',
-    bound=Literal[
-        'ALICE_BLUE', 'ANTIQUE_WHITE', 'AQUAMARINE', 'AZURE', 'BEIGE', 'BISQUE', 'BLACK',
-        'BLANCHED_ALMOND', 'BLUE', 'BLUE_VIOLET', 'BROWN', 'BURLY_WOOD', 'BURNT_SIENNA',
-        'CADET_BLUE', 'CHARTREUSE', 'CHOCOLATE', 'CORAL', 'CORNFLOWER_BLUE', 'CORNSILK',
-        'CRIMSON', 'CYAN', 'DARK_BLUE', 'DARK_CYAN', 'DARK_GOLDENROD', 'DARK_GREEN', 'DARK_GREY',
-        'DARK_KHAKI', 'DARK_MAGENTA', 'DARK_OLIVE_GREEN', 'DARK_ORANGE', 'DARK_ORCHID',
-        'DARK_RED', 'DARK_SALMON', 'DARK_SEA_GREEN', 'DARK_SLATE_BLUE', 'DARK_SLATE_GREY',
-        'DARK_TURQUOISE', 'DARK_VIOLET', 'DEEP_PINK', 'DEEP_SKY_BLUE', 'DIM_GREY', 'DODGER_BLUE',
-        'FIREBRICK', 'FLORAL_WHITE', 'FOREST_GREEN', 'FUCHSIA', 'GHOST_WHITE', 'GOLD',
-        'GOLDENROD', 'GREEN', 'GREEN_YELLOW', 'GREY', 'HONEYDEW', 'HOT_PINK', 'INDIAN_RED',
-        'INDIGO', 'IVORY', 'KHAKI', 'LAVENDER', 'LAVENDER_BLUSH', 'LAWN_GREEN', 'LEMON_CHIFFON',
-        'LIGHT_BLUE', 'LIGHT_CORAL', 'LIGHT_CYAN', 'LIGHT_GOLDENROD_YELLOW', 'LIGHT_GREEN',
-        'LIGHT_GREY', 'LIGHT_PINK', 'LIGHT_SALMON', 'LIGHT_SEA_GREEN', 'LIGHT_SKY_BLUE',
-        'LIGHT_SLATE_GREY', 'LIGHT_STEEL_BLUE', 'LIGHT_YELLOW', 'LIME', 'LIME_GREEN', 'LINEN',
-        'MAROON', 'MEDIUM_AQUAMARINE', 'MEDIUM_BLUE', 'MEDIUM_ORCHID', 'MEDIUM_PURPLE',
-        'MEDIUM_SEA_GREEN', 'MEDIUM_SLATE_BLUE', 'MEDIUM_SPRING_GREEN', 'MEDIUM_TURQUOISE',
-        'MEDIUM_VIOLET_RED', 'MIDNIGHT_BLUE', 'MINT_CREAM', 'MISTY_ROSE', 'MOCCASIN',
-        'NAVAJO_WHITE', 'NAVY', 'OLD_LACE', 'OLIVE', 'OLIVE_DRAB', 'ORANGE', 'ORANGE_RED',
-        'ORCHID', 'PALE_GOLDENROD', 'PALE_GREEN', 'PALE_TURQUOISE', 'PALE_VIOLET_RED',
-        'PAPAYA_WHIP', 'PEACH_PUFF', 'PERU', 'PINK', 'PLUM', 'POWDER_BLUE', 'PURPLE',
-        'REBECCA_PURPLE', 'RED', 'ROSY_BROWN', 'ROYAL_BLUE', 'SADDLE_BROWN', 'SALMON',
-        'SANDY_BROWN', 'SEASHELL', 'SEA_GREEN', 'SIENNA', 'SILVER', 'SKY_BLUE', 'SLATE_BLUE',
-        'SLATE_GREY', 'SNOW', 'SPRING_GREEN', 'STEEL_BLUE', 'TAN', 'TEAL', 'THISTLE', 'TOMATO',
-        'TURQUOISE', 'VIOLET', 'WHEAT', 'WHITE', 'WHITE_SMOKE', 'YELLOW', 'YELLOW_GREEN'
-    ]
-)
-_ColorName4Bit = TypeVar(
-    '_ColorName4Bit',
-    bound=Literal[
-        'BLACK', 'RED', 'GREEN', 'YELLOW', 'BLUE', 'MAGENTA', 'CYAN', 'GREY', 'DARK_GREY',
-        'BRIGHT_RED', 'BRIGHT_GREEN', 'BRIGHT_YELLOW', 'BRIGHT_BLUE', 'BRIGHT_MAGENTA',
-        'BRIGHT_CYAN', 'WHITE'
-    ]
-)
-# fmt: on
-named_color: Union[
-    dict[Literal['4b'], Callable[[_ColorName4Bit], Color]],
-    dict[Literal['24b'], Callable[[_ColorName], Color]],
-]
+named_color: MappingProxyType[tuple[Literal['4b', '24b'], str], Color]
 
-def rgb_dispatch[F: (
-    type,
-    FunctionType,
-)](__f: F, /, *, var_names: Sequence[str] = ()) -> F: ...
+@overload
+def rgb_dispatch[_F: Callable[..., Any]](__f: _F, /) -> _F: ...
+@overload
+def rgb_dispatch[_F: Callable[..., Any]](names: tuple[str, ...] = ()) -> Callable[[_F], _F]: ...
 
-Back = AnsiBack()
-Fore = AnsiFore()
-Style = AnsiStyle()
+Back: AnsiBack
+Fore: AnsiFore
+Style: AnsiStyle

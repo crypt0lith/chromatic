@@ -3,7 +3,7 @@ from typing import Callable, Iterable, Iterator, Literal, Sequence, SupportsInde
 
 import numpy as np
 
-from .colorconv import hex2rgb, hsl2rgb, rgb2hex, rgb2hsl
+from .colorconv import int2rgb, hsl2rgb, rgb2int, rgb2hsl
 from .core import Color
 from .._typing import Float3Tuple, Int3Tuple
 
@@ -54,10 +54,7 @@ def _init_gradient_color_vec(
         h_diff = min(abs_h, 360 - abs_h)
         dist = math.sqrt(h_diff**2 + (stop_s - start_s) ** 2 + (stop_l - start_l) ** 2)
         num_samples = max(int(dist / float(step)), 1)
-    color_vec = [
-        np.linspace(*bounds, num=num_samples, dtype=float)
-        for bounds in zip(start, stop)
-    ]
+    color_vec = [np.linspace(*bounds, num=num_samples, dtype=float) for bounds in zip(start, stop)]
     color_vec = list(zip(*color_vec))
     return color_vec
 
@@ -76,13 +73,10 @@ def hsl_gradient(
         step *= 10
     color_vec = _init_gradient_color_vec(num, start, step, stop)
     color_iter = iter(color_vec)
-    type_map: dict[type[Color | int], ...] = {
-        Color: lambda x: x.rgb,
-        int: lambda x: hex2rgb(x),
-    }
-    get_rgb_iter_idx: Callable[[Color | int, SupportsIndex], int] = (
-        lambda x, ix: rgb2hsl(type_map[type(x)](x))[ix]
-    )
+    type_map: dict[type[Color | int], ...] = {Color: lambda x: x.rgb, int: lambda x: int2rgb(x)}
+    get_rgb_iter_idx: Callable[[Color | int, SupportsIndex], int] = lambda x, ix: rgb2hsl(
+        type_map[type(x)](x)
+    )[ix]
     next_rgb_iter = None
     prev_output = None
     while ncycles > 0:
@@ -128,7 +122,7 @@ def rgb_luma_transform(
     if dtype is None:
         ret_type = tuple
     elif issubclass(dtype, int):
-        ret_type = lambda x: dtype(rgb2hex(x))
+        ret_type = lambda x: dtype(rgb2int(x))
     is_cycle = bool(cycle is not False)
     is_oscillator = cycle == 'wave'
     if is_oscillator:

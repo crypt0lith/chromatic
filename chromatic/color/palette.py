@@ -1,150 +1,103 @@
-from functools import lru_cache, update_wrapper, wraps
-from inspect import getfullargspec, getmodule, isbuiltin, signature
-from types import FunctionType, MappingProxyType
-from typing import (
-    Callable,
-    Iterator,
-    Sequence,
-    TYPE_CHECKING,
-    Union,
-    cast,
-    dataclass_transform,
-)
+__all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']
+
+from functools import lru_cache, update_wrapper
+from inspect import getfullargspec, isbuiltin, signature
+from typing import Iterable, Iterator, Mapping, Never, TYPE_CHECKING, Union, final
 
 from .colorconv import ANSI_4BIT_RGB
 from .core import Color, ColorStr, SgrParameter, color_chain
 from .._typing import Int3Tuple
 
-null = object()
+if TYPE_CHECKING:
+    from _typeshed import SupportsKeysAndGetItem
 
 
-class Member[_T]:
-
-    def __init__(self, name, clsname, offset):
-        self.name = name
-        self.clsname = clsname
-        self.offset = offset
-
-    def __get__(self, instance, owner) -> _T:
-        if instance is None:
-            return self
-        value = instance.__members__[self.offset]
-        if value is null:
-            raise AttributeError(self.name)
-        try:
-            value.name = self.name
-        except AttributeError:
-            pass
-        return value
-
-    def __set__(self, instance, value: _T):
-        instance.__members__[self.offset] = value
-
-    def __repr__(self):
-        return f"<{type(self).__name__} {self.name!r} of {self.clsname!r}>"
-
-
-@dataclass_transform()
 class DynamicNSMeta[_VT](type):
+    @classmethod
+    def __class_getitem__(mcls, _):
+        return mcls
 
-    def __new__(
-        mcls, clsname: str, bases: tuple[type, ...], mapping: dict[str, ...], **kwargs
-    ):
-        slot_names: dict[str, ...] = mapping.get('__annotations__', {})
-        member: Member[_VT]
-        for offset, name in enumerate(slot_names):
-            member = Member(name, clsname, offset)
-            mapping[name] = member
-        return type.__new__(mcls, clsname, bases, mapping, **kwargs)
+    @classmethod
+    def __prepare__(mcls, clsname, bases, /, **kwds):
+        return {'__members__': ()}
 
-
-class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
-    if TYPE_CHECKING:
-        __members__: list[_VT]
-
-    def __new__(cls, *args, **kwargs):
-        inst = super().__new__(cls)
-        if hasattr(cls, '__annotations__'):
-            slots = kwargs.pop(
-                'slots', list(filter(_check_if_ns_member(cls), cls.__annotations__))
+    def __new__(mcls, clsname, bases, namespace, /, **kwds):
+        namespace['__members__'] = tuple(
+            dict.fromkeys(
+                member for base in bases if isinstance(base, mcls) for member in base.__members__
             )
-            empty_slots = [null] * len(slots)
-            object.__setattr__(inst, '__members__', empty_slots)
-        return inst
-
-    def __init__[_KT](self, **kwargs: dict[_KT, _VT]):
-        for name, value in kwargs.items():
-            self.__setattr__(name, value)
-
-    def __init_subclass__(cls, **kwargs):
-        factory: Callable[[...], _VT] | FunctionType = kwargs.get('factory')
-        if DynamicNamespace in cls.__bases__ or not callable(factory):
-            return super().__new__(cls)
-        base: type[DynamicNamespace] = cast(
-            type[...],
-            next((typ for typ in cls.mro() if DynamicNamespace in typ.__bases__), null),
         )
-        if base is null:
-            raise TypeError(
-                f"{cls.__qualname__!r} does not have any base classes of "
-                f"type {DynamicNamespace.__qualname__!r}"
-            ) from None
-        d = dict(zip(base.__annotations__, map(factory, base().__members__)))
-        cls.__annotations__: dict[str, ...] = {k: type(v) for k, v in d.items()}
-        _new = cls.__new__
-        cls.__new__ = update_wrapper(
-            lambda *args, **kwds: _new(*args, **(kwds | dict(slots=d))), cls.__new__
-        )
-        cls.__init__ = update_wrapper(
-            lambda *args, **kwds: DynamicNamespace.__init__(*args, **(kwds | d)),
-            cls.__init__,
-        )
+        if kwds:
+            keys = kwds.keys()
+            if not keys <= {'iterable', 'member_type'}:
+                raise ValueError(f"unexpected keywords: {(keys - {'iterable', 'member_type'})}")
+            if keys == {'iterable', 'member_type'}:
+                raise ValueError("cannot use keywords 'iterable' with 'member_type'")
+            key, value = kwds.popitem()
+            if key == 'iterable':
+                ann = namespace.get('__annotations__', {})
+                member_names = set(namespace['__members__']).union(
+                    k for k, v in ann.items() if (k not in namespace and v is _Member)
+                )
+                namespace['__members__'] = tuple(
+                    sorted(member_names, key=(*ann, *namespace['__members__']).index)
+                )
+                iterable = value
+                if not isinstance(iterable, (Iterable, Mapping)):
+                    raise TypeError(
+                        "expected 'iterable' to be iterable object, "
+                        f"got {type(iterable).__name__!r} instead"
+                    )
+                elif isinstance(iterable, Mapping):
+                    if iterable.keys() != member_names:
+                        if member_names.isdisjoint(iterable):
+                            raise ValueError(
+                                "mapping contains unexpected keys: "
+                                + str(iterable.keys() - member_names)
+                            )
+                        raise ValueError
+                    namespace |= iterable
+                else:
+                    namespace.update(zip(namespace['__members__'], iterable, strict=True))
+            else:
+                assert key == 'member_type', f"expected key='member_type', got {key=}"
+                member_func = value
+                if not callable(member_func):
+                    raise ValueError(
+                        "expected 'member_type' to be type or callable object, "
+                        f"got {type(member_func).__name__!r} object instead"
+                    )
+                namespace.update(
+                    (
+                        member,
+                        member_func(
+                            namespace[member]
+                            if member in namespace
+                            else next(
+                                getattr(base, member)
+                                for base in bases
+                                if isinstance(base, mcls) and hasattr(base, member)
+                            )
+                        ),
+                    )
+                    for member in namespace['__members__']
+                )
 
-    def __setattr__(self, name, value):
-        cls = type(self)
-        if hasattr(cls, '__annotations__') and name not in cls.__annotations__:
-            raise AttributeError(
-                f'{cls.__name__!r} object has no attribute {name!r}'
-            ) from None
-        super().__setattr__(name, value)
+        return super().__new__(mcls, clsname, bases, namespace)
 
-    def as_dict(self):
-        return dict(zip(type(self).__annotations__, self.__members__))
+    def __init__(cls, clsname, bases, namespace, /, **__):
+        super().__init__(clsname, bases, namespace)
 
-    def __iter__(self):
-        return iter(self.__members__)
+    def asdict(cls):
+        return {member: getattr(cls, member) for member in cls.__members__}
 
 
-def _check_if_ns_member(cls: type) -> Callable[[str], bool]:
-    type_params = cls.__type_params__
-    if not type_params or len(type_params) != 1:
-        return lambda _: False
-    else:
-        anno_dict = cls.__annotations__
-        member_type = type_params[0]
-        return lambda x: member_type == anno_dict.get(x)
+class DynamicNamespace[_T](metaclass=DynamicNSMeta[_T]): ...
 
 
-def _ns_from_iter[_KT, _VT](
-    __iter: Iterator[_KT] | Callable[[], Iterator[_KT]], member_type: type[_VT] = object
-) -> Callable[[type[DynamicNamespace[_VT]]], type[DynamicNamespace[_VT]]]:
-    def decorator(cls: type[DynamicNamespace[_VT]]):
-        anno = cls.__annotations__
-        type_params = cls.__type_params__
-        m_iter = __iter() if callable(__iter) else iter(__iter)
-        members: Iterator[_KT] = (
-            m_iter
-            if (member_type is object or not isinstance(member_type, type))
-            else map(member_type, m_iter)
-        )
-        d = dict(zip((k for k, v in anno.items() if v in type_params), members))
-        cls.__init__ = update_wrapper(
-            lambda *args, **kwargs: cls.__base__.__init__(*args, **(kwargs | d)),
-            cls.__init__,
-        )
-        return cls
-
-    return decorator
+@final
+class _Member[_T]:
+    def __new__(cls: type[_T]) -> _T: ...
 
 
 def _gen_named_color_values() -> Iterator[int]:
@@ -168,264 +121,262 @@ def _gen_named_color_values() -> Iterator[int]:
     ]
 
 
-@_ns_from_iter(_gen_named_color_values, Color)
-class ColorNamespace[NamedColor: Color](DynamicNamespace[NamedColor]):
-    BLACK: NamedColor
-    DIM_GREY: NamedColor
-    GREY: NamedColor
-    DARK_GREY: NamedColor
-    SILVER: NamedColor
-    LIGHT_GREY: NamedColor
-    WHITE_SMOKE: NamedColor
-    WHITE: NamedColor
-    MAROON: NamedColor
-    DARK_RED: NamedColor
-    RED: NamedColor
-    FIREBRICK: NamedColor
-    BROWN: NamedColor
-    INDIAN_RED: NamedColor
-    LIGHT_CORAL: NamedColor
-    ROSY_BROWN: NamedColor
-    MISTY_ROSE: NamedColor
-    SNOW: NamedColor
-    SIENNA: NamedColor
-    ORANGE_RED: NamedColor
-    TOMATO: NamedColor
-    BURNT_SIENNA: NamedColor
-    CORAL: NamedColor
-    SALMON: NamedColor
-    DARK_SALMON: NamedColor
-    LIGHT_SALMON: NamedColor
-    SEASHELL: NamedColor
-    SADDLE_BROWN: NamedColor
-    CHOCOLATE: NamedColor
-    PERU: NamedColor
-    SANDY_BROWN: NamedColor
-    PEACH_PUFF: NamedColor
-    LINEN: NamedColor
-    DARK_ORANGE: NamedColor
-    BURLY_WOOD: NamedColor
-    BISQUE: NamedColor
-    ANTIQUE_WHITE: NamedColor
-    ORANGE: NamedColor
-    TAN: NamedColor
-    WHEAT: NamedColor
-    NAVAJO_WHITE: NamedColor
-    MOCCASIN: NamedColor
-    BLANCHED_ALMOND: NamedColor
-    PAPAYA_WHIP: NamedColor
-    OLD_LACE: NamedColor
-    FLORAL_WHITE: NamedColor
-    DARK_GOLDENROD: NamedColor
-    GOLDENROD: NamedColor
-    CORNSILK: NamedColor
-    DARK_KHAKI: NamedColor
-    GOLD: NamedColor
-    KHAKI: NamedColor
-    PALE_GOLDENROD: NamedColor
-    BEIGE: NamedColor
-    LIGHT_GOLDENROD_YELLOW: NamedColor
-    LEMON_CHIFFON: NamedColor
-    OLIVE: NamedColor
-    YELLOW: NamedColor
-    LIGHT_YELLOW: NamedColor
-    IVORY: NamedColor
-    DARK_GREEN: NamedColor
-    GREEN: NamedColor
-    DARK_OLIVE_GREEN: NamedColor
-    FOREST_GREEN: NamedColor
-    OLIVE_DRAB: NamedColor
-    LIME_GREEN: NamedColor
-    DARK_SEA_GREEN: NamedColor
-    LIME: NamedColor
-    YELLOW_GREEN: NamedColor
-    LAWN_GREEN: NamedColor
-    CHARTREUSE: NamedColor
-    LIGHT_GREEN: NamedColor
-    GREEN_YELLOW: NamedColor
-    PALE_GREEN: NamedColor
-    HONEYDEW: NamedColor
-    SEA_GREEN: NamedColor
-    MEDIUM_SEA_GREEN: NamedColor
-    SPRING_GREEN: NamedColor
-    MINT_CREAM: NamedColor
-    DARK_SLATE_GREY: NamedColor
-    TEAL: NamedColor
-    DARK_CYAN: NamedColor
-    LIGHT_SEA_GREEN: NamedColor
-    MEDIUM_TURQUOISE: NamedColor
-    MEDIUM_AQUAMARINE: NamedColor
-    TURQUOISE: NamedColor
-    MEDIUM_SPRING_GREEN: NamedColor
-    CYAN: NamedColor
-    PALE_TURQUOISE: NamedColor
-    AQUAMARINE: NamedColor
-    LIGHT_CYAN: NamedColor
-    AZURE: NamedColor
-    STEEL_BLUE: NamedColor
-    CADET_BLUE: NamedColor
-    DEEP_SKY_BLUE: NamedColor
-    DARK_TURQUOISE: NamedColor
-    SKY_BLUE: NamedColor
-    LIGHT_SKY_BLUE: NamedColor
-    LIGHT_BLUE: NamedColor
-    POWDER_BLUE: NamedColor
-    ALICE_BLUE: NamedColor
-    MIDNIGHT_BLUE: NamedColor
-    ROYAL_BLUE: NamedColor
-    SLATE_GREY: NamedColor
-    DODGER_BLUE: NamedColor
-    LIGHT_SLATE_GREY: NamedColor
-    CORNFLOWER_BLUE: NamedColor
-    LIGHT_STEEL_BLUE: NamedColor
-    LAVENDER: NamedColor
-    NAVY: NamedColor
-    DARK_BLUE: NamedColor
-    MEDIUM_BLUE: NamedColor
-    BLUE: NamedColor
-    GHOST_WHITE: NamedColor
-    INDIGO: NamedColor
-    DARK_VIOLET: NamedColor
-    DARK_SLATE_BLUE: NamedColor
-    REBECCA_PURPLE: NamedColor
-    BLUE_VIOLET: NamedColor
-    DARK_ORCHID: NamedColor
-    SLATE_BLUE: NamedColor
-    MEDIUM_ORCHID: NamedColor
-    MEDIUM_SLATE_BLUE: NamedColor
-    MEDIUM_PURPLE: NamedColor
-    THISTLE: NamedColor
-    PURPLE: NamedColor
-    DARK_MAGENTA: NamedColor
-    MEDIUM_VIOLET_RED: NamedColor
-    FUCHSIA: NamedColor
-    DEEP_PINK: NamedColor
-    ORCHID: NamedColor
-    HOT_PINK: NamedColor
-    VIOLET: NamedColor
-    PLUM: NamedColor
-    LAVENDER_BLUSH: NamedColor
-    CRIMSON: NamedColor
-    PALE_VIOLET_RED: NamedColor
-    LIGHT_PINK: NamedColor
-    PINK: NamedColor
+class ColorNamespace(DynamicNamespace[Color], iterable=map(Color, _gen_named_color_values())):
+    BLACK: _Member
+    DIM_GREY: _Member
+    GREY: _Member
+    DARK_GREY: _Member
+    SILVER: _Member
+    LIGHT_GREY: _Member
+    WHITE_SMOKE: _Member
+    WHITE: _Member
+    MAROON: _Member
+    DARK_RED: _Member
+    RED: _Member
+    FIREBRICK: _Member
+    BROWN: _Member
+    INDIAN_RED: _Member
+    LIGHT_CORAL: _Member
+    ROSY_BROWN: _Member
+    MISTY_ROSE: _Member
+    SNOW: _Member
+    SIENNA: _Member
+    ORANGE_RED: _Member
+    TOMATO: _Member
+    BURNT_SIENNA: _Member
+    CORAL: _Member
+    SALMON: _Member
+    DARK_SALMON: _Member
+    LIGHT_SALMON: _Member
+    SEASHELL: _Member
+    SADDLE_BROWN: _Member
+    CHOCOLATE: _Member
+    PERU: _Member
+    SANDY_BROWN: _Member
+    PEACH_PUFF: _Member
+    LINEN: _Member
+    DARK_ORANGE: _Member
+    BURLY_WOOD: _Member
+    BISQUE: _Member
+    ANTIQUE_WHITE: _Member
+    ORANGE: _Member
+    TAN: _Member
+    WHEAT: _Member
+    NAVAJO_WHITE: _Member
+    MOCCASIN: _Member
+    BLANCHED_ALMOND: _Member
+    PAPAYA_WHIP: _Member
+    OLD_LACE: _Member
+    FLORAL_WHITE: _Member
+    DARK_GOLDENROD: _Member
+    GOLDENROD: _Member
+    CORNSILK: _Member
+    DARK_KHAKI: _Member
+    GOLD: _Member
+    KHAKI: _Member
+    PALE_GOLDENROD: _Member
+    BEIGE: _Member
+    LIGHT_GOLDENROD_YELLOW: _Member
+    LEMON_CHIFFON: _Member
+    OLIVE: _Member
+    YELLOW: _Member
+    LIGHT_YELLOW: _Member
+    IVORY: _Member
+    DARK_GREEN: _Member
+    GREEN: _Member
+    DARK_OLIVE_GREEN: _Member
+    FOREST_GREEN: _Member
+    OLIVE_DRAB: _Member
+    LIME_GREEN: _Member
+    DARK_SEA_GREEN: _Member
+    LIME: _Member
+    YELLOW_GREEN: _Member
+    LAWN_GREEN: _Member
+    CHARTREUSE: _Member
+    LIGHT_GREEN: _Member
+    GREEN_YELLOW: _Member
+    PALE_GREEN: _Member
+    HONEYDEW: _Member
+    SEA_GREEN: _Member
+    MEDIUM_SEA_GREEN: _Member
+    SPRING_GREEN: _Member
+    MINT_CREAM: _Member
+    DARK_SLATE_GREY: _Member
+    TEAL: _Member
+    DARK_CYAN: _Member
+    LIGHT_SEA_GREEN: _Member
+    MEDIUM_TURQUOISE: _Member
+    MEDIUM_AQUAMARINE: _Member
+    TURQUOISE: _Member
+    MEDIUM_SPRING_GREEN: _Member
+    CYAN: _Member
+    PALE_TURQUOISE: _Member
+    AQUAMARINE: _Member
+    LIGHT_CYAN: _Member
+    AZURE: _Member
+    STEEL_BLUE: _Member
+    CADET_BLUE: _Member
+    DEEP_SKY_BLUE: _Member
+    DARK_TURQUOISE: _Member
+    SKY_BLUE: _Member
+    LIGHT_SKY_BLUE: _Member
+    LIGHT_BLUE: _Member
+    POWDER_BLUE: _Member
+    ALICE_BLUE: _Member
+    MIDNIGHT_BLUE: _Member
+    ROYAL_BLUE: _Member
+    SLATE_GREY: _Member
+    DODGER_BLUE: _Member
+    LIGHT_SLATE_GREY: _Member
+    CORNFLOWER_BLUE: _Member
+    LIGHT_STEEL_BLUE: _Member
+    LAVENDER: _Member
+    NAVY: _Member
+    DARK_BLUE: _Member
+    MEDIUM_BLUE: _Member
+    BLUE: _Member
+    GHOST_WHITE: _Member
+    INDIGO: _Member
+    DARK_VIOLET: _Member
+    DARK_SLATE_BLUE: _Member
+    REBECCA_PURPLE: _Member
+    BLUE_VIOLET: _Member
+    DARK_ORCHID: _Member
+    SLATE_BLUE: _Member
+    MEDIUM_ORCHID: _Member
+    MEDIUM_SLATE_BLUE: _Member
+    MEDIUM_PURPLE: _Member
+    THISTLE: _Member
+    PURPLE: _Member
+    DARK_MAGENTA: _Member
+    MEDIUM_VIOLET_RED: _Member
+    FUCHSIA: _Member
+    DEEP_PINK: _Member
+    ORCHID: _Member
+    HOT_PINK: _Member
+    VIOLET: _Member
+    PLUM: _Member
+    LAVENDER_BLUSH: _Member
+    CRIMSON: _Member
+    PALE_VIOLET_RED: _Member
+    LIGHT_PINK: _Member
+    PINK: _Member
 
 
-def _style_wrappers():
+def style():
     for x in SgrParameter:
-        yield color_chain(sgr_params=([x] if x not in {38, 48} else []))
+        if x not in {38, 48}:
+            yield color_chain([x])
 
 
-@_ns_from_iter(_style_wrappers)
-class AnsiStyle[StyleStr: color_chain](DynamicNamespace[StyleStr]):
-    RESET: StyleStr
-    BOLD: StyleStr
-    FAINT: StyleStr
-    ITALICS: StyleStr
-    SINGLE_UNDERLINE: StyleStr
-    SLOW_BLINK: StyleStr
-    RAPID_BLINK: StyleStr
-    NEGATIVE: StyleStr
-    CONCEALED_CHARS: StyleStr
-    CROSSED_OUT: StyleStr
-    PRIMARY: StyleStr
-    FIRST_ALT: StyleStr
-    SECOND_ALT: StyleStr
-    THIRD_ALT: StyleStr
-    FOURTH_ALT: StyleStr
-    FIFTH_ALT: StyleStr
-    SIXTH_ALT: StyleStr
-    SEVENTH_ALT: StyleStr
-    EIGHTH_ALT: StyleStr
-    NINTH_ALT: StyleStr
-    GOTHIC: StyleStr
-    DOUBLE_UNDERLINE: StyleStr
-    RESET_BOLD_AND_FAINT: StyleStr
-    RESET_ITALIC_AND_GOTHIC: StyleStr
-    RESET_UNDERLINES: StyleStr
-    RESET_BLINKING: StyleStr
-    POSITIVE: StyleStr
-    REVEALED_CHARS: StyleStr
-    RESET_CROSSED_OUT: StyleStr
-    BLACK_FG: StyleStr
-    RED_FG: StyleStr
-    GREEN_FG: StyleStr
-    YELLOW_FG: StyleStr
-    BLUE_FG: StyleStr
-    MAGENTA_FG: StyleStr
-    CYAN_FG: StyleStr
-    WHITE_FG: StyleStr
-    ANSI_256_SET_FG: StyleStr
-    DEFAULT_FG_COLOR: StyleStr
-    BLACK_BG: StyleStr
-    RED_BG: StyleStr
-    GREEN_BG: StyleStr
-    YELLOW_BG: StyleStr
-    BLUE_BG: StyleStr
-    MAGENTA_BG: StyleStr
-    CYAN_BG: StyleStr
-    WHITE_BG: StyleStr
-    ANSI_256_SET_BG: StyleStr
-    DEFAULT_BG_COLOR: StyleStr
-    FRAMED: StyleStr
-    ENCIRCLED: StyleStr
-    OVERLINED: StyleStr
-    NOT_FRAMED_OR_CIRCLED: StyleStr
-    IDEOGRAM_UNDER_OR_RIGHT: StyleStr
-    IDEOGRAM_2UNDER_OR_2RIGHT: StyleStr
-    IDEOGRAM_OVER_OR_LEFT: StyleStr
-    IDEOGRAM_2OVER_OR_2LEFT: StyleStr
-    CANCEL: StyleStr
-    BLACK_BRIGHT_FG: StyleStr
-    RED_BRIGHT_FG: StyleStr
-    GREEN_BRIGHT_FG: StyleStr
-    YELLOW_BRIGHT_FG: StyleStr
-    BLUE_BRIGHT_FG: StyleStr
-    MAGENTA_BRIGHT_FG: StyleStr
-    CYAN_BRIGHT_FG: StyleStr
-    WHITE_BRIGHT_FG: StyleStr
-    BLACK_BRIGHT_BG: StyleStr
-    RED_BRIGHT_BG: StyleStr
-    GREEN_BRIGHT_BG: StyleStr
-    YELLOW_BRIGHT_BG: StyleStr
-    BLUE_BRIGHT_BG: StyleStr
-    MAGENTA_BRIGHT_BG: StyleStr
-    CYAN_BRIGHT_BG: StyleStr
-    WHITE_BRIGHT_BG: StyleStr
+class AnsiStyle(DynamicNamespace[color_chain], iterable=style()):
+    RESET: _Member
+    BOLD: _Member
+    FAINT: _Member
+    ITALICS: _Member
+    SINGLE_UNDERLINE: _Member
+    SLOW_BLINK: _Member
+    RAPID_BLINK: _Member
+    NEGATIVE: _Member
+    CONCEALED_CHARS: _Member
+    CROSSED_OUT: _Member
+    PRIMARY: _Member
+    FIRST_ALT: _Member
+    SECOND_ALT: _Member
+    THIRD_ALT: _Member
+    FOURTH_ALT: _Member
+    FIFTH_ALT: _Member
+    SIXTH_ALT: _Member
+    SEVENTH_ALT: _Member
+    EIGHTH_ALT: _Member
+    NINTH_ALT: _Member
+    GOTHIC: _Member
+    DOUBLE_UNDERLINE: _Member
+    RESET_BOLD_AND_FAINT: _Member
+    RESET_ITALIC_AND_GOTHIC: _Member
+    RESET_UNDERLINES: _Member
+    RESET_BLINKING: _Member
+    POSITIVE: _Member
+    REVEALED_CHARS: _Member
+    RESET_CROSSED_OUT: _Member
+    BLACK_FG: _Member
+    RED_FG: _Member
+    GREEN_FG: _Member
+    YELLOW_FG: _Member
+    BLUE_FG: _Member
+    MAGENTA_FG: _Member
+    CYAN_FG: _Member
+    WHITE_FG: _Member
+    DEFAULT_FG_COLOR: _Member
+    BLACK_BG: _Member
+    RED_BG: _Member
+    GREEN_BG: _Member
+    YELLOW_BG: _Member
+    BLUE_BG: _Member
+    MAGENTA_BG: _Member
+    CYAN_BG: _Member
+    WHITE_BG: _Member
+    DEFAULT_BG_COLOR: _Member
+    FRAMED: _Member
+    ENCIRCLED: _Member
+    OVERLINED: _Member
+    NOT_FRAMED_OR_CIRCLED: _Member
+    IDEOGRAM_UNDER_OR_RIGHT: _Member
+    IDEOGRAM_2UNDER_OR_2RIGHT: _Member
+    IDEOGRAM_OVER_OR_LEFT: _Member
+    IDEOGRAM_2OVER_OR_2LEFT: _Member
+    CANCEL: _Member
+    BLACK_BRIGHT_FG: _Member
+    RED_BRIGHT_FG: _Member
+    GREEN_BRIGHT_FG: _Member
+    YELLOW_BRIGHT_FG: _Member
+    BLUE_BRIGHT_FG: _Member
+    MAGENTA_BRIGHT_FG: _Member
+    CYAN_BRIGHT_FG: _Member
+    WHITE_BRIGHT_FG: _Member
+    BLACK_BRIGHT_BG: _Member
+    RED_BRIGHT_BG: _Member
+    GREEN_BRIGHT_BG: _Member
+    YELLOW_BRIGHT_BG: _Member
+    BLUE_BRIGHT_BG: _Member
+    MAGENTA_BRIGHT_BG: _Member
+    CYAN_BRIGHT_BG: _Member
+    WHITE_BRIGHT_BG: _Member
 
 
-def _bg_wrapper_factory(__x: Color):
+def background(__x: Color):
     return color_chain(bg=__x, ansi_type='24b')
 
 
-def _fg_wrapper_factory(__x: Color):
+def foreground(__x: Color):
     return color_chain(fg=__x, ansi_type='24b')
 
 
-class AnsiBack(ColorNamespace[color_chain], factory=_bg_wrapper_factory):
-    RESET = getattr(AnsiStyle(), 'DEFAULT_BG_COLOR')
+class AnsiBack(ColorNamespace, member_type=background):
+    RESET = AnsiStyle.DEFAULT_BG_COLOR
 
     def __call__(self, bg: Union[Color, int, tuple[int, int, int]]):
         return color_chain(bg=bg)
 
 
-class AnsiFore(ColorNamespace[color_chain], factory=_fg_wrapper_factory):
-    RESET = getattr(AnsiStyle(), 'DEFAULT_FG_COLOR')
+class AnsiFore(ColorNamespace, member_type=foreground):
+    RESET = AnsiStyle.DEFAULT_FG_COLOR
 
     def __call__(self, fg: Union[Color, int, tuple[int, int, int]]):
         return color_chain(fg=fg)
 
 
-_COLOR_DICT: dict[ColorStr, Int3Tuple] = {
-    ColorStr(name.casefold(), {'fg': color}, ansi_type='24b'): color.rgb
-    for name, color in ColorNamespace().as_dict().items()
-}
-
-
 class _color_ns_getter:
-    mapping = MappingProxyType({k.base_str: v for k, v in _COLOR_DICT.items()})
+    mapping = (
+        {name.casefold(): color.rgb for name, color in ColorNamespace.asdict().items()}
+        .items()
+        .mapping
+    )
 
-    __str__ = lambda self: str(_COLOR_DICT)
+    def __str__(self):
+        return str(
+            {str(ColorStr(k, fg=v, ansi_type='24b')): v for k, v in type(self).mapping.items()}
+        )
 
     @staticmethod
     @lru_cache
@@ -437,6 +388,9 @@ class _color_ns_getter:
             return self._normalize_key(__key) in self.mapping
         return False
 
+    def keys(self):
+        return self.mapping.keys()
+
     def __getitem__(self, __key: str):
         return self.mapping[self._normalize_key(__key)]
 
@@ -444,119 +398,151 @@ class _color_ns_getter:
         try:
             return getattr(self.mapping, __name)
         except AttributeError as e:
-            raise AttributeError(
-                str(e).replace(*map(lambda x: type(x).__name__, (self.mapping, self)))
-            ) from None
+            msg = str(e)
+            msg = msg.replace(type(self.mapping).__name__, type(self).__name__)
+            err = AttributeError(msg)
+            err.__cause__ = e.__cause__
+            raise err
 
 
-def rgb_dispatch[**P, R](
-    __f: Callable[P, R] = None, /, *, var_names: Sequence[str] = ()
-) -> Callable[P, R]:
-    dummy_func = lambda *args, **kwargs: ...
-    [rgb_args, variadic] = [set[str]() for _ in range(2)]
+def rgb_dispatch(names=()):
+    def decorator(__f):
+        def fix_signature(__f):
+            from .._typing import eval_annotation
 
-    def fix_signature():
-        nonlocal var_names, rgb_args, variadic
-        if isinstance(var_names, str):
-            var_names = (var_names,)
-        if not callable(__f):
-            raise ValueError
-        try:
-            argspec = getfullargspec(__f)
-            sig = signature(__f)
-        except TypeError:
-            if not (isbuiltin(__f) or getattr(__f, '__module__', '') == 'builtins'):
-                raise
-            argspec = getfullargspec(dummy_func)
-            sig = signature(dummy_func)
-        variadic = {argspec.varargs, argspec.varkw}
-        variadic.discard(None)
-        all_args = variadic.union(argspec.args + argspec.kwonlyargs)
-        rgb_args = all_args.intersection(
-            {'*': argspec.varargs, '**': argspec.varkw}.get(arg) or arg
-            for arg in var_names
-        )
-        if not rgb_args:
-            keys = frozenset({'fg', 'bg'})
-            for arg in all_args:
-                if (arg[:2] in keys) or (arg[-2:] in keys):
-                    rgb_args.add(arg)
-        variadic &= rgb_args
-        parameters = []
-        for name, param in sig.parameters.items():
-            if name not in rgb_args or param.annotation is param.empty:
-                parameters.append(param)
-            else:
-                anno = param.annotation
-                parameters.append(
-                    param.replace(
-                        annotation=str
-                        | eval(
-                            getattr(anno, '__name__', str(anno)),
-                            getmodule(__f).__dict__,
+            nonlocal names, rgb_args, variadic
+            try:
+                argspec = getfullargspec(__f)
+                sig = signature(__f)
+            except TypeError:
+                if not (isbuiltin(__f) or getattr(__f, '__module__', '') == 'builtins'):
+                    raise
+                return signature(lambda *args, **kwargs: ...)
+            variadic = set(name for name in [argspec.varargs, argspec.varkw] if name is not None)
+            all_arg_names = variadic.union(argspec.args + argspec.kwonlyargs)
+            rgb_args = all_arg_names.intersection(
+                dict.get({'*': argspec.varargs, '**': argspec.varkw}, arg, arg) for arg in names
+            )
+            eitherwith = lambda s, *args: str.startswith(s, *args) or str.endswith(s, *args)
+            if not rgb_args:
+                for name in all_arg_names:
+                    if eitherwith(name, ('fg', 'bg')):
+                        rgb_args.add(name)
+            variadic &= rgb_args
+            parameters = []
+            for name, p in sig.parameters.items():
+                if name not in rgb_args or p.annotation is p.empty:
+                    parameters.append(p)
+                else:
+                    annotation = p.annotation
+                    try:
+                        annotation |= str
+                    except TypeError:
+                        union_repr = f"{annotation} | str"
+                        try:
+                            annotation = eval_annotation(union_repr, globals=__f.__globals__)
+                        except NameError:
+                            annotation = union_repr
+                    parameters.append(p.replace(annotation=annotation))
+            return sig.replace(parameters=parameters)
+
+        def wrapper(*args, **kwargs):
+            bound = wrapper_sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+            for name, value in bound.arguments.items():
+                if name not in rgb_args:
+                    continue
+                if name in variadic:
+                    bound.arguments[name] = (
+                        tuple(color_ns[v] if v in color_ns else v for v in value)
+                        if isinstance(value, tuple)
+                        else {k: color_ns[v] if v in color_ns else v for k, v in value.items()}
+                    )
+                elif value in color_ns:
+                    bound.arguments[name] = color_ns[value]
+            return __f(*bound.args, **bound.kwargs)
+
+        color_ns: SupportsKeysAndGetItem[str, Int3Tuple] = _color_ns_getter()
+        rgb_args, variadic = set[str](), set[str]()
+        wrapper_sig = fix_signature(__f)
+        if not hasattr(__f, '__text_signature__'):
+            setattr(__f, '__signature__', wrapper_sig)
+        return update_wrapper(wrapper, __f)
+
+    if callable(names):
+        user_func, names = names, ()
+        return decorator(user_func)
+    elif isinstance(names, tuple):
+        if any(type(x) is not str for x in names):
+            clsname = next(t for t in map(type, names) if t is not str).__name__
+            raise TypeError(
+                f"expected tuple of strings, " f"got tuple containing {clsname!r} object instead"
+            )
+        return decorator
+    raise TypeError(
+        "expected callable or variable names tuple, " f"got {type(names).__name__!r} object instead"
+    )
+
+
+def _make_named_color_map() -> ...:
+    class NamedColorMapping(dict):
+        def __setitem__(self, *args: Never):
+            raise NotImplementedError
+
+        def __getitem__(self, __key: tuple[str, str]):
+            try:
+                k1, k2 = __key
+                if type(k2) is not str:
+                    raise TypeError
+                return super().__getitem__((k1, k2.upper()))
+            except (TypeError, KeyError, ValueError):
+                pass
+            raise KeyError(__key)
+
+    return NamedColorMapping(
+        ((k1, k2), rgb)
+        for k1, items in dict.items(
+            {
+                '4b': dict.items(
+                    dict(
+                        zip(
+                            [
+                                'BLACK',
+                                'RED',
+                                'GREEN',
+                                'YELLOW',
+                                'BLUE',
+                                'MAGENTA',
+                                'CYAN',
+                                'GREY',
+                                'DARK_GREY',
+                                'BRIGHT_RED',
+                                'BRIGHT_GREEN',
+                                'BRIGHT_YELLOW',
+                                'BRIGHT_BLUE',
+                                'BRIGHT_MAGENTA',
+                                'BRIGHT_CYAN',
+                                'WHITE',
+                            ],
+                            map(Color.from_rgb, ANSI_4BIT_RGB),
                         )
                     )
-                )
-        return sig.replace(parameters=parameters)
-
-    __f.__signature__ = fix_signature()
-    color_ns = cast(MappingProxyType[str, Int3Tuple], _color_ns_getter())
-
-    @wraps(__f)
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        bound = getattr(__f, '__signature__').bind(*args, **kwargs)
-        bound.apply_defaults()
-        for arg, value in bound.arguments.items():
-            if arg not in rgb_args:
-                continue
-            if arg in variadic:
-                bound.arguments[arg] = (
-                    tuple(color_ns[v] if v in color_ns else v for v in value)
-                    if isinstance(value, tuple)
-                    else {
-                        k: color_ns[v] if v in color_ns else v for k, v in value.items()
-                    }
-                )
-            elif value in color_ns:
-                bound.arguments[arg] = color_ns[value]
-        return __f(*bound.args, **bound.kwargs)
-
-    return wrapper
+                ),
+                '24b': ColorNamespace.asdict().items(),
+            }
+        )
+        for k2, rgb in items
+    )
 
 
-# fmt: off
-named_color = cast(
-    ...,
-    {
-        '4b': dict(
-            zip(
-                ['BLACK', 'RED', 'GREEN', 'YELLOW', 'BLUE', 'MAGENTA', 'CYAN', 'GREY',
-                 'DARK_GREY', 'BRIGHT_RED', 'BRIGHT_GREEN', 'BRIGHT_YELLOW', 'BRIGHT_BLUE',
-                 'BRIGHT_MAGENTA', 'BRIGHT_CYAN', 'WHITE'],
-                map(Color.from_rgb, ANSI_4BIT_RGB),
-            )
-        ).__getitem__,
-        '24b': ColorNamespace().as_dict().__getitem__,
-    },
-)  # fmt: on
+named_color = _make_named_color_map()
 
 
 def named_color_idents():
     return [
-        ColorStr(name.replace('_', ' ').lower(), color_spec=color, ansi_type='24b')
-        for name, color in ColorNamespace().as_dict().items()
+        ColorStr(name.replace('_', ' ').lower(), color, ansi_type='24b')
+        for name, color in ColorNamespace.asdict().items()
     ]
-
-
-# def display_ansi256_color_range():
-#     from numpy import asarray
-#     from chromatic.color.colorconv import ansi_8bit_to_rgb
-#
-#     ansi256_range = asarray(range(256)).reshape([16] * 2).tolist()
-#     return [
-#         [ColorStr(obj='###', color_spec=ansi_8bit_to_rgb(v), ansi_type='8b') for v in arr]
-#         for arr in ansi256_range
-#     ]
 
 
 def __getattr__(name: ...) -> ...:
@@ -573,5 +559,3 @@ if TYPE_CHECKING:
     Back: AnsiBack
     Fore: AnsiFore
     Style: AnsiStyle
-
-__all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']

@@ -118,7 +118,10 @@ ANSI_4BIT_RGB: list[tuple[int, int, int]] = [
 
 
 def test_luma_transformer(
-    test_color1: Color, test_color2: Color = None, *, base_str='亮度和颜色梯度算法测试！！！'
+    test_color1: Color,
+    test_color2: Color = None,
+    *,
+    base_str='亮度和颜色梯度算法测试！！！',
 ):
     test_color2_rgb: Optional[tuple[int, int, int]] = getattr(test_color2, 'rgb', None)
     color_gen = rgb_luma_transform(
@@ -165,7 +168,9 @@ def _rand_color_str_array(n_rows=10, n_cols=10):
         current = []
         for col in range(n_cols):
             char = random.choice(printable_chars) if next(rand_bin_iter) else None
-            current.append(ColorStr(char, randcolor(), ansi_type=ansicolor24Bit) if char else ' ')
+            current.append(
+                ColorStr(char, randcolor(), ansi_type=ansicolor24Bit) if char else ' '
+            )
         output.append(
             '{}{}{}{}'.format(
                 *map(
@@ -173,7 +178,10 @@ def _rand_color_str_array(n_rows=10, n_cols=10):
                     (
                         current,
                         *(
-                            ((c.as_ansi_type(t) if isinstance(c, ColorStr) else c) for c in current)
+                            (
+                                (c.as_ansi_type(t) if isinstance(c, ColorStr) else c)
+                                for c in current
+                            )
                             for t in (ansicolor4Bit, ansicolor8Bit, ansicolor24Bit)
                         ),
                     ),
@@ -300,7 +308,9 @@ class TestColorStr(unittest.TestCase):
             r = random.randint(0, 255)
             g = random.randint(0, 255)
             b = random.randint(0, 255)
-            random_text = ''.join(random.choices(ascii_letters, k=random.randint(5, 15)))
+            random_text = ''.join(
+                random.choices(ascii_letters, k=random.randint(5, 15))
+            )
 
             cs_color = ColorStr(random_text, fg=Color.from_rgb((r, g, b)))
             self.assertEqual(cs_color.fg.rgb, (r, g, b))
@@ -325,7 +335,9 @@ class TestColorStr(unittest.TestCase):
 
 def main():
     inp_ = None
-    modes = dict(enumerate([unittest.main, test_performance_benchmark, _rand_color_str_array]))
+    modes = dict(
+        enumerate([unittest.main, test_performance_benchmark, _rand_color_str_array])
+    )
     while inp_ not in range(len(modes)):
         try:
             s = '\n'.join(f"{k}\t{v.__name__.lstrip('_')}" for k, v in modes.items())

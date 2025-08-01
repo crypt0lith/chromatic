@@ -1,4 +1,11 @@
-__all__ = ['UserFont', 'butterfly', 'escher', 'goblin_virus', 'register_userfont', 'userfont']
+__all__ = [
+    'UserFont',
+    'butterfly',
+    'escher',
+    'goblin_virus',
+    'register_userfont',
+    'userfont',
+]
 
 import PIL.Image
 

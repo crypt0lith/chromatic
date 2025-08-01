@@ -1,7 +1,17 @@
 __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']
 
 from types import MappingProxyType
-from typing import Any, Callable, ClassVar, Iterable, Literal, Mapping, Self, TypeAlias, overload
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Iterable,
+    Literal,
+    Mapping,
+    Self,
+    TypeAlias,
+    overload,
+)
 
 from .core import Color, ColorStr, color_chain
 from .._typing import Int3Tuple
@@ -109,7 +119,11 @@ class DynamicNSMeta[_VT](type):
     ) -> Mapping[str, object]: ...
     @overload
     def __new__(
-        mcls: type[Self], clsname: str, bases: tuple[type, ...], namespace: dict[str, ...], /
+        mcls: type[Self],
+        clsname: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, ...],
+        /,
     ) -> Self: ...
     @overload
     def __new__(
@@ -279,7 +293,9 @@ named_color: MappingProxyType[tuple[Literal['4b', '24b'], str], Color]
 @overload
 def rgb_dispatch[_F: Callable[..., Any]](__f: _F, /) -> _F: ...
 @overload
-def rgb_dispatch[_F: Callable[..., Any]](names: tuple[str, ...] = ()) -> Callable[[_F], _F]: ...
+def rgb_dispatch[_F: Callable[..., Any]](
+    names: tuple[str, ...] = (),
+) -> Callable[[_F], _F]: ...
 
 Back: AnsiBack
 Fore: AnsiFore

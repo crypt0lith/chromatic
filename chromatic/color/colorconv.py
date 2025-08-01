@@ -29,7 +29,14 @@ from typing import Final, Literal, SupportsInt, TypeGuard
 
 import numpy as np
 
-from .._typing import Float3Tuple, FloatSequence, Int3Tuple, RGBPixel, RGBVectorLike, ShapedNDArray
+from .._typing import (
+    Float3Tuple,
+    FloatSequence,
+    Int3Tuple,
+    RGBPixel,
+    RGBVectorLike,
+    ShapedNDArray,
+)
 
 
 @lru_cache
@@ -107,7 +114,10 @@ def lab2xyz(lab: FloatSequence) -> Float3Tuple:
     x, y, z = map(
         mul,
         (95.047, 100.0, 108.883),
-        map(lambda i: (lambda j: j if j > 0.008856 else (i - 16 / 116) / 7.787)(i**3), (x, y, z)),
+        map(
+            lambda i: (lambda j: j if j > 0.008856 else (i - 16 / 116) / 7.787)(i**3),
+            (x, y, z),
+        ),
     )
     return x, y, z
 
@@ -127,7 +137,9 @@ def rgb2xyz(rgb: RGBPixel) -> Float3Tuple:
 
 
 def xyz2rgb(xyz: ShapedNDArray[tuple[Literal[3]], np.float64]) -> Int3Tuple:
-    r, g, b = (np.clip(M_XYZ2RGB @ np.array(xyz, dtype=np.float64), 0.0, 1.0) * 255.0).astype(int)
+    r, g, b = (
+        np.clip(M_XYZ2RGB @ np.array(xyz, dtype=np.float64), 0.0, 1.0) * 255.0
+    ).astype(int)
     return r, g, b
 
 
@@ -147,7 +159,13 @@ def hsl2rgb(hsl: FloatSequence) -> Int3Tuple:
         mid2 = v - vsf
         r, g, b = (
             round(x * 0xFF)
-            for x in [[v, mid1, m], [mid2, v, m], [m, v, mid1], [m, mid2, v], [mid1, m, v]][sextant]
+            for x in [
+                [v, mid1, m],
+                [mid2, v, m],
+                [m, v, mid1],
+                [m, mid2, v],
+                [mid1, m, v],
+            ][sextant]
         )
     else:
         r, g, b = [round(L * 0xFF)] * 3
@@ -273,11 +291,13 @@ def _4b_lookup() -> dict[Int3Tuple, Int3Tuple]:
 
     rgb_4b_arr = np.asarray(ANSI_4BIT_RGB)
     quants = np.stack(
-        np.meshgrid(*np.repeat(np.arange(32).reshape([1, -1]), 3, 0), indexing='ij'), axis=-1
+        np.meshgrid(*np.repeat(np.arange(32).reshape([1, -1]), 3, 0), indexing='ij'),
+        axis=-1,
     ).reshape([-1, 3])
     nearest_colors = rgb_4b_arr[np.argmin(rgb_dist(quants * 8, rgb_4b_arr), axis=1)]
     table: dict = {
-        tuple(map(int, color)): tuple(map(int, nearest_colors[i])) for i, color in enumerate(quants)
+        tuple(map(int, color)): tuple(map(int, nearest_colors[i]))
+        for i, color in enumerate(quants)
     }
     return table
 

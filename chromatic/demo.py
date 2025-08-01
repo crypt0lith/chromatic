@@ -28,7 +28,9 @@ def escher_dragon_ascii():
     font = userfont['vga437']
     char_set = r"  ._-~+<vX♦'^Vx>|πΦ0Ω#$║╫"
 
-    ascii_str = img2ascii(input_img, font, factor=240, char_set=char_set, sort_glyphs=True)
+    ascii_str = img2ascii(
+        input_img, font, factor=240, char_set=char_set, sort_glyphs=True
+    )
 
     ascii_img = ascii2img(ascii_str, font, font_size=16, fg='white', bg='black')
 
@@ -67,7 +69,9 @@ def butterfly_16color():
 
     char_set = r"'·,•-_→+<>ⁿ*%⌂7√Iï∞πbz£9yîU{}1αHSw♥æ?GX╕╒éà⌡MF╝╩ΘûÇƒQ½☻Å¶┤▄╪║▒█"
 
-    ansi_array = img2ansi(input_img, font, factor=200, char_set=char_set, ansi_type=ansicolor4Bit)
+    ansi_array = img2ansi(
+        input_img, font, factor=200, char_set=char_set, ansi_type=ansicolor4Bit
+    )
 
     ansi_img = ansi2img(ansi_array, font, font_size=16)
 
@@ -84,7 +88,9 @@ def butterfly_truecolor():
 
     font = userfont['vga437']
 
-    ansi_array = img2ansi(input_img, font, factor=200, ansi_type='24b', equalize='white_point')
+    ansi_array = img2ansi(
+        input_img, font, factor=200, ansi_type='24b', equalize='white_point'
+    )
 
     ansi_img = ansi2img(ansi_array, font, font_size=16)
 
@@ -101,7 +107,9 @@ def butterfly_randcolor():
 
     font = userfont['vga437']
 
-    ansi_array = img2ansi(input_img, font, factor=200, ansi_type='8b', equalize='white_point')
+    ansi_array = img2ansi(
+        input_img, font, factor=200, ansi_type='8b', equalize='white_point'
+    )
 
     for row in range(len(ansi_array)):
         for idx, cs in enumerate(ansi_array[row]):
@@ -146,7 +154,9 @@ def named_colors():
     whites = [0]
     for idx, n in enumerate(named):
         hsv = rgb2hsv(n.fg.rgb)
-        if all(map(lambda i, x: math.isclose(hsv[i], x, abs_tol=0.16), (-1, 1), (1, 0))):
+        if all(
+            map(lambda i, x: math.isclose(hsv[i], x, abs_tol=0.16), (-1, 1), (1, 0))
+        ):
             if idx - whites[-1] < 4:
                 whites.pop()
             whites.append(idx)
@@ -199,8 +209,14 @@ def color_table():
         ColorStr(f"{name: ^{spacing}}", fg=color, ansi_type=ansicolor24Bit)
         for name, color in colors.items()
     ]
-    bg_colors = [ColorStr().recolor(bg=None)] + [c.recolor(fg=None, bg=c.fg) for c in fg_colors]
-    print('|'.join(f"{'%dbit' % n: {'>' if n == 24 else '^'}{spacing - 1}}" for n in (4, 8, 24)))
+    bg_colors = [ColorStr().recolor(bg=None)] + [
+        c.recolor(fg=None, bg=c.fg) for c in fg_colors
+    ]
+    print(
+        '|'.join(
+            f"{'%dbit' % n: {'>' if n == 24 else '^'}{spacing - 1}}" for n in (4, 8, 24)
+        )
+    )
     for row in fg_colors:
         for col in bg_colors:
             for typ in ansi_types:
@@ -218,7 +234,9 @@ def color_table():
     ]
     for style in style_params[:-1]:
         print(
-            ColorStr('.'.join([SgrParameter.__qualname__, style.name])).update_sgr(style),
+            ColorStr('.'.join([SgrParameter.__qualname__, style.name])).update_sgr(
+                style
+            ),
             end='\x1b[0m'.ljust(8),
         )
     else:
@@ -330,7 +348,12 @@ def print_help(ns: dict[str, FunctionType], choices: dict[int, str]):
     for idx, k in choices.items():
         head = f"\t{idx}, {k}"
         desc = '\n'.join(
-            wrap(ns[k].__doc__ or '', columns, initial_indent='\t\t', subsequent_indent='\t\t')
+            wrap(
+                ns[k].__doc__ or '',
+                columns,
+                initial_indent='\t\t',
+                subsequent_indent='\t\t',
+            )
         )
         print(f"{head: <{indent}}{desc}")
     print()
@@ -351,17 +374,19 @@ def main():
     if len(sys.argv) > 1:
         arg = sys.argv[1]
         if arg.casefold() in {'-h', '--help'}:
-            print_help(ns, choices)
-            exit()
+            return print_help(ns, choices)
         elif len(sys.argv) != 2:
-            print(f"unexpected arguments: " + f"{sys.argv[1:]}".strip('[]'), file=sys.stderr)
-            exit(1)
+            print(
+                f"unexpected arguments: " + f"{sys.argv[1:]}".strip('[]'),
+                file=sys.stderr,
+            )
+            return 1
         else:
             try:
                 choice = get_choice(arg.strip())
             except KeyError as e:
                 print(f"unexpected argument: {e}", file=sys.stderr)
-                exit(1)
+                return 1
     else:
         for idx, k in choices.items():
             print(f"{idx} {k!r}")
@@ -371,7 +396,7 @@ def main():
                 if not from_user:
                     continue
                 if from_user == 'exit':
-                    exit()
+                    return
                 choice = get_choice(from_user)
                 break
             except KeyError as e:
@@ -379,12 +404,13 @@ def main():
                 time.sleep(0.1)
             except KeyboardInterrupt:
                 print(f"\n{KeyboardInterrupt.__name__}", file=sys.stderr)
-                exit()
+                return
     if choice is not None:
         print(f"running {choice.__name__!r}...", end='\n\n')
         _, delta, fmt = _time_wrapper(choice)()
         print(f"\ntotal execution time: {delta} {fmt}")
+        return
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

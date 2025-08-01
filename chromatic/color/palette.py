@@ -24,13 +24,18 @@ class DynamicNSMeta[_VT](type):
     def __new__(mcls, clsname, bases, namespace, /, **kwds):
         namespace['__members__'] = tuple(
             dict.fromkeys(
-                member for base in bases if isinstance(base, mcls) for member in base.__members__
+                member
+                for base in bases
+                if isinstance(base, mcls)
+                for member in base.__members__
             )
         )
         if kwds:
             keys = kwds.keys()
             if not keys <= {'iterable', 'member_type'}:
-                raise ValueError(f"unexpected keywords: {(keys - {'iterable', 'member_type'})}")
+                raise ValueError(
+                    f"unexpected keywords: {(keys - {'iterable', 'member_type'})}"
+                )
             if keys == {'iterable', 'member_type'}:
                 raise ValueError("cannot use keywords 'iterable' with 'member_type'")
             key, value = kwds.popitem()
@@ -58,7 +63,9 @@ class DynamicNSMeta[_VT](type):
                         raise ValueError
                     namespace |= iterable
                 else:
-                    namespace.update(zip(namespace['__members__'], iterable, strict=True))
+                    namespace.update(
+                        zip(namespace['__members__'], iterable, strict=True)
+                    )
             else:
                 assert key == 'member_type', f"expected key='member_type', got {key=}"
                 member_func = value
@@ -121,7 +128,9 @@ def _gen_named_color_values() -> Iterator[int]:
     ]
 
 
-class ColorNamespace(DynamicNamespace[Color], iterable=map(Color, _gen_named_color_values())):
+class ColorNamespace(
+    DynamicNamespace[Color], iterable=map(Color, _gen_named_color_values())
+):
     BLACK: _Member
     DIM_GREY: _Member
     GREY: _Member
@@ -375,7 +384,10 @@ class _color_ns_getter:
 
     def __str__(self):
         return str(
-            {str(ColorStr(k, fg=v, ansi_type='24b')): v for k, v in type(self).mapping.items()}
+            {
+                str(ColorStr(k, fg=v, ansi_type='24b')): v
+                for k, v in type(self).mapping.items()
+            }
         )
 
     @staticmethod
@@ -418,12 +430,17 @@ def rgb_dispatch(names=()):
                 if not (isbuiltin(__f) or getattr(__f, '__module__', '') == 'builtins'):
                     raise
                 return signature(lambda *args, **kwargs: ...)
-            variadic = set(name for name in [argspec.varargs, argspec.varkw] if name is not None)
+            variadic = set(
+                name for name in [argspec.varargs, argspec.varkw] if name is not None
+            )
             all_arg_names = variadic.union(argspec.args + argspec.kwonlyargs)
             rgb_args = all_arg_names.intersection(
-                dict.get({'*': argspec.varargs, '**': argspec.varkw}, arg, arg) for arg in names
+                dict.get({'*': argspec.varargs, '**': argspec.varkw}, arg, arg)
+                for arg in names
             )
-            eitherwith = lambda s, *args: str.startswith(s, *args) or str.endswith(s, *args)
+            eitherwith = lambda s, *args: str.startswith(s, *args) or str.endswith(
+                s, *args
+            )
             if not rgb_args:
                 for name in all_arg_names:
                     if eitherwith(name, ('fg', 'bg')):
@@ -440,7 +457,9 @@ def rgb_dispatch(names=()):
                     except TypeError:
                         union_repr = f"{annotation} | str"
                         try:
-                            annotation = eval_annotation(union_repr, globals=__f.__globals__)
+                            annotation = eval_annotation(
+                                union_repr, globals=__f.__globals__
+                            )
                         except NameError:
                             annotation = union_repr
                     parameters.append(p.replace(annotation=annotation))
@@ -456,7 +475,10 @@ def rgb_dispatch(names=()):
                     bound.arguments[name] = (
                         tuple(color_ns[v] if v in color_ns else v for v in value)
                         if isinstance(value, tuple)
-                        else {k: color_ns[v] if v in color_ns else v for k, v in value.items()}
+                        else {
+                            k: color_ns[v] if v in color_ns else v
+                            for k, v in value.items()
+                        }
                     )
                 elif value in color_ns:
                     bound.arguments[name] = color_ns[value]
@@ -476,11 +498,13 @@ def rgb_dispatch(names=()):
         if any(type(x) is not str for x in names):
             clsname = next(t for t in map(type, names) if t is not str).__name__
             raise TypeError(
-                f"expected tuple of strings, " f"got tuple containing {clsname!r} object instead"
+                f"expected tuple of strings, "
+                f"got tuple containing {clsname!r} object instead"
             )
         return decorator
     raise TypeError(
-        "expected callable or variable names tuple, " f"got {type(names).__name__!r} object instead"
+        "expected callable or variable names tuple, "
+        f"got {type(names).__name__!r} object instead"
     )
 
 

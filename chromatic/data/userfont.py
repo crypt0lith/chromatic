@@ -34,7 +34,9 @@ class UserFont:
         return hash((type(self), self.font, self.size, self.index, self.encoding))
 
     def __fspath__(self):
-        return osp.realpath(osp.join(os.environ["CHROMATIC_DATADIR"], self.font), strict=True)
+        return osp.realpath(
+            osp.join(os.environ["CHROMATIC_DATADIR"], self.font), strict=True
+        )
 
     def to_truetype(self):
         from PIL.ImageFont import truetype
@@ -82,11 +84,15 @@ def register_userfont(
     copy=False,
 ):
     metadata = {
-        k: v for k, v in locals().items() if (k in {'size', 'index', 'encoding'} and v is not None)
+        k: v
+        for k, v in locals().items()
+        if (k in {'size', 'index', 'encoding'} and v is not None)
     }
     name = name or osp.splitext(osp.basename(fp))[0]
     if not isinstance(name, str):
-        raise TypeError(f"expected 'name' to be 'str', got {type(name).__name__!r} instead")
+        raise TypeError(
+            f"expected 'name' to be 'str', got {type(name).__name__!r} instead"
+        )
     fp = osp.realpath(fp, strict=True)
     if not osp.isfile(fp):
         raise ValueError(f"not a file: {fp!r}")

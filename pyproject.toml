@@ -20,6 +20,7 @@ dependencies = [
 authors = [{ name = "crypt0lith" }]
 description = "ANSI art image processing and colored terminal text"
 readme = "README.md"
+license-files = ["LICENSE"]
 keywords = ["ansi", "ascii", "art", "font", "image", "terminal", "parser"]
 classifiers = [
     "Programming Language :: Python :: 3.12",
@@ -30,9 +31,6 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/crypt0lith/chromatic"
-
-[tool.setuptools]
-license-files = ["LICENSE"]
 
 [tool.setuptools_scm]
 write_to = "chromatic/_version.py"

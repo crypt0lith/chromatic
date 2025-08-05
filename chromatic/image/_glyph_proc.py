@@ -63,17 +63,19 @@ def get_glyph_masks(
 
 
 def sort_glyphs(__s: str, font: FontArgType, reverse: bool = False):
-    def _sum_mask(item: tuple[str, np.ndarray]):
-        return item[0], np.sum(item[1])
-
+    all_chars = list(__s)
+    mapping = {}
+    for c, arr in get_glyph_masks(font, __s, dist_transform=True).items():
+        v = np.sum(arr)
+        if v <= 0 and c != ' ':
+            continue
+        mapping[c] = v
     return ''.join(
-        char
-        for (char, value) in sorted(
-            map(_sum_mask, get_glyph_masks(font, __s, dist_transform=True).items()),
-            key=lambda x: x[1],
+        sorted(
+            filter(mapping.__contains__, all_chars),
+            key=mapping.__getitem__,
             reverse=reverse,
         )
-        if value > 0 or char == ' '
     )
 
 
@@ -84,7 +86,5 @@ def ttf_extract_codepoints(
     with TTFont(__fp, **kwargs) as font:
         for table in font['cmap'].tables:
             codepoints |= table.cmap.keys()
-
-    return np.sort(
-        np.array([i for i in codepoints if chr(i).isprintable()], dtype='<u2')
-    )
+    arr = np.array([i for i in codepoints if chr(i).isprintable()], dtype='<u2')
+    return np.sort(arr)  # type: ignore[arg-type]

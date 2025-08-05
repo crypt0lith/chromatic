@@ -173,6 +173,26 @@ def named_colors():
 
 
 @DEMO_FUNCS.register
+def color_cube():
+    """Print the ANSI256 6x6x6 color cube"""
+    fmt_code = lambda n: f"\x1b[48;5;{n}m{n: >4}"
+    for i in range(0, 8, 4):
+        for j in range(i, i + 8):
+            print(fmt_code(i + j), end='')
+        else:
+            print("\x1b[m")
+    for i in range(6):
+        for j in range(0x10, 0xE8, 6):
+            print(fmt_code(i + j), end='')
+        else:
+            print("\x1b[m")
+    for i in range(0xE8, 0x100):
+        print(fmt_code(i), end='')
+    else:
+        print("\x1b[m")
+
+
+@DEMO_FUNCS.register
 def color_table():
     """Print foreground / background combinations in each ANSI format.
 

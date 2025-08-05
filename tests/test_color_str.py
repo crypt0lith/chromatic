@@ -178,10 +178,10 @@ def _rand_color_str_array(n_rows=10, n_cols=10):
                     (
                         current,
                         *(
-                            (
-                                (c.as_ansi_type(t) if isinstance(c, ColorStr) else c)
+                            [
+                                c.as_ansi_type(t) if isinstance(c, ColorStr) else c
                                 for c in current
-                            )
+                            ]
                             for t in (ansicolor4Bit, ansicolor8Bit, ansicolor24Bit)
                         ),
                     ),

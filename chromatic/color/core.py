@@ -266,8 +266,6 @@ class colorbytes(bytes):
 class ansicolor4Bit(colorbytes):
     """ANSI 4-bit color format.
 
-    alias: '4b'
-
     Supports 16 colors:
         * 8 standard colors:
             {0: black, 1: red, 2: green, 3: yellow, 4: blue, 5: magenta, 6: cyan, 7: white}
@@ -298,8 +296,6 @@ class ansicolor4Bit(colorbytes):
 class ansicolor8Bit(colorbytes):
     """ANSI 8-Bit color format.
 
-    alias: '8b'
-
     Supports 256 colors, mapped to the following value ranges:
         * (0, 15): Corresponds to ANSI 4-bit colors.
         * (16, 231): Represents a 6x6x6 RGB color cube.
@@ -327,8 +323,6 @@ class ansicolor8Bit(colorbytes):
 
 class ansicolor24Bit(colorbytes):
     """ANSI 24-Bit color format.
-
-    alias: '24b'
 
     Supports all colors in the RGB color space (16,777,216 total).
 
@@ -407,7 +401,37 @@ def _is_ansi_type(typ: type):
         return False
 
 
-@lru_cache(maxsize=None)
+@lru_cache
+def get_ansi_type(typ):
+    try:
+        return _ANSI_FORMAT_MAP[typ]
+    except (TypeError, KeyError) as e:
+        if isinstance(typ, str):
+            err = ValueError(f"invalid ANSI color format alias: {e!r}")
+        else:
+            from .._typing import unionize
+
+            repr_getter = lambda t: (t if isinstance(t, type) else type(t))
+            msg = (
+                "Expected {.__name__!r} or {}, got {.__name__!r} object instead".format(
+                    str,
+                    type[unionize(set(map(repr_getter, _ANSI_FORMAT_MAP.values())))],
+                    repr_getter(typ),
+                )
+            )
+            err = TypeError(msg)
+        err.__cause__ = e.__cause__
+        raise err
+
+
+def set_default_ansi(typ):
+    """Sets the global `DEFAULT_ANSI` variable to the specified ANSI color format"""
+    if valid_typ := get_ansi_type(typ):
+        global DEFAULT_ANSI
+        DEFAULT_ANSI = valid_typ
+
+
+@lru_cache(maxsize=1)
 def sgr_re_pattern():
     uint8_re = r"(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)"
     ansicolor_re = f"[3-4]8;(?:2(?:;{uint8_re}){{3}}|5;{uint8_re})"
@@ -454,29 +478,6 @@ def _unwrap_ansi_escape(__b: bytes | bytearray):
 
 def _concat_ansi_escape(__it: Iterable[bytes | bytearray]):
     return b'\x1b[%sm' % b';'.join(__it)
-
-
-@lru_cache
-def get_ansi_type(typ):
-    try:
-        return _ANSI_FORMAT_MAP[typ]
-    except (TypeError, KeyError) as e:
-        if isinstance(typ, str):
-            err = ValueError(f"invalid ANSI color format alias: {e!r}")
-        else:
-            from .._typing import unionize
-
-            repr_getter = lambda t: (t if isinstance(t, type) else type(t))
-            msg = (
-                "Expected {.__name__!r} or {}, got {.__name__!r} object instead".format(
-                    str,
-                    type[unionize(set(map(repr_getter, _ANSI_FORMAT_MAP.values())))],
-                    repr_getter(typ),
-                )
-            )
-            err = TypeError(msg)
-        err.__cause__ = e.__cause__
-        raise err
 
 
 def rgb2ansi_escape(fmt, mode, rgb):

@@ -7,6 +7,7 @@ __all__ = [
     'Fore',
     'SgrParameter',
     'Style',
+    'UserFont',
     '__version__',
     'ansi2img',
     'ansi_quantize',
@@ -14,10 +15,10 @@ __all__ = [
     'ansicolor4Bit',
     'ansicolor8Bit',
     'ansify',
-    'image',
     'ascii2img',
     'ascii_printable',
     'color',
+    'color_chain',
     'colorbytes',
     'contrast_stretch',
     'cp437_printable',
@@ -26,14 +27,23 @@ __all__ = [
     'get_font_key',
     'get_font_object',
     'get_glyph_masks',
+    'hexstr2rgb',
+    'image',
     'img2ansi',
     'img2ascii',
+    'int2rgb',
     'named_color',
     'read_ans',
     'register_userfont',
     'render_ans',
     'reshape_ansi',
+    'rgb2hexstr',
+    'rgb2int',
+    'sort_glyphs',
     'to_sgr_array',
+    'ttf_extract_codepoints',
+    'userfont',
+    'set_default_ansi',
 ]
 from . import color, data, image
 from ._version import version as __version__
@@ -48,10 +58,16 @@ from .color import (
     ansicolor24Bit,
     ansicolor4Bit,
     ansicolor8Bit,
+    color_chain,
     colorbytes,
+    hexstr2rgb,
+    int2rgb,
     named_color,
+    rgb2hexstr,
+    rgb2int,
+    set_default_ansi,
 )
-from .data import register_userfont
+from .data import UserFont, register_userfont, userfont
 from .image import (
     AnsiImage,
     ansi2img,
@@ -71,4 +87,4 @@ from .image import (
     reshape_ansi,
     to_sgr_array,
 )
-from .image._glyph_proc import get_glyph_masks
+from .image._glyph_proc import get_glyph_masks, sort_glyphs, ttf_extract_codepoints

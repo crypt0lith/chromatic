@@ -85,6 +85,7 @@ if TYPE_CHECKING:
         RGBImageLike,
         ShapedNDArray,
         TupleOf2,
+        TupleOf3,
     )
 
     LiteralDigit: TypeAlias = Sequence[
@@ -507,8 +508,8 @@ def img2ascii(
 
 def img2ascii(
     __img: RGBImageLike | PathLike[str] | str,
-    __font: FontArgType = 'arial.ttf',
-    factor: int = 100,
+    __font: FontArgType = userfont['vga437'],
+    factor: int = 200,
     char_set: Iterable[str] = None,
     sort_glyphs: bool | type[reversed] = True,
     *,
@@ -585,8 +586,8 @@ def img2ascii(
 @rgb_dispatch(('bg',))
 def img2ansi(
     __img: RGBImageLike | PathLike[str] | str,
-    __font: FontArgType = 'arial.ttf',
-    factor: int = 100,
+    __font: FontArgType = userfont['vga437'],
+    factor: int = 200,
     char_set: Iterable[str] = None,
     ansi_type: AnsiColorParam = DEFAULT_ANSI,
     sort_glyphs: bool | type[reversed] = True,
@@ -671,7 +672,7 @@ def img2ansi(
         x = []
         for j in range(w):
             char = lines[i][j]
-            fg_color = Color.from_rgb(color_arr.getpixel([j, i]))
+            fg_color = Color.from_rgb(color_arr.getpixel((j, i)))
             if j > 0 and x[-1].fg == fg_color:
                 x[-1] += char
             else:
@@ -683,8 +684,8 @@ def img2ansi(
 @rgb_dispatch(('fg', 'bg'))
 def ascii2img(
     __ascii: str,
-    __font: FontArgType = 'arial.ttf',
-    font_size=24,
+    __font: FontArgType = userfont['vga437'],
+    font_size=16,
     *,
     fg: Int3Tuple | str = (0, 0, 0),
     bg: Int3Tuple | str = (0xFF, 0xFF, 0xFF),
@@ -722,7 +723,8 @@ def ascii2img(
     n_rows, n_cols = map(len, (lines, lines[0]))
     cw, ch = _get_bbox_shape(font)
     iw, ih = (int(i * j) for i, j in zip((cw, ch), (n_cols, n_rows)))
-    img = Image.new('RGB', (iw, ih), tuple(map(int, bg)))
+    (r, g, b) = tuple(map(int, bg))
+    img = Image.new('RGB', (iw, ih), (r, g, b))
     draw = ImageDraw.Draw(img)
     y_offset = 0
     for line in lines:
@@ -734,8 +736,8 @@ def ascii2img(
 @rgb_dispatch(('fg_default', 'bg_default'))
 def ansi2img(
     __ansi_array: list[list[ColorStr]],
-    __font: FontArgType = 'arial.ttf',
-    font_size=24,
+    __font: FontArgType = userfont['vga437'],
+    font_size=16,
     *,
     fg_default: Int3Tuple | str = (170, 170, 170),
     bg_default: Int3Tuple | str | Literal['auto'] = 'auto',
@@ -782,12 +784,13 @@ def ansi2img(
         for row in __ansi_array
     )
     iw, ih = map(int, (max_row_width, n_rows * row_height))
-    input_fg = fg_default
+    input_fg: TupleOf3[int] = fg_default
     if auto := bg_default == 'auto':
         input_bg = bg_default = None
     else:
         input_bg = bg_default
-    img = Image.new('RGB', (iw, ih), cast(tuple[float, ...], bg_default))
+    bg_default: Optional[TupleOf3[int] | ...]
+    img = Image.new('RGB', (iw, ih), bg_default)
     draw = ImageDraw.Draw(img)
     y_offset = 0
     for row in __ansi_array:
@@ -803,7 +806,7 @@ def ansi2img(
                 if auto:
                     bg_default = bg_color
             draw.rectangle(
-                [x_offset, y_offset, x_offset + text_width, y_offset + row_height],
+                (x_offset, y_offset, x_offset + text_width, y_offset + row_height),
                 fill=bg_color or (0, 0, 0),
             )
             draw.text(
@@ -882,7 +885,7 @@ def _is_csi_param(__c: str) -> TypeGuard[Literal[';'] | LiteralDigit]:
     return __c == ';' or __c.isdigit()
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=1)
 def sgr_span_re_pattern():
     sgr_re = sgr_re_pattern().pattern.removeprefix(r'\x1b\[')
     return re.compile(
@@ -952,7 +955,6 @@ def _sub_bold_colors(lines: Iterable[str]) -> Iterator[str]:
 
 
 def reshape_ansi(__str: str, w: int, h: int) -> str:
-
     def cursor() -> Generator[tuple[int, int], tuple[int, int], None]:
         idx, total = 0, h * w
         while idx < total:
@@ -1026,8 +1028,8 @@ def reshape_ansi(__str: str, w: int, h: int) -> str:
 
 
 @lru_cache
-def to_sgr_array(__str: str, ansi_type: AnsiColorParam = DEFAULT_ANSI):
-    ansi_typ = get_ansi_type(ansi_type)
+def to_sgr_array(__str: str, ansi_type: AnsiColorParam = None):
+    ansi_typ = DEFAULT_ANSI if ansi_type is None else get_ansi_type(ansi_type)
     new_cs = partial(ColorStr, ansi_type=ansi_typ, reset=False)
     xs = []
     for line in _sub_bold_colors(__str.splitlines()):

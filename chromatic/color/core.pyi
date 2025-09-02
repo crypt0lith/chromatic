@@ -54,7 +54,7 @@ from chromatic._typing import (
     TupleOf3,
 )
 
-
+def is_vt_enabled() -> bool: ...
 @overload
 def get_ansi_type[_T: AnsiColorType](typ: _T) -> _T: ...
 @overload
@@ -68,7 +68,7 @@ def randcolor() -> Color: ...
 def rgb2ansi_escape(
     fmt: AnsiColorAlias | AnsiColorType, mode: ColorDictKeys, rgb: Int3Tuple
 ) -> bytes: ...
-def sgr_re_pattern() -> re.Pattern[str]: ...
+def sgr_pattern() -> re.Pattern[str]: ...
 
 class ansicolor4Bit(colorbytes):
     alias: ClassVar[L['4b']]
@@ -266,6 +266,7 @@ class ColorStr(str):
     @property
     def rgb_dict(self) -> MappingProxyType[ColorDictKeys, Int3Tuple]: ...
     _sgr: SgrSequence
+    _reset: L["\x1b[0m", ""]
 
 class _ColorChainKwargs(TypedDict, total=False):
     ansi_type: AnsiColorAlias | type[AnsiColorFormat]

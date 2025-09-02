@@ -583,7 +583,7 @@ def img2ascii(
     return ascii_str
 
 
-@rgb_dispatch(('bg',))
+@rgb_dispatch('bg')
 def img2ansi(
     __img: RGBImageLike | PathLike[str] | str,
     __font: FontArgType = userfont['vga437'],
@@ -681,7 +681,7 @@ def img2ansi(
     return xs
 
 
-@rgb_dispatch(('fg', 'bg'))
+@rgb_dispatch('fg', 'bg')
 def ascii2img(
     __ascii: str,
     __font: FontArgType = userfont['vga437'],
@@ -733,7 +733,7 @@ def ascii2img(
     return img
 
 
-@rgb_dispatch(('fg_default', 'bg_default'))
+@rgb_dispatch('fg_default', 'bg_default')
 def ansi2img(
     __ansi_array: list[list[ColorStr]],
     __font: FontArgType = userfont['vga437'],

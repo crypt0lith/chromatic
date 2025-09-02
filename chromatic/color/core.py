@@ -401,7 +401,7 @@ _ANSI_COLOR_TYPES = cast(
 _ANSI_FORMAT_MAP = {k: x for x in _ANSI_COLOR_TYPES for k in [x, x.alias]}
 
 
-@lru_cache
+@lru_cache(maxsize=len(_ANSI_COLOR_TYPES))
 def _is_ansi_type(typ: type):
     try:
         return typ in _ANSI_COLOR_TYPES
@@ -409,7 +409,7 @@ def _is_ansi_type(typ: type):
         return False
 
 
-@lru_cache
+@lru_cache(maxsize=len(_ANSI_FORMAT_MAP))
 def get_ansi_type(typ):
     try:
         return _ANSI_FORMAT_MAP[typ]

@@ -291,11 +291,9 @@ class ColorNamespace[NamedColor = Color](DynamicNamespace[NamedColor]):
 named_color: MappingProxyType[tuple[Literal['4b', '24b'], str], Color]
 
 @overload
-def rgb_dispatch[_F: Callable[..., Any]](__f: _F, /) -> _F: ...
+def rgb_dispatch[_F: Callable[..., Any]](__f: _F, /, *names: str) -> _F: ...
 @overload
-def rgb_dispatch[_F: Callable[..., Any]](
-    names: tuple[str, ...] = (),
-) -> Callable[[_F], _F]: ...
+def rgb_dispatch[_F: Callable[..., Any]](*names: str) -> Callable[[_F], _F]: ...
 
 Back: AnsiBack
 Fore: AnsiFore

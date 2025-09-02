@@ -4,8 +4,14 @@ import sys
 import time
 from os import PathLike
 from pathlib import PurePath
+from random import choices as get_random
 from types import FunctionType
 from typing import Callable
+
+from numpy import ndarray
+from skimage.metrics import mean_squared_error
+
+import chromatic as cm
 
 
 class FunctionNamespace:
@@ -21,35 +27,23 @@ DEMO_FUNCS = FunctionNamespace()
 @DEMO_FUNCS.register
 def escher_dragon_ascii():
     """Displays the image-to-ASCII transform of 'Dragon' by M.C. Escher."""
-    from chromatic.image import ascii2img, img2ascii
-    from chromatic.data import userfont, escher
-
-    input_img = escher()
-    font = userfont['vga437']
+    input_img = cm.data.escher()
+    font = cm.userfont['vga437']
     char_set = r"  ._-~+<vX♦'^Vx>|πΦ0Ω#$║╫"
-
-    ascii_str = img2ascii(
+    ascii_str = cm.img2ascii(
         input_img, font, factor=240, char_set=char_set, sort_glyphs=True
     )
-
-    ascii_img = ascii2img(ascii_str, font, font_size=16, fg='white', bg='black')
-
+    ascii_img = cm.ascii2img(ascii_str, font, font_size=16, fg='white', bg='black')
     ascii_img.show()
 
 
 @DEMO_FUNCS.register
 def escher_dragon_256color():
     """Displays the image-to-ANSI transform of 'Dragon' by M.C. Escher in 8-bit color."""
-    from chromatic.image import ansi2img, img2ansi
-    from chromatic.data import userfont, escher
-
-    input_img = escher()
-    font = userfont['vga437']
-
-    ansi_array = img2ansi(input_img, font, factor=240, ansi_type='8b', equalize=True)
-
-    ansi_img = ansi2img(ansi_array, font, font_size=16)
-
+    input_img = cm.data.escher()
+    font = cm.userfont['vga437']
+    ansi_array = cm.img2ansi(input_img, font, factor=240, ansi_type='8b', equalize=True)
+    ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
     ansi_img.show()
 
 
@@ -59,101 +53,72 @@ def butterfly_16color():
 
     Good ol' C-x M-c M-butterfly...
     """
-    from chromatic.color import ansicolor4Bit
-    from chromatic.image import ansi2img, img2ansi
-    from chromatic.data import userfont, butterfly
-
-    input_img = butterfly()
-
-    font = userfont['vga437']
-
+    input_img = cm.data.butterfly()
+    font = cm.data.userfont['vga437']
     char_set = r"'·,•-_→+<>ⁿ*%⌂7√Iï∞πbz£9yîU{}1αHSw♥æ?GX╕╒éà⌡MF╝╩ΘûÇƒQ½☻Å¶┤▄╪║▒█"
-
-    ansi_array = img2ansi(
-        input_img, font, factor=200, char_set=char_set, ansi_type=ansicolor4Bit
+    ansi_array = cm.img2ansi(
+        input_img,
+        font,
+        factor=200,
+        char_set=char_set,
+        equalize=True,
+        ansi_type=cm.ansicolor4Bit,
     )
-
-    ansi_img = ansi2img(ansi_array, font, font_size=16)
-
+    ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
     ansi_img.show()
 
 
 @DEMO_FUNCS.register
 def butterfly_truecolor():
     """Displays the image-to-ANSI transform of 'Spider Lily & Papilio xuthus' in 24-bit color."""
-    from chromatic.image import ansi2img, img2ansi
-    from chromatic.data import userfont, butterfly
-
-    input_img = butterfly()
-
-    font = userfont['vga437']
-
-    ansi_array = img2ansi(
+    input_img = cm.data.butterfly()
+    font = cm.userfont['vga437']
+    ansi_array = cm.img2ansi(
         input_img, font, factor=200, ansi_type='24b', equalize='white_point'
     )
-
-    ansi_img = ansi2img(ansi_array, font, font_size=16)
-
+    ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
     ansi_img.show()
 
 
 @DEMO_FUNCS.register
 def butterfly_randcolor():
-    from chromatic.image import ansi2img, img2ansi
-    from chromatic.color import randcolor, rgb2hsv, hsv2rgb, Color
-    from chromatic.data import userfont, butterfly
-
-    input_img = butterfly()
-
-    font = userfont['vga437']
-
-    ansi_array = img2ansi(
+    input_img = cm.data.butterfly()
+    font = cm.userfont['vga437']
+    ansi_array = cm.img2ansi(
         input_img, font, factor=200, ansi_type='8b', equalize='white_point'
     )
-
     for row in range(len(ansi_array)):
         for idx, cs in enumerate(ansi_array[row]):
             if (fg := cs.fg) is not None:
-                _, _, v = rgb2hsv(fg.rgb)
-                h, s, _ = rgb2hsv(randcolor().rgb)
-                ansi_array[row][idx] = cs.recolor(fg=Color.from_rgb(hsv2rgb((h, s, v))))
-
-    ansi_img = ansi2img(ansi_array, font, font_size=16)
-
+                _, _, v = cm.color.rgb2hsv(fg.rgb)
+                h, s, _ = cm.color.rgb2hsv(cm.color.randcolor().rgb)
+                ansi_array[row][idx] = cs.recolor(
+                    fg=cm.Color.from_rgb(cm.color.hsv2rgb((h, s, v)))
+                )
+    ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
     ansi_img.show()
 
 
 @DEMO_FUNCS.register
 def goblin_virus_truecolor():
     """`G-O-B-L-I-N VIRUS <https://imgur.com/n0Mng2P>`__"""
-    from chromatic.image import ansi2img, img2ansi
-    from chromatic.data import userfont, goblin_virus
-
-    input_img = goblin_virus()
-
-    font = userfont['vga437']
-
+    input_img = cm.data.goblin_virus()
+    font = cm.userfont['vga437']
     char_set = r'  .-|_⌐¬^:()═+<>v≥≤«*»x└┘π╛╘┴┐┌┬╧╚╙X╒╜╨#0╓╝╩╤╥│╔┤├╞╗╦┼╪║╟╠╫╣╬░▒▓█▄▌▐▀'
-
-    ansi_array = img2ansi(
+    ansi_array = cm.img2ansi(
         input_img, font, factor=200, char_set=char_set, ansi_type='24b', equalize=False
     )
-
-    ansi_img = ansi2img(ansi_array, font, font_size=16)
-
+    ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
     ansi_img.show()
 
 
 @DEMO_FUNCS.register
 def named_colors():
-    from chromatic.color.palette import named_color_idents, ColorNamespace
-    from chromatic.color.colorconv import rgb2hsv, rgb2lab
-
-    print(f"{'.'.join([ColorNamespace.__module__, ColorNamespace.__name__])}:")
-    named = named_color_idents()
+    print("{0.__module__}.{0.__name__}:".format(cm.ColorNamespace))
+    named = cm.color.palette.named_color_idents()
     whites = [0]
     for idx, n in enumerate(named):
-        hsv = rgb2hsv(n.fg.rgb)
+        hsv = cm.color.rgb2hsv(n.fg.rgb)
         if all(
             map(lambda i, x: math.isclose(hsv[i], x, abs_tol=0.16), (-1, 1), (1, 0))
         ):
@@ -161,33 +126,33 @@ def named_colors():
                 whites.pop()
             whites.append(idx)
     whites.append(-1)
-    buffer = []
     for start, stop in zip(whites, whites[1:]):
         xs = sorted(
             named[start + 1 if start else None : stop + 1 if ~stop else None],
-            key=lambda x: rgb2lab(x.fg.rgb),
+            key=lambda x: cm.color.rgb2lab(x.fg.rgb),
         )
-        buffer.append(xs)
-    for line in buffer:
-        print(' | '.join(line))
+        print(' | '.join(xs))
 
 
 @DEMO_FUNCS.register
 def color_cube():
     """Print the ANSI256 6x6x6 color cube"""
     fmt_code = lambda n: f"\x1b[48;5;{n}m{n: >4}"
-    for i in range(0, 8, 4):
-        for j in range(i, i + 8):
-            print(fmt_code(i + j), end='')
-        else:
+    ansi_256_codes = iter(range(0x100))
+    for i in range(0x10):
+        if i and i % 8 == 0:
             print("\x1b[m")
-    for i in range(6):
-        for j in range(0x10, 0xE8, 6):
-            print(fmt_code(i + j), end='')
-        else:
+        print(fmt_code(next(ansi_256_codes)), end='')
+    else:
+        print("\x1b[m")
+    for i in range(6**3):
+        if i and i % 6**2 == 0:
             print("\x1b[m")
-    for i in range(0xE8, 0x100):
-        print(fmt_code(i), end='')
+        print(fmt_code(next(ansi_256_codes)), end='')
+    else:
+        print("\x1b[m")
+    for x in ansi_256_codes:
+        print(fmt_code(x), end='')
     else:
         print("\x1b[m")
 
@@ -198,20 +163,11 @@ def color_table():
 
     A handful of stylistic SGR parameters are displayed as well.
     """
-    from chromatic.color import (
-        ColorStr,
-        Color,
-        SgrParameter,
-        ansicolor24Bit,
-        ansicolor4Bit,
-        ansicolor8Bit,
-        ColorNamespace,
-    )
 
-    ansi_types = [ansicolor4Bit, ansicolor8Bit, ansicolor24Bit]
+    ansi_types = [cm.ansicolor4Bit, cm.ansicolor8Bit, cm.ansicolor24Bit]
 
-    colors: dict[str, Color] = {
-        name.title(): getattr(ColorNamespace, name)
+    colors: dict[str, cm.Color] = {
+        name.title(): getattr(cm.ColorNamespace, name)
         for name in [
             'BLACK',
             'WHITE',
@@ -226,10 +182,10 @@ def color_table():
     }
     spacing = max(map(len, colors)) + 1
     fg_colors = [
-        ColorStr(f"{name: ^{spacing}}", fg=color, ansi_type=ansicolor24Bit)
+        cm.ColorStr(f"{name: ^{spacing}}", fg=color, ansi_type=cm.ansicolor24Bit)
         for name, color in colors.items()
     ]
-    bg_colors = [ColorStr().recolor(bg=None)] + [
+    bg_colors = [cm.ColorStr().recolor(bg=None)] + [
         c.recolor(fg=None, bg=c.fg) for c in fg_colors
     ]
     print(
@@ -244,36 +200,24 @@ def color_table():
         print()
     print('\nstyles:', end='\t')
     style_params = [
-        SgrParameter.BOLD,
-        SgrParameter.ITALICS,
-        SgrParameter.CROSSED_OUT,
-        SgrParameter.ENCIRCLED,
-        SgrParameter.SINGLE_UNDERLINE,
-        SgrParameter.DOUBLE_UNDERLINE,
-        SgrParameter.NEGATIVE,
+        cm.SgrParameter.BOLD,
+        cm.SgrParameter.ITALICS,
+        cm.SgrParameter.CROSSED_OUT,
+        cm.SgrParameter.ENCIRCLED,
+        cm.SgrParameter.SINGLE_UNDERLINE,
+        cm.SgrParameter.DOUBLE_UNDERLINE,
+        cm.SgrParameter.NEGATIVE,
     ]
-    for style in style_params[:-1]:
+    for style in style_params:
         print(
-            ColorStr('.'.join([SgrParameter.__qualname__, style.name])).update_sgr(
+            cm.ColorStr(f"{cm.SgrParameter.__qualname__}.{style.name}").update_sgr(
                 style
             ),
-            end='\x1b[0m'.ljust(8),
-        )
-    else:
-        print(
-            ColorStr(f"{SgrParameter.__qualname__}.{style_params[-1].name}").update_sgr(
-                style_params[-1]
-            )
+            end=('\n' if style is style_params[-1] else "\x1b[0m".ljust(8)),
         )
 
 
 def glyph_comparisons(__output_dir: str | PathLike[str] = None):
-    from chromatic import get_glyph_masks
-    from chromatic.data import userfont
-    from chromatic.image import cp437_printable
-    from numpy import ndarray
-    from random import choices as get_random
-    from skimage.metrics import mean_squared_error
 
     def _find_best_matches(
         glyph_masks1: dict[str, ndarray], glyph_masks2: dict[str, ndarray]
@@ -292,13 +236,13 @@ def glyph_comparisons(__output_dir: str | PathLike[str] = None):
 
     if __output_dir and not os.path.isdir(__output_dir):
         raise NotADirectoryError(__output_dir)
-    user_fonts = [pair := (userfont['vga437'], userfont['consolas']), pair[::-1]]
+    user_fonts = [pair := (cm.userfont['vga437'], cm.userfont['consolas']), pair[::-1]]
     trans_table = str.maketrans({']': None, '0': ' ', '[': ' '})
-    char_set = cp437_printable()
+    char_set = cm.cp437_printable()
     separator = '#' * 100
     for font1, font2 in user_fonts:
-        glyph_masks_1 = get_glyph_masks(font1, char_set, dist_transform=True)
-        glyph_masks_2 = get_glyph_masks(font2, char_set, dist_transform=True)
+        glyph_masks_1 = cm.get_glyph_masks(font1, char_set, dist_transform=True)
+        glyph_masks_2 = cm.get_glyph_masks(font2, char_set, dist_transform=True)
         best_matches_ = _find_best_matches(glyph_masks_1, glyph_masks_2)
         txt = ''.join(
             '->'.center(32, ' ')

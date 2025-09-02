@@ -417,7 +417,7 @@ class _color_ns_getter:
             raise err
 
 
-def rgb_dispatch(names=()):
+def rgb_dispatch(*names: str):
     def decorator(__f):
         def fix_signature(__f):
             from .._typing import eval_annotation
@@ -430,9 +430,9 @@ def rgb_dispatch(names=()):
                 if not (isbuiltin(__f) or getattr(__f, '__module__', '') == 'builtins'):
                     raise
                 return signature(lambda *args, **kwargs: ...)
-            variadic = set(
+            variadic = {
                 name for name in [argspec.varargs, argspec.varkw] if name is not None
-            )
+            }
             all_arg_names = variadic.union(argspec.args + argspec.kwonlyargs)
             rgb_args = all_arg_names.intersection(
                 dict.get({'*': argspec.varargs, '**': argspec.varkw}, arg, arg)
@@ -491,21 +491,16 @@ def rgb_dispatch(names=()):
             setattr(__f, '__signature__', wrapper_sig)
         return update_wrapper(wrapper, __f)
 
-    if callable(names):
-        user_func, names = names, ()
-        return decorator(user_func)
-    elif isinstance(names, tuple):
-        if any(type(x) is not str for x in names):
-            clsname = next(t for t in map(type, names) if t is not str).__name__
+    if names and callable(names[0]):
+        func, *names = names
+    else:
+        func = None
+    for x in names:
+        if type(x) is not str:
             raise TypeError(
-                f"expected tuple of strings, "
-                f"got tuple containing {clsname!r} object instead"
+                f"found {type(x).__name__!r} object in names, expected only str"
             )
-        return decorator
-    raise TypeError(
-        "expected callable or variable names tuple, "
-        f"got {type(names).__name__!r} object instead"
-    )
+    return decorator if func is None else decorator(func)
 
 
 def _make_named_color_map() -> ...:
@@ -564,19 +559,19 @@ named_color = _make_named_color_map()
 
 def named_color_idents():
     return [
-        ColorStr(name.replace('_', ' ').lower(), color, ansi_type='24b')
+        ColorStr(name.translate({0x5F: 0x20}).lower(), color, ansi_type='24b')
         for name, color in ColorNamespace.asdict().items()
     ]
 
 
-def __getattr__(name: ...) -> ...:
-    if name == 'Back':
-        return AnsiBack()
-    if name == 'Fore':
-        return AnsiFore()
-    if name == 'Style':
-        return AnsiStyle()
-    raise AttributeError(f"Module {__name__!r} has no attribute {name!r}")
+def __getattr__(name: str) -> ...:
+    try:
+        return globals().setdefault(
+            name, {'Back': AnsiBack, 'Fore': AnsiFore, 'Style': AnsiStyle}[name]()
+        )
+    except KeyError:
+        pass
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 if TYPE_CHECKING:

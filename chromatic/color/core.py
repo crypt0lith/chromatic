@@ -11,6 +11,7 @@ __all__ = [
     'color_chain',
     'colorbytes',
     'get_ansi_type',
+    'is_vt_enabled',
     'randcolor',
     'rgb2ansi_escape',
 ]
@@ -18,6 +19,7 @@ __all__ = [
 import os
 import random
 import re
+import sys
 from collections import Counter
 from collections.abc import Buffer
 from copy import deepcopy
@@ -53,9 +55,9 @@ from .colorconv import (
 )
 from .._typing import AnsiColorAlias, ColorDictKeys, Int3Tuple
 
-os.system('')
+# os.system('')
 
-CSI: Final[bytes] = b'['
+CSI: Final[bytes] = b'\x1b['
 SGR_RESET: Final[bytes] = CSI + b'0m'
 SGR_RESET_S: Final[str] = SGR_RESET.decode()
 
@@ -346,42 +348,48 @@ class ansicolor24Bit(colorbytes):
     alias = '24b'
 
 
-_SUPPORTS_256 = frozenset(
-    [
-        'ANSICON',
-        'COLORTERM',
-        'ConEmuANSI',
-        'PYCHARM_HOSTED',
-        'TERM',
-        'TERMINAL_EMULATOR',
-        'TERM_PROGRAM',
-        'WT_SESSION',
-    ]
-)
-
-
-def is_vt_proc_enabled():
-    if os.name != 'nt' or os.environ.keys() & _SUPPORTS_256:
-        return True
-
+if os.name == 'nt':
     from ctypes import windll, wintypes
 
-    STD_OUTPUT_HANDLE = -11
-    ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
-    kernel32 = windll.kernel32
-    kernel32.GetStdHandle.restype = wintypes.HANDLE
-    kernel32.GetConsoleMode.restype = kernel32.SetConsoleMode.restype = wintypes.BOOL
-    handle = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
-    if handle == -1:
-        return False
-    mode = wintypes.DWORD()
-    if not kernel32.GetConsoleMode(handle, byref(mode)):
-        return False
-    mode.value |= ENABLE_VIRTUAL_TERMINAL_PROCESSING
-    return kernel32.SetConsoleMode(handle, mode)
+    def _enable_vt_processing(handle: int):
+        ENABLE_VT_PROCESSING = 0x0004
+        k32 = windll.kernel32
+        k32.GetStdHandle.restype = wintypes.HANDLE
+        k32.GetConsoleMode.restype = k32.SetConsoleMode.restype = wintypes.BOOL
+        h = k32.GetStdHandle(handle)
+        if h == -1:
+            return False
+        mode = wintypes.DWORD()
+        if not k32.GetConsoleMode(h, byref(mode)):
+            return False
+        mode.value |= ENABLE_VT_PROCESSING
+        return bool(k32.SetConsoleMode(h, mode))
+
+    def is_vt_enabled():
+        if os.environ.keys() & {
+            'ANSICON',
+            'COLORTERM',
+            'ConEmuANSI',
+            'PYCHARM_HOSTED',
+            'TERM',
+            'TERMINAL_EMULATOR',
+            'TERM_PROGRAM',
+            'WT_SESSION',
+        }:
+            return True
+        ok = False
+        for fd, handle in [(sys.stdout, -11), (sys.stderr, -12)]:
+            if getattr(fd, "isatty", lambda: False)():
+                ok |= _enable_vt_processing(handle)
+        return ok
+
+else:
+
+    def is_vt_enabled():
+        return True
 
 
-DEFAULT_ANSI = ansicolor8Bit if is_vt_proc_enabled() else ansicolor4Bit
+DEFAULT_ANSI = ansicolor8Bit if is_vt_enabled() else ansicolor4Bit
 
 AnsiColorFormat: TypeAlias = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
 AnsiColorType: TypeAlias = type[AnsiColorFormat]
@@ -393,7 +401,7 @@ _ANSI_COLOR_TYPES = cast(
 _ANSI_FORMAT_MAP = {k: x for x in _ANSI_COLOR_TYPES for k in [x, x.alias]}
 
 
-@lru_cache
+@lru_cache(maxsize=len(_ANSI_COLOR_TYPES))
 def _is_ansi_type(typ: type):
     try:
         return typ in _ANSI_COLOR_TYPES
@@ -401,7 +409,7 @@ def _is_ansi_type(typ: type):
         return False
 
 
-@lru_cache
+@lru_cache(maxsize=len(_ANSI_FORMAT_MAP))
 def get_ansi_type(typ):
     try:
         return _ANSI_FORMAT_MAP[typ]
@@ -432,7 +440,7 @@ def set_default_ansi(typ):
 
 
 @lru_cache(maxsize=1)
-def sgr_re_pattern():
+def sgr_pattern():
     uint8_re = r"(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)"
     ansicolor_re = f"[3-4]8;(?:2(?:;{uint8_re}){{3}}|5;{uint8_re})"
     sgr_param_re = (
@@ -445,7 +453,7 @@ def sgr_re_pattern():
 def _split_ansi_escape(__s: str) -> list[tuple['SgrSequence', str]] | None:
     out = []
     i = 0
-    for m in sgr_re_pattern().finditer(__s):
+    for m in sgr_pattern().finditer(__s):
         text = __s[i : (j := m.start())]
         if i != j:
             out.append(text)
@@ -643,8 +651,9 @@ def _iter_normalized_sgr[_T: (
     Buffer,
     SupportsInt,
 )](__iter: bytes | bytearray | Iterable[_T]) -> Iterator[int | AnsiColorFormat]:
-    __iter: ...
-    for elt in __iter.split(b';') if isinstance(__iter, (bytes, bytearray)) else __iter:
+    if isinstance(__iter, (bytes, bytearray)):
+        __iter = __iter.split(b';')
+    for elt in __iter:
         match elt:
             case (colorbytes() as cb) | SgrParamBuffer(colorbytes() as cb):
                 yield cb
@@ -938,44 +947,43 @@ _END_RESET_PATTERN = re.compile(r"\x1b\[0?m$")
 _unset: Any = object()
 
 
-def _make_colorstr[_T: ColorStr](cls: type[_T], obj=_unset, *args, **kwargs) -> _T:
-    sgr = SgrSequence()
-    fg = kwargs.pop('fg', _unset)
-    bg = kwargs.pop('bg', _unset)
-    ansi_type = kwargs.pop('ansi_type', _unset)
-    reset = kwargs.pop('reset', _unset)
-    if kwargs:
-        if not kwargs.keys() <= {'encoding', 'errors'}:
-            raise ValueError(
-                f"unexpected keyword arguments: {(kwargs.keys() - {'encoding', 'errors'})}"
-            )
+def _colorstr[_T: ColorStr](
+    cls: type[_T],
+    obj=_unset,
+    /,
+    fg=None,
+    bg=None,
+    *,
+    encoding=_unset,
+    errors=_unset,
+    ansi_type=_unset,
+    reset=True,
+) -> _T:
+    if buf_kwargs := {
+        k: v
+        for k, v in locals().items()
+        if k in {"encoding", "errors"} and v is not _unset
+    }:
         if not isinstance(obj, Buffer):
-            raise ValueError(
-                "expected buffer or bytes-like object, "
-                f"got {type(obj).__name__!r} object instead"
-            )
-        encoding = kwargs.pop('encoding', 'utf-8')
-        errors = kwargs.pop('errors', 'strict')
-        if isinstance(obj, (bytes, bytearray)):
-            obj = obj.decode(encoding, errors)
-        else:
-            obj = bytes(obj).decode(encoding, errors)
+            raise ValueError(f"unexpected keyword arguments: {set(buf_kwargs)}")
+        elif not isinstance(obj, (bytes, bytearray)):
+            obj = bytes(obj)
+        obj = obj.decode(**buf_kwargs)
+    sgr = SgrSequence()
+
     if obj is not _unset:
         if isinstance(obj, str):
             base_str = str(obj)
-            while m := sgr_re_pattern().match(base_str):
-                sgr.extend(m[0].removeprefix('\x1b[').removesuffix('m').encode())
+            sgr_match = sgr_pattern().match
+            while m := sgr_match(base_str):
+                sgr.extend(m[0].removeprefix("\x1b[").removesuffix('m').encode())
                 base_str = base_str[m.end() :]
             base_str = _END_RESET_PATTERN.sub('', base_str)
         else:
             base_str = str(obj)
     else:
         base_str = ''
-    if '\x1b[' in base_str:
-        raise ValueError
-    if reset is _unset:
-        reset = True
-    elif type(reset) is not bool:
+    if type(reset) is not bool:
         reset = bool(reset)
     if ansi_type is not _unset:
         ansi_type = get_ansi_type(ansi_type)
@@ -987,34 +995,8 @@ def _make_colorstr[_T: ColorStr](cls: type[_T], obj=_unset, *args, **kwargs) -> 
             key=lambda x: x[1],
         )[0]
     try:
-        if fg is bg is _unset:
-            match args:
-                case []:
-                    fg = bg = None
-                case [_ as fg]:
-                    bg = None
-                case [_ as fg, _ as bg]:
-                    pass
-                case _:
-                    raise ValueError
-        elif fg is _unset:
-            match args:
-                case []:
-                    fg = None
-                case [_ as fg]:
-                    pass
-                case _:
-                    raise ValueError
-        elif bg is _unset:
-            match args:
-                case []:
-                    bg = None
-                case [_ as bg]:
-                    pass
-                case _:
-                    raise ValueError
-        for k, v in dict.items({'fg': fg, 'bg': bg}):
-            if v is None:
+        for k, v in locals().items():
+            if k not in {"fg", "bg"} or v is None:
                 continue
             match v:
                 case Color(rgb=(_ as r, _ as g, _ as b)):
@@ -1028,27 +1010,21 @@ def _make_colorstr[_T: ColorStr](cls: type[_T], obj=_unset, *args, **kwargs) -> 
                 case _:
                     raise TypeError(type(v))
             sgr.append(ansi_type.from_rgb((k, (r, g, b))).to_param_buffer())
-    except (ValueError, TypeError) as e:
-        if isinstance(e, ValueError):
-            err = ValueError(
-                "ColorStr expected at most 2 positional arguments, " f"got {len(args)}"
-            )
-        else:
-            [typ] = e.args
-            err = TypeError(
-                "expected integer or vector of 3 integers, "
-                f"got {typ.__name__!r} object instead"
-            )
+    except TypeError as e:
+        [typ] = e.args
+        err = TypeError(
+            "expected integer or vector of 3 integers, "
+            f"got {typ.__name__!r} object instead"
+        )
         err.__cause__ = e.__cause__
         raise err
-    inst: Any = str.__new__(
-        cls, ''.join([str(sgr), base_str, SGR_RESET_S if reset else ''])
-    )
+    suffix = SGR_RESET_S if reset else ''
+    inst: Any = str.__new__(cls, f"{sgr}{base_str}{suffix}")
     inst.__dict__ |= {
         '_sgr': sgr,
         '_base_str': base_str,
         '_ansi_type': ansi_type,
-        '_reset': reset,
+        '_reset': suffix,
     }
     return inst
 
@@ -1062,7 +1038,7 @@ class ColorStr(str):
         sgr = kwargs.get('sgr', self._sgr)
         base_str = kwargs.get('base_str', self.base_str)
         suffix = SGR_RESET_S if kwargs.get('reset', self.reset) else ''
-        inst: Any = str.__new__(type(self), ''.join([str(sgr), base_str, suffix]))
+        inst = super().__new__(type(self), f"{sgr}{base_str}{suffix}")
         inst.__dict__ |= vars(self) | {f'_{k}': v for k, v in kwargs.items()}
         return inst
 
@@ -1070,7 +1046,7 @@ class ColorStr(str):
         r"""Returns a 3-tuple of parts of the string
         (sgr, base string, '\x1B[0m' or '')
         """
-        return str(self._sgr), self.base_str, SGR_RESET_S if self.reset else ''
+        return str(self._sgr), self.base_str, self._reset
 
     def as_ansi_type(self, __ansi_type):
         """Convert all ANSI colors in the `ColorStr` to a single ANSI type.
@@ -1091,10 +1067,7 @@ class ColorStr(str):
         if self.rgb_dict and ansi_type is not self.ansi_format:
             sgr = SgrSequence(self._sgr)
             sgr.rgb_dict = sgr._rgb_dict, ansi_type
-            inst = str.__new__(
-                type(self),
-                ''.join([str(sgr), self.base_str, SGR_RESET_S if self.reset else '']),
-            )
+            inst = super().__new__(type(self), f"{sgr}{self.base_str}{self._reset}")
             inst.__dict__ |= vars(self) | {'_sgr': sgr, '_ansi_type': ansi_type}
             return inst
         return self
@@ -1288,10 +1261,7 @@ class ColorStr(str):
                 sgr.remove(bx)
             else:
                 sgr.append(bx)
-        inst = super().__new__(
-            type(self),
-            ''.join([str(sgr), self.base_str, SGR_RESET_S if self.reset else '']),
-        )
+        inst = super().__new__(type(self), f"{sgr}{self.base_str}{self._reset}")
         inst.__dict__ |= vars(self) | {
             '_sgr': sgr,
             '_ansi_type': sgr.ansi_type() or self.ansi_format,
@@ -1371,7 +1341,7 @@ class ColorStr(str):
             )
         )
 
-    def ljust(self, __width, __fillchar=" "):
+    def ljust(self, __width, __fillchar=' '):
         return self._weak_var_update(base_str=self.base_str.ljust(__width, __fillchar))
 
     def lower(self):
@@ -1519,7 +1489,7 @@ class ColorStr(str):
         return self._weak_var_update(base_str=self.base_str * __value)
 
     def __new__(cls, obj=_unset, *args, **kwargs):
-        return _make_colorstr(cls, obj, *args, **kwargs)
+        return _colorstr(cls, obj, *args, **kwargs)
 
     def __repr__(self):
         return f'{type(self).__name__}({str(self)!r})'
@@ -1574,7 +1544,7 @@ class ColorStr(str):
 
     @property
     def reset(self):
-        return getattr(self, '_reset')
+        return bool(self._reset)
 
     @property
     def rgb_dict(self):

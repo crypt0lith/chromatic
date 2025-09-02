@@ -52,7 +52,7 @@ from ..color.core import (
     ansicolor4Bit,
     ansicolor8Bit,
     get_ansi_type,
-    sgr_re_pattern,
+    sgr_pattern,
 )
 from ..color.palette import rgb_dispatch
 from ..data import UserFont, userfont
@@ -366,7 +366,7 @@ def ansi_quantize(
     img: RGBArray,
     ansi_type: type[ansicolor4Bit | ansicolor8Bit],
     *,
-    equalize: bool | Literal['white_point'] = True,
+    equalize: bool | Literal['white_point'] = False,
 ):
     """Color-quantize an RGB array into ANSI 4-bit or 8-bit color space.
 
@@ -583,7 +583,7 @@ def img2ascii(
     return ascii_str
 
 
-@rgb_dispatch(('bg',))
+@rgb_dispatch('bg')
 def img2ansi(
     __img: RGBImageLike | PathLike[str] | str,
     __font: FontArgType = userfont['vga437'],
@@ -591,7 +591,7 @@ def img2ansi(
     char_set: Iterable[str] = None,
     ansi_type: AnsiColorParam = DEFAULT_ANSI,
     sort_glyphs: bool | type[reversed] = True,
-    equalize: bool | Literal['white_point'] = True,
+    equalize: bool | Literal['white_point'] = False,
     bg: Color | Int3Tuple | str = (0, 0, 0),
 ):
     """Convert an image to an ANSI array.
@@ -681,7 +681,7 @@ def img2ansi(
     return xs
 
 
-@rgb_dispatch(('fg', 'bg'))
+@rgb_dispatch('fg', 'bg')
 def ascii2img(
     __ascii: str,
     __font: FontArgType = userfont['vga437'],
@@ -733,7 +733,7 @@ def ascii2img(
     return img
 
 
-@rgb_dispatch(('fg_default', 'bg_default'))
+@rgb_dispatch('fg_default', 'bg_default')
 def ansi2img(
     __ansi_array: list[list[ColorStr]],
     __font: FontArgType = userfont['vga437'],
@@ -829,7 +829,7 @@ def ansify(
     char_set: Iterable[str] = None,
     sort_glyphs: bool | type[reversed] = True,
     ansi_type: AnsiColorParam = DEFAULT_ANSI,
-    equalize: bool | Literal['white_point'] = True,
+    equalize: bool | Literal['white_point'] = False,
     fg: Int3Tuple | str = (170, 170, 170),
     bg: Int3Tuple | str | Literal['auto'] = (0, 0, 0),
 ):
@@ -886,8 +886,8 @@ def _is_csi_param(__c: str) -> TypeGuard[Literal[';'] | LiteralDigit]:
 
 
 @lru_cache(maxsize=1)
-def sgr_span_re_pattern():
-    sgr_re = sgr_re_pattern().pattern.removeprefix(r'\x1b\[')
+def cursor_or_sgr_pattern():
+    sgr_re = sgr_pattern().pattern.removeprefix(r'\x1b\[')
     return re.compile(
         rf"(?:\x1b\[(?:(?P<cursor>\d*[A-G]|\d*(?:;\d*)?H)|(?P<sgr>{sgr_re})))?(?P<text>[^\x1b]*)"
     )
@@ -951,7 +951,7 @@ def _sub_bold_colors(lines: Iterable[str]) -> Iterator[str]:
     for line in lines:
         bold_bit = False
         prev_colors = {}
-        yield sgr_re_pattern().sub(sub, line)
+        yield sgr_pattern().sub(sub, line)
 
 
 def reshape_ansi(__str: str, w: int, h: int) -> str:
@@ -982,7 +982,7 @@ def reshape_ansi(__str: str, w: int, h: int) -> str:
     cur = cursor()
     x, y = next(cur)
     for line in _sub_bold_colors(__str.splitlines()):
-        for m in sgr_span_re_pattern().finditer(line + '\n'):
+        for m in cursor_or_sgr_pattern().finditer(line + '\n'):
             if cg := m['cursor']:
                 write_cell(' ')
                 param, code = cg[:-1], cg[-1]
@@ -1018,10 +1018,10 @@ def reshape_ansi(__str: str, w: int, h: int) -> str:
                 write_cell(ch, incr=True)
 
     out_lines = []
-    any_sgr_re = re.compile(r"\x1b\[\d*(?:;\d*)*[A-HJ-KS-Tmf]")
+    any_ansi_seq = re.compile(r"\x1b\[\d*(?:;\d*)*[A-HJ-KS-Tmf]")
     for row in arr:
         out_row = ''.join(cell.translate({0: ' '}) for cell in row)
-        lhs, rhs = map(' '.__mul__, divmod(w - len(any_sgr_re.sub('', out_row)), 2))
+        lhs, rhs = map(' '.__mul__, divmod(w - len(any_ansi_seq.sub('', out_row)), 2))
         out_lines.append(f"{lhs}{out_row}{rhs}")
 
     return '\n'.join(out_lines)
@@ -1034,7 +1034,7 @@ def to_sgr_array(__str: str, ansi_type: AnsiColorParam = None):
     xs = []
     for line in _sub_bold_colors(__str.splitlines()):
         x = []
-        for m in sgr_span_re_pattern().finditer(line):
+        for m in cursor_or_sgr_pattern().finditer(line):
             text = m["text"]
             if m["sgr"]:
                 sgr = SgrSequence(map(int, m["sgr"].removesuffix('m').split(';')))

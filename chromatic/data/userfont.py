@@ -1,7 +1,7 @@
 import json
 import os
 import os.path as osp
-from dataclasses import dataclass, field
+from dataclasses import field, dataclass, MISSING, fields
 from types import MappingProxyType
 from typing import AnyStr, TYPE_CHECKING
 
@@ -23,7 +23,7 @@ if not osp.exists(os.environ["CHROMATIC_FONTDIR"]):
 _TRUETYPE_EXT = frozenset({'.ttf', '.ttc'})
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class UserFont:
     font: str
     size: int = field(default=24, kw_only=True)
@@ -36,6 +36,21 @@ class UserFont:
     def __fspath__(self):
         return osp.realpath(
             osp.join(os.environ["CHROMATIC_DATADIR"], self.font), strict=True
+        )
+
+    def __repr__(self):
+        cls = type(self)
+        inst_fields = {}
+        for f in fields(cls):  # noqa
+            v = getattr(self, f.name)
+            if f.default is MISSING or v != f.default:
+                inst_fields[f.name] = v
+        try:
+            inst_fields["font"] = os.fspath(self)
+        except (OSError, FileNotFoundError):
+            pass
+        return f"{cls.__name__}(%s)" % ', '.join(
+            f"{k}={v!r}" for k, v in inst_fields.items()
         )
 
     def to_truetype(self):

@@ -559,19 +559,19 @@ named_color = _make_named_color_map()
 
 def named_color_idents():
     return [
-        ColorStr(name.replace('_', ' ').lower(), color, ansi_type='24b')
+        ColorStr(name.translate({0x5F: 0x20}).lower(), color, ansi_type='24b')
         for name, color in ColorNamespace.asdict().items()
     ]
 
 
-def __getattr__(name: ...) -> ...:
-    if name == 'Back':
-        return AnsiBack()
-    if name == 'Fore':
-        return AnsiFore()
-    if name == 'Style':
-        return AnsiStyle()
-    raise AttributeError(f"Module {__name__!r} has no attribute {name!r}")
+def __getattr__(name: str) -> ...:
+    try:
+        return globals().setdefault(
+            name, {'Back': AnsiBack, 'Fore': AnsiFore, 'Style': AnsiStyle}[name]()
+        )
+    except KeyError:
+        pass
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 if TYPE_CHECKING:

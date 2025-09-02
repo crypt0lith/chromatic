@@ -366,7 +366,7 @@ def ansi_quantize(
     img: RGBArray,
     ansi_type: type[ansicolor4Bit | ansicolor8Bit],
     *,
-    equalize: bool | Literal['white_point'] = True,
+    equalize: bool | Literal['white_point'] = False,
 ):
     """Color-quantize an RGB array into ANSI 4-bit or 8-bit color space.
 
@@ -591,7 +591,7 @@ def img2ansi(
     char_set: Iterable[str] = None,
     ansi_type: AnsiColorParam = DEFAULT_ANSI,
     sort_glyphs: bool | type[reversed] = True,
-    equalize: bool | Literal['white_point'] = True,
+    equalize: bool | Literal['white_point'] = False,
     bg: Color | Int3Tuple | str = (0, 0, 0),
 ):
     """Convert an image to an ANSI array.
@@ -829,7 +829,7 @@ def ansify(
     char_set: Iterable[str] = None,
     sort_glyphs: bool | type[reversed] = True,
     ansi_type: AnsiColorParam = DEFAULT_ANSI,
-    equalize: bool | Literal['white_point'] = True,
+    equalize: bool | Literal['white_point'] = False,
     fg: Int3Tuple | str = (170, 170, 170),
     bg: Int3Tuple | str | Literal['auto'] = (0, 0, 0),
 ):

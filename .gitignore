@@ -1,8 +1,6 @@
 *.pyc
 *.pyo
 __pycache__/
-/dist/
-/*.egg-info/
 /chromatic/_version.py
 /chromatic/data/userfont.json
 /tests/_*

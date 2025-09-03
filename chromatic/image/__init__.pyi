@@ -67,4 +67,4 @@ from ._curses import (
     translate_cp437,
     unctrl,
 )
-from ._glyph_proc import get_glyph_masks, sort_glyphs, ttf_extract_codepoints
+from ._glyph import get_glyph_masks, sort_glyphs, ttf_extract_codepoints

@@ -572,7 +572,7 @@ def img2ascii(
     elif type(char_set) is not str:
         char_set = ''.join(char_set)
     if sort_glyphs in {True, reversed}:
-        from ._glyph_proc import sort_glyphs as glyph_sort
+        from ._glyph import sort_glyphs as glyph_sort
 
         char_set = glyph_sort(char_set, font, reverse=(sort_glyphs is reversed))
     maxlen = len(char_set) - 1

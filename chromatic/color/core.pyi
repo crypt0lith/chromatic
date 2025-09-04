@@ -229,21 +229,21 @@ class ColorStr(str):
     def __mod__(self, __value) -> ColorStr: ...
     def __mul__(self, __value: SupportsIndex) -> Self: ...
     @overload
-    def __new__[_RgbVectorLike: RGBVectorLike](
+    def __new__[_RGBVectorLike: RGBVectorLike](
         cls,
         obj: object = ...,
-        fg: SupportsInt | _RgbVectorLike = None,
-        bg: SupportsInt | _RgbVectorLike = None,
+        fg: SupportsInt | _RGBVectorLike = None,
+        bg: SupportsInt | _RGBVectorLike = None,
         *,
         ansi_type: AnsiColorParam = ...,
         reset: bool = ...,
     ) -> Self: ...
     @overload
-    def __new__[_RgbVectorLike: RGBVectorLike](
+    def __new__[_RGBVectorLike: RGBVectorLike](
         cls,
         obj: Buffer,
-        fg: SupportsInt | _RgbVectorLike = None,
-        bg: SupportsInt | _RgbVectorLike = None,
+        fg: SupportsInt | _RGBVectorLike = None,
+        bg: SupportsInt | _RGBVectorLike = None,
         *,
         encoding: str = ...,
         errors: str = ...,
@@ -286,28 +286,31 @@ class color_chain:
         masks: Sequence[tuple[SgrSequence, str]],
         ansi_type: type[AnsiColorFormat] = None,
     ) -> Self: ...
+    def shrink(self) -> Self: ...
     def __add__[_T: (
         color_chain,
         SgrSequence,
         ColorStr,
         str,
     )](self, other: _T) -> color_chain: ...
+    def __bool__(self) -> bool: ...
     def __call__(self, __obj=None) -> str: ...
-    def __init__[_T: (
-        int,
-        Buffer,
-        SgrParamBuffer,
-    )](
-        self, __sgr: Iterable[_T] = ..., **kwargs: Unpack[_ColorChainKwargs]
+    @overload
+    def __getitem__(self, __index: SupportsIndex) -> tuple[SgrSequence, str]: ...
+    @overload
+    def __getitem__(self, __index: slice) -> list[tuple[SgrSequence, str]]: ...
+    def __init__[_T: color_chain | ColorStr | str | SgrSequence](
+        self, __sgr: Iterable[_T] = ..., *, ansi_type: AnsiColorParam = ...
     ) -> None: ...
+    def __len__(self) -> int: ...
     def __radd__[_T: (
         color_chain,
-        SgrSequence,
         ColorStr,
         str,
+        SgrSequence,
     )](self, other: _T) -> color_chain: ...
 
-    _ansi_type: type[AnsiColorFormat]
+    _ansi_type: type[AnsiColorFormat] | None
     _masks: list[tuple[SgrSequence, str]]
 
     @property

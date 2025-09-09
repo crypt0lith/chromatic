@@ -92,7 +92,9 @@ def int2rgb(__x: int) -> Int3Tuple:
     try:
         return getattr(__x, 'rgb')
     except AttributeError:
-        return (__x >> 16) & 0xFF, (__x >> 8) & 0xFF, __x & 0xFF
+        pass
+    x = int(__x) & 0xFFFFFF
+    return (x >> 16) & 0xFF, (x >> 8) & 0xFF, x & 0xFF
 
 
 def xyz2lab(xyz: FloatSequence) -> Float3Tuple:

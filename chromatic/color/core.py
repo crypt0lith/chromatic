@@ -26,6 +26,7 @@ from copy import deepcopy
 from ctypes import byref
 from enum import IntEnum
 from functools import lru_cache
+from types import UnionType
 from typing import (
     Any,
     Final,
@@ -34,6 +35,7 @@ from typing import (
     Iterator,
     Literal as L,
     MutableSequence,
+    Self,
     Sequence,
     SupportsIndex,
     SupportsInt,
@@ -55,11 +57,9 @@ from .colorconv import (
 )
 from .._typing import AnsiColorAlias, ColorDictKeys, Int3Tuple
 
-# os.system('')
-
 CSI: Final[bytes] = b'\x1b['
-SGR_RESET: Final[bytes] = CSI + b'0m'
-SGR_RESET_S: Final[str] = SGR_RESET.decode()
+SGR_RESET: Final[bytes] = b'\x1b[0m'
+SGR_RESET_S: Final[str] = '\x1b[0m'
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code#SGR
@@ -175,6 +175,11 @@ _ANSI256_KEY2I = {v: int(k) for k, v in _ANSI256_B2KEY.items()}
 # ----------------
 
 
+@lru_cache
+def _issubclass(__cls: type, __class_or_tuple: type | UnionType | tuple[Any, ...]):
+    return issubclass(__cls, __class_or_tuple)
+
+
 class colorbytes(bytes):
 
     @classmethod
@@ -211,19 +216,20 @@ class colorbytes(bytes):
                 k, v = dict(__rgb).popitem()
             case _:
                 raise ValueError
-        r, g, b = map(int, v) if isinstance(v, Iterable) else int2rgb(int(v))
-        typ: AnsiColorType = cls if cls is not colorbytes else DEFAULT_ANSI
-        inst = bytes.__new__(typ, rgb2ansi_escape(typ, mode=k, rgb=(r, g, b)))
+        r, g, b = map(int, v) if _issubclass(type(v), Iterable) else int2rgb(int(v))
+        typ: AnsiColorType = DEFAULT_ANSI if cls is colorbytes else cls
+        inst = super().__new__(typ, rgb2ansi_escape(typ, mode=k, rgb=(r, g, b)))
         setattr(inst, '_rgb_dict', {k: (r, g, b)})
         return inst
 
     def __new__(cls, __ansi):
-        if not isinstance(__ansi, (bytes, bytearray)):
+        objtype = type(__ansi)
+        if not _issubclass(objtype, (bytes, bytearray)):
             raise TypeError(
-                f"Expected bytes-like object, got {type(__ansi).__name__!r} object instead"
+                f"Expected bytes-like object, got {objtype.__name__!r} object instead"
             )
         issubtype = bool(cls is not colorbytes)
-        if issubtype and type(__ansi) is cls:
+        if issubtype and objtype is cls:
             return __ansi
         k: ColorDictKeys
         match _unwrap_ansi_escape(__ansi):
@@ -248,12 +254,12 @@ class colorbytes(bytes):
                 typ = cls
             else:
                 __ansi = rgb2ansi_escape(typ, mode=k, rgb=rgb)
-        inst = bytes.__new__(typ, __ansi)
+        inst = super().__new__(typ, __ansi)
         setattr(inst, '_rgb_dict', {k: rgb})
         return inst
 
     def __repr__(self):
-        return f"{type(self).__name__}({self})"
+        return "{0.__class__.__name__}({0!s})".format(self)
 
     def to_param_buffer(self):
         obj = object.__new__(SgrParamBuffer)
@@ -413,23 +419,21 @@ def _is_ansi_type(typ: type):
 def get_ansi_type(typ):
     try:
         return _ANSI_FORMAT_MAP[typ]
-    except (TypeError, KeyError) as e:
-        if isinstance(typ, str):
-            err = ValueError(f"invalid ANSI color format alias: {e!r}")
-        else:
-            from .._typing import unionize
+    except (TypeError, KeyError):
+        pass
+    if isinstance(typ, str):
+        raise ValueError(f"invalid ANSI color format alias: {typ!r}")
+    from .._typing import unionize
 
-            repr_getter = lambda t: (t if isinstance(t, type) else type(t))
-            msg = (
-                "Expected {.__name__!r} or {}, got {.__name__!r} object instead".format(
-                    str,
-                    type[unionize(set(map(repr_getter, _ANSI_FORMAT_MAP.values())))],
-                    repr_getter(typ),
-                )
-            )
-            err = TypeError(msg)
-        err.__cause__ = e.__cause__
-        raise err
+    repr_getter = lambda t: (t if isinstance(t, type) else type(t))
+    err = TypeError(
+        "Expected {.__name__!r} or {}, got {.__name__!r} object instead".format(
+            str,
+            type[unionize(set(map(repr_getter, _ANSI_FORMAT_MAP.values())))],
+            repr_getter(typ),
+        )
+    )
+    raise err
 
 
 def set_default_ansi(typ):
@@ -501,16 +505,14 @@ def rgb2ansi_escape(fmt, mode, rgb):
         else:
             sgr += [2, *rgb]
         return b';'.join(map(b'%d'.__mod__, sgr))
-    except KeyError as e:
-        if isinstance(mode, str):
-            err = ValueError(f"invalid mode: {mode!r}")
-        else:
-            err = TypeError(
-                f"expected 'mode' be {str.__name__!r}, "
-                f"got {type(mode).__name__!r} object instead"
-            )
-        err.__cause__ = e.__cause__
-        raise err
+    except KeyError:
+        pass
+    if isinstance(mode, str):
+        raise ValueError(f"invalid mode: {mode!r}")
+    raise TypeError(
+        f"expected 'mode' be {str.__name__!r}, "
+        f"got {type(mode).__name__!r} object instead"
+    )
 
 
 class Color(int):
@@ -523,13 +525,13 @@ class Color(int):
     """
 
     def __new__(cls, *args, **kwargs):
-        if is_u24(__x := int(*args, **kwargs), strict=True):
-            inst = super().__new__(cls, __x)
+        inst = super().__new__(cls, *args, **kwargs)
+        if is_u24(inst, strict=True):
             inst._rgb = int2rgb(inst)
             return inst
 
     def __repr__(self):
-        return f"{type(self).__name__}(0x{self:06X})"
+        return "{0.__class__.__name__}(0x{0:06X})".format(self)
 
     def __invert__(self):
         return Color(0xFFFFFF ^ self)
@@ -562,7 +564,7 @@ class SgrParamBuffer[_T]:
         try:
             return getattr(self, '_bytes')
         except AttributeError:
-            setattr(self, '_bytes', bytes(self.value))
+            setattr(self, '_bytes', bytes(self._value))
             return self._bytes
 
     def __eq__(self, other):
@@ -572,9 +574,10 @@ class SgrParamBuffer[_T]:
         return hash(self.value)
 
     def __init__(self, __value=b''):
-        if isinstance(__value, bytes):
+        if _issubclass(__value.__class__, bytes):
             self._value = __value
-        elif isinstance(__value, type(self)):
+        elif _issubclass(__value.__class__, self.__class__):
+            __value: Self
             self._value = __value._value
         else:
             err = TypeError(
@@ -592,13 +595,13 @@ class SgrParamBuffer[_T]:
         return self._value
 
     def __repr__(self):
-        return f"{type(self).__name__}({self._value!r})"
+        return "{0.__class__.__name__}({0._value!r})".format(self)
 
     def is_color(self):
         try:
             return getattr(self, '_is_color')
         except AttributeError:
-            setattr(self, '_is_color', isinstance(self._value, colorbytes))
+            setattr(self, '_is_color', _issubclass(type(self._value), colorbytes))
             return self._is_color
 
     def is_reset(self):
@@ -651,26 +654,34 @@ def _iter_normalized_sgr[_T: (
     Buffer,
     SupportsInt,
 )](__iter: bytes | bytearray | Iterable[_T]) -> Iterator[int | AnsiColorFormat]:
-    if isinstance(__iter, (bytes, bytearray)):
+    if _issubclass(type(__iter), (bytes, bytearray)):
         __iter = __iter.split(b';')
+    elt: Any
     for elt in __iter:
-        match elt:
-            case (colorbytes() as cb) | SgrParamBuffer(colorbytes() as cb):
-                yield cb
-            case (SupportsInt() as b) | SgrParamBuffer(_ as b):
-                yield int(b)
-            case Buffer():
+        objtype = type(elt)
+        if objtype is SgrParamBuffer:
+            elt = elt._value
+            if _issubclass(type(elt), colorbytes):
+                yield elt
+            else:
+                yield int(elt)
+        elif _issubclass(objtype, colorbytes):
+            yield elt
+        elif _issubclass(objtype, Buffer):
+            if objtype is not bytes:
                 elt = bytes(elt)
-                if elt.isdigit():
-                    yield int(elt)
-                else:
-                    yield from _get_sgr_nums(elt)
-            case _:
-                raise TypeError(
-                    "Expected {!r} or bytes-like object, got {!r} instead".format(
-                        int.__qualname__, type(elt).__qualname__
-                    )
+            if elt.isdigit():
+                yield int(elt)
+            else:
+                yield from _get_sgr_nums(elt)
+        elif _issubclass(objtype, SupportsInt):
+            yield int(elt)
+        else:
+            raise TypeError(
+                "Expected {.__name__!r} or bytes-like object, got {.__name__!r} instead".format(
+                    int, type(elt)
                 )
+            )
 
 
 def _co_yield_colorbytes(
@@ -739,19 +750,14 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
         return self.__copy__()
 
     def insert(self, __index, __value):
-        if not isinstance(__value, SgrParamBuffer):
-            try:
-                __value = SgrParamBuffer(__value)
-            except TypeError as e:
-                err = TypeError(e)
-                err.__cause__ = e.__cause__
-                raise err
+        if type(__value) is not SgrParamBuffer:
+            __value = SgrParamBuffer(__value)
         self._sgr_params.insert(__index, __value)
         if __value.is_color():
             self._update_colors()
 
     def extend(self, __iter):
-        self._sgr_params += [SgrParamBuffer(x) for x in _iter_sgr(__iter)]
+        self._sgr_params.extend(map(SgrParamBuffer, _iter_sgr(__iter)))
         self._update_colors()
 
     def is_color(self):
@@ -773,8 +779,9 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
             return typ
 
     def __add__(self, other):
-        if isinstance(other, SgrSequence):
-            return type(self)(x for xs in (self, other) for x in xs)
+        cls = type(self)
+        if isinstance(other, cls):
+            return cls(x for xs in (self, other) for x in xs)
         return NotImplemented
 
     def __bool__(self):
@@ -812,15 +819,12 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
         else:
             colors: dict = {}
             elts: dict = {}
-            bold_bit = False
             for elt in _iter_sgr(__iter):
                 if elt in elts:
                     continue
                 match elt:
-                    case colorbytes(__class__=ansi_type):
+                    case colorbytes():
                         elt: AnsiColorFormat
-                        if bold_bit and ansi_type is ansicolor4Bit and int(elt) <= 37:
-                            elt = ansicolor4Bit(b'%d' % (int(elt) + 60))
                         for k in elt.rgb_dict:
                             x = colors.pop(k, None)
                             if x is not None:
@@ -828,15 +832,10 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
                             colors[k] = elt
                         elts[elt.to_param_buffer()] = None
                         continue
-                    case b'0' | b'1' | b'22' | b'39' | b'49':
+                    case b'0' | b'39' | b'49':
                         if elt == b'0':
                             elts.clear()
                             colors.clear()
-                            bold_bit = False
-                        elif elt == b'1':
-                            bold_bit = True
-                        elif elt == b'22':
-                            bold_bit = False
                         else:
                             if x := colors.pop({b'39': 'fg', b'49': 'bg'}[elt], None):
                                 elts.pop(x)
@@ -862,13 +861,19 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
         else:
             __index: SupportsIndex
             __value: ...
-            xs = list(_iter_sgr(__value))
-            if len(xs) != 1:
-                err = ValueError(
-                    f"parsed {len(xs)} sgr parameters, expected only 1: {xs!r}"
+            xs = _iter_sgr(__value)
+            x = next(xs)
+            i = 1
+            try:
+                _ = next(xs)
+            except StopIteration:
+                pass
+            else:
+                i += 1
+                raise ValueError(
+                    f"parsed {i + sum(1 for _ in xs)} sgr parameters, expected only 1"
                 )
-                raise err
-            self._sgr_params[__index] = SgrParamBuffer(xs.pop())
+            self._sgr_params[__index] = SgrParamBuffer(x)
         self._update_colors()
 
     def __str__(self):
@@ -953,7 +958,7 @@ def _colorstr[_T: ColorStr](
 
     if obj is not _unset:
         if isinstance(obj, str):
-            base_str = str(obj)
+            base_str = getattr(obj, 'base_str', obj)
             sgr_match = sgr_pattern().match
             while m := sgr_match(base_str):
                 sgr.extend(m[0].removeprefix("\x1b[").removesuffix('m').encode())
@@ -982,7 +987,7 @@ def _colorstr[_T: ColorStr](
                 case Color(rgb=(_ as r, _ as g, _ as b)):
                     pass
                 case SupportsInt():
-                    r, g, b = int2rgb(int(v))
+                    r, g, b = int2rgb(v)
                 case [SupportsInt(), SupportsInt(), SupportsInt()]:
                     r, g, b = (int(x) & 0xFF for x in v)
                 case np.ndarray(shape=(3,)):
@@ -1045,7 +1050,7 @@ class ColorStr(str):
         """
         ansi_type = get_ansi_type(__ansi_type)
         if self.rgb_dict and ansi_type is not self.ansi_format:
-            sgr = SgrSequence(self._sgr)
+            sgr = self._sgr.copy()
             sgr.rgb_dict = sgr._rgb_dict, ansi_type
             inst = super().__new__(type(self), f"{sgr}{self.base_str}{self._reset}")
             inst.__dict__ |= vars(self) | {'_sgr': sgr, '_ansi_type': ansi_type}
@@ -1430,8 +1435,10 @@ class ColorStr(str):
         return NotImplemented
 
     def __format__(self, format_spec=''):
-        if ansi_typ := _ANSI_FORMAT_MAP.get(format_spec):  # type: ignore[arg-type]
-            return str(self.as_ansi_type(ansi_typ))
+        if format_spec.endswith('b'):
+            for alias in ('24b', '8b', '4b'):
+                format_spec = format_spec.rpartition(alias)[0]
+                return str(self.as_ansi_type(alias)).__format__(format_spec)
         return super().__format__(format_spec)
 
     def __getitem__(self, __key):
@@ -1477,7 +1484,7 @@ class ColorStr(str):
         return NotImplemented
 
     def __repr__(self):
-        return f'{type(self).__name__}({str(self)!r})'
+        return f"{self.__class__.__name__}({super().__repr__()})"
 
     def __xor__(self, other):
         """Return copy of self with colors ^ other colors"""

@@ -410,7 +410,7 @@ class SgrParamBuffer[
     @property
     def value(self) -> _T: ...
     __slots__ = ('_bytes', '_is_color', '_is_reset', '_value')
-    _value: _T
+    # _value: _T
 
 class SgrSequence(MutableSequence[SgrParamBuffer]):
     def _update_colors(self): ...

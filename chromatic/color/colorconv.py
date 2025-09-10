@@ -59,7 +59,7 @@ def is_u24(value, *, strict: bool = False):
     ValueError
         Raised when `strict=True` and value is not u24
     """
-    if _supports_int(type(value)):
+    if _supports_int(value.__class__):
         if 0 <= int(value) <= 0xFFFFFF:
             return True
         elif not strict:

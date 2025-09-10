@@ -1404,13 +1404,7 @@ class ColorStr(str, _IntFloatMixin):
         return NotImplemented
 
     def __contains__(self, __key: str):
-        if type(__key) is not str:
-            return False
-        if __key == str(self._sgr):
-            return True
-        if __key == SGR_RESET_S:
-            return self.reset
-        return bool(__key in self.base_str)
+        return self.base_str.__contains__(__key)
 
     def __eq__(self, other):
         if _issubclass(other.__class__, self.__class__):
@@ -1424,8 +1418,14 @@ class ColorStr(str, _IntFloatMixin):
                 return str(self.as_ansi_type(alias)).__format__(format_spec)
         return super().__format__(format_spec)
 
+    def __ge__(self, other):
+        return self.base_str.__ge__(other)
+
     def __getitem__(self, __key):
         return self._weak_var_update(base_str=self.base_str[__key])
+
+    def __gt__(self, other):
+        return self.base_str.__gt__(other)
 
     def __hash__(self):
         return hash((self.__class__, str(self)))
@@ -1443,8 +1443,14 @@ class ColorStr(str, _IntFloatMixin):
         for c in self.base_str:
             yield self._weak_var_update(base_str=c)
 
+    def __le__(self, other):
+        return self.base_str.__le__(other)
+
     def __len__(self):
         return len(self.base_str)
+
+    def __lt__(self, other):
+        return self.base_str.__lt__(other)
 
     def __matmul__(self, other):
         """Return a new `ColorStr` with the base string of `self` and colors of `other`"""
@@ -1457,6 +1463,8 @@ class ColorStr(str, _IntFloatMixin):
 
     def __mul__(self, __value):
         return self._weak_var_update(base_str=self.base_str * __value)
+
+    __rmul__ = __mul__
 
     def __new__(cls, obj=_unset, *args, **kwargs):
         return _colorstr(super(), obj, *args, **kwargs)  # noqa

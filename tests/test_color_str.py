@@ -326,7 +326,7 @@ class TestColorStr(unittest.TestCase):
         cs = ColorStr(ansi_type='4b', reset=False)
         self.assertEqual((cs.base_str, cs.ansi), ('', b''))
 
-        red_fg = cs.update_sgr(SgrParameter.RED_BRIGHT_FG)
+        red_fg = cs.add_sgr_param(SgrParameter.RED_BRIGHT_FG)
         self.assertEqual([ansicolor4Bit(b'91')], list(red_fg._sgr.values()))
         red_fg += 'iadd'
         self.assertEqual([ansicolor4Bit(b'91')], list(red_fg._sgr.values()))

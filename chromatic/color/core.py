@@ -1082,19 +1082,6 @@ class ColorStr(str, _IntFloatMixin):
             return inst
         return self
 
-    def bold(self):
-        if b'%d' % SgrParameter.BOLD in self._sgr:
-            return self
-        return self.update_sgr(SgrParameter.BOLD)
-
-    def italicize(self):
-        if b'%d' % SgrParameter.ITALICS in self._sgr:
-            return self
-        return self.update_sgr(SgrParameter.ITALICS)
-
-    def negative(self):
-        return self.update_sgr(SgrParameter.NEGATIVE)
-
     def recolor(self, *args, **kwargs):
         """ColorStr.recolor(self, __value, *, absolute=False) -> ColorStr
         ColorStr.recolor(self, *, fg=None, bg=None, absolute=False) -> ColorStr
@@ -1180,103 +1167,76 @@ class ColorStr(str, _IntFloatMixin):
         sgr.rgb_dict = {'fg': fg, 'bg': bg}, self.ansi_format
         return self._weak_var_update(sgr=sgr)
 
-    def strikethrough(self):
-        if b'%d' % SgrParameter.CROSSED_OUT in self._sgr:
-            return self
-        return self.update_sgr(SgrParameter.CROSSED_OUT)
-
-    def underline(self, double=False):
-        if double:
-            if b'%d' % SgrParameter.DOUBLE_UNDERLINE in self._sgr:
-                return self
-            elif b'%d' % SgrParameter.SINGLE_UNDERLINE in self._sgr:
-                return self.update_sgr(
-                    SgrParameter.SINGLE_UNDERLINE, SgrParameter.DOUBLE_UNDERLINE
-                )
-            else:
-                return self.update_sgr(SgrParameter.DOUBLE_UNDERLINE)
-        else:
-            if b'%d' % SgrParameter.SINGLE_UNDERLINE in self._sgr:
-                return self
-            elif b'%d' % SgrParameter.DOUBLE_UNDERLINE in self._sgr:
-                return self.update_sgr(
-                    SgrParameter.DOUBLE_UNDERLINE, SgrParameter.SINGLE_UNDERLINE
-                )
-            else:
-                return self.update_sgr(SgrParameter.SINGLE_UNDERLINE)
-
-    def update_sgr(self, *args):
-        """Return a copy of `self` with updated SGR sequence parameters.
-
-        Parameters
-        ----------
-        *args: SgrParameter | int
-            The SGR parameter value(s) to be added or removed from the `ColorStr`.
-            A value already in `self` SGR sequence gets removed, else it gets added.
-            If no values are passed, returns `self` unchanged.
-
-        Returns
-        -------
-        ColorStr
-            A new `ColorStr` object with the SGR updates applied.
-
-        Raises
-        ------
-        ValueError
-            If any of the SGR parameters are invalid,
-            or if extended color codes { 38, 48 } are passed.
-
-        Examples
-        --------
-            >>> # creating an empty ColorStr object
-            >>> empty_cs = ColorStr(reset=True)
-            >>> empty_cs.ansi
-            b''
-
-            >>> # adding red foreground color
-            >>> red_fg = empty_cs.update_sgr(SgrParameter.RED_FG)
-            >>> red_fg.rgb_dict
-            {'fg': (170, 0, 0)}
-
-            >>> # removing the same parameter
-            >>> empty_cs = red_fg.update_sgr(31)
-            >>> empty_cs.ansi, empty_cs.rgb_dict
-            (b'', {})
-
-            >>> # adding more parameters
-            >>> styles = [SgrParameter.BOLD, SgrParameter.ITALICS, SgrParameter.NEGATIVE]
-            >>> stylized_cs = empty_cs.update_sgr(*styles)
-            >>> stylized_cs.ansi.replace(CSI, b'ESC[')
-            b'ESC[1;3;7m'
-
-            >>> # parameter updates also supported by the `__add__` operator
-            >>> stylized_cs += SgrParameter.BLACK_BG    # add background color
-            >>> stylized_cs += SgrParameter.BOLD    # remove bold style
-            >>> stylized_cs.ansi.replace(CSI, b'ESC['), stylized_cs.rgb_dict
-            (b'ESC[3;7;40m', {'bg': (0, 0, 0)})
-
-        See Also
-        --------
-            ColorStr.recolor : to change colors
-            ColorStr.as_ansi_type : to change ANSI color type
-        """
-        if not args:
+    def strip_style(self):
+        only_colors = []
+        diff = False
+        for x in self._sgr:
+            if x.is_color():
+                only_colors.append(x)
+            elif not diff:
+                diff = True
+        if not diff:
             return self
         sgr = self._sgr.copy()
-        for x in args:
-            if not _is_sgr_param(x):
-                raise ValueError
-            bx = SgrParamBuffer(b'%d' % x)
-            if bx in sgr:
-                sgr.remove(bx)
-            else:
-                sgr.append(bx)
+        sgr[:] = only_colors
+        return self._weak_var_update(sgr=sgr)
+
+    def add_sgr_param(self, __x: SgrParameter):
+        if __x.__class__ is not SgrParameter:
+            __x = SgrParameter(__x)
+        bx = SgrParamBuffer(b'%d' % __x)
+        if bx in self._sgr:
+            return self
+        sgr = self._sgr.copy()
+        sgr.append(bx)
         inst = super().__new__(self.__class__, f"{sgr}{self.base_str}{self._reset}")
         inst.__dict__ |= vars(self) | {
             '_sgr': sgr,
             '_ansi_type': sgr.ansi_type() or self.ansi_format,
         }
         return inst
+
+    def remove_sgr_param(self, __x: SgrParameter):
+        if __x.__class__ is not SgrParameter:
+            __x = SgrParameter(__x)
+        bx = SgrParamBuffer(b'%d' % __x)
+        if bx not in self._sgr:
+            return self
+        sgr = self._sgr.copy()
+        sgr.remove(bx)
+        inst = super().__new__(self.__class__, f"{sgr}{self.base_str}{self._reset}")
+        inst.__dict__ |= vars(self) | {
+            '_sgr': sgr,
+            '_ansi_type': sgr.ansi_type() or self.ansi_format,
+        }
+        return inst
+
+    def blink(self):
+        return self.add_sgr_param(SgrParameter.SLOW_BLINK)
+
+    def blink_stop(self):
+        return self.add_sgr_param(SgrParameter.RESET_BLINKING)
+
+    def bold(self):
+        return self.add_sgr_param(SgrParameter.BOLD)
+
+    def crossout(self):
+        return self.add_sgr_param(SgrParameter.CROSSED_OUT)
+
+    def dunder(self):
+        return self.add_sgr_param(SgrParameter.DOUBLE_UNDERLINE)
+
+    def encircle(self):
+        return self.add_sgr_param(SgrParameter.ENCIRCLED)
+
+    def italicize(self):
+        return self.add_sgr_param(SgrParameter.ITALICS)
+
+    def negative(self):
+        return self.add_sgr_param(SgrParameter.NEGATIVE)
+
+    def sunder(self):
+        return self.add_sgr_param(SgrParameter.SINGLE_UNDERLINE)
 
     def capitalize(self):
         return self._weak_var_update(base_str=self.base_str.capitalize())
@@ -1441,8 +1401,6 @@ class ColorStr(str, _IntFloatMixin):
             )
         elif isinstance(other, str):
             return self._weak_var_update(base_str=self.base_str + other)
-        elif isinstance(other, SgrParameter):
-            return self.update_sgr(other)
         return NotImplemented
 
     def __contains__(self, __key: str):

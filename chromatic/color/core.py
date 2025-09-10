@@ -217,7 +217,11 @@ class colorbytes(bytes):
                 k, v = dict(__rgb).popitem()
             case _:
                 raise ValueError
-        r, g, b = (int(x) & 0xFF for x in v) if _issubclass(v.__class__, Iterable) else int2rgb(v)
+        r, g, b = (
+            (int(x) & 0xFF for x in v)
+            if _issubclass(v.__class__, Iterable)
+            else int2rgb(v)
+        )
         typ: AnsiColorType = DEFAULT_ANSI if cls is colorbytes else cls
         inst = super().__new__(typ, rgb2ansi_escape(typ, mode=k, rgb=(r, g, b)))
         setattr(inst, '_rgb_dict', {k: (r, g, b)})
@@ -791,7 +795,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
         inst._sgr_params = self._sgr_params.copy()
         inst._rgb_dict = self._rgb_dict.copy()
         return inst
-    
+
     copy = __copy__
 
     def __deepcopy__(self, memo):
@@ -929,8 +933,8 @@ _END_RESET_PATTERN = re.compile(r"\x1b\[0?m$")
 _unset: Any = object()
 
 
-def _colorstr[_T: ColorStr](
-    cls: type[_T],
+def _colorstr[_T](
+    supercls: type[_T],
     obj=_unset,
     /,
     fg=None,
@@ -943,9 +947,7 @@ def _colorstr[_T: ColorStr](
 ) -> _T:
     localns = locals().items()
     if buf_kwargs := {
-        k: v
-        for k, v in localns
-        if k in {"encoding", "errors"} and v is not _unset
+        k: v for k, v in localns if k in {"encoding", "errors"} and v is not _unset
     }:
         if not _issubclass(obj.__class__, Buffer):
             raise ValueError(f"unexpected keyword arguments: {set(buf_kwargs)}")
@@ -974,7 +976,9 @@ def _colorstr[_T: ColorStr](
         ansi_type = DEFAULT_ANSI
     else:
         ansi_type = max(
-            Counter(x._value.__class__ for x in sgr._sgr_params if x.is_color()).items(),
+            Counter(
+                x._value.__class__ for x in sgr._sgr_params if x.is_color()
+            ).items(),
             key=lambda x: x[1],
         )[0]
     try:
@@ -1002,7 +1006,9 @@ def _colorstr[_T: ColorStr](
         err.__cause__ = e.__cause__
         raise err
     suffix = SGR_RESET_S if reset else ''
-    inst: Any = cls.__base__.__new__(cls, f"{sgr}{base_str}{suffix}")   # noqa
+    inst: Any = supercls.__new__(
+        supercls.__thisclass__, f"{sgr}{base_str}{suffix}"
+    )  # noqa
     inst.__dict__ |= {
         '_sgr': sgr,
         '_base_str': base_str,
@@ -1012,7 +1018,28 @@ def _colorstr[_T: ColorStr](
     return inst
 
 
-class ColorStr(str):
+class _IntFloatMixin:
+    """Mixin for ColorStr -> int/float conversion
+
+    Notes:
+        If supplying 'base' to `int`, CPython ignores `nb_int` due to `PyUnicode_Check`.
+        Use `ColorStr.base_str` directly in that case.
+    """
+
+    def __int__(self):
+        try:
+            return int(getattr(self, 'base_str'))
+        except AttributeError:
+            return int(str(self))
+
+    def __float__(self):
+        try:
+            return float(getattr(self, 'base_str'))
+        except AttributeError:
+            return float(str(self))
+
+
+class ColorStr(str, _IntFloatMixin):
     def _weak_var_update(self, **kwargs):
         if not kwargs.keys() <= {'base_str', 'sgr', 'reset'}:
             raise ValueError(
@@ -1474,7 +1501,7 @@ class ColorStr(str):
         return self._weak_var_update(base_str=self.base_str * __value)
 
     def __new__(cls, obj=_unset, *args, **kwargs):
-        return _colorstr(cls, obj, *args, **kwargs)
+        return _colorstr(super(), obj, *args, **kwargs)  # noqa
 
     def __radd__(self, other):
         if isinstance(other, SgrSequence):

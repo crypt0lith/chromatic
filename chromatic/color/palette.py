@@ -2,10 +2,19 @@ __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_col
 
 from functools import lru_cache, update_wrapper
 from inspect import getfullargspec, isbuiltin, signature
-from typing import Iterable, Iterator, Mapping, Never, TYPE_CHECKING, Union, final
+from typing import (
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Never,
+    TYPE_CHECKING,
+    Union,
+    final,
+)
 
 from .colorconv import ANSI_4BIT_RGB
-from .core import Color, ColorStr, SgrParameter, color_chain
+from .core import Color, ColorStr, SgrParameter, SgrSequence, color_chain
 from .._typing import Int3Tuple
 
 if TYPE_CHECKING:
@@ -13,6 +22,7 @@ if TYPE_CHECKING:
 
 
 class DynamicNSMeta[_VT](type):
+
     @classmethod
     def __class_getitem__(mcls, _):
         return mcls
@@ -104,11 +114,12 @@ class DynamicNamespace[_T](metaclass=DynamicNSMeta[_T]): ...
 
 @final
 class _Member[_T]:
+
     def __new__(cls: type[_T]) -> _T: ...
 
 
-def _gen_named_color_values() -> Iterator[int]:
-    yield from [
+def _gen_named_color_values[_T](__f: Callable[[int], _T] = int) -> Iterator[_T]:
+    for x in (
         0x000000, 0x696969, 0x808080, 0xA9A9A9, 0xC0C0C0, 0xD3D3D3, 0xF5F5F5, 0xFFFFFF, 0x800000,
         0x8B0000, 0xFF0000, 0xB22222, 0xA52A2A, 0xCD5C5C, 0xF08080, 0xBC8F8F, 0xFFE4E1, 0xFFFAFA,
         0xA0522D, 0xFF4500, 0xFF6347, 0xEA7E5D, 0xFF7F50, 0xFA8072, 0xE9967A, 0xFFA07A, 0xFFF5EE,
@@ -125,12 +136,11 @@ def _gen_named_color_values() -> Iterator[int]:
         0x663399, 0x8A2BE2, 0x9932CC, 0x6A5ACD, 0xBA55D3, 0x7B68EE, 0x9370DB, 0xD8BFD8, 0x800080,
         0x8B008B, 0xC71585, 0xFF00FF, 0xFF1493, 0xDA70D6, 0xFF69B4, 0xEE82EE, 0xDDA0DD, 0xFFF0F5,
         0xDC143C, 0xDB7093, 0xFFB6C1, 0xFFC0CB  # fmt: skip
-    ]
+    ):
+        yield __f(x)
 
 
-class ColorNamespace(
-    DynamicNamespace[Color], iterable=map(Color, _gen_named_color_values())
-):
+class ColorNamespace(DynamicNamespace[Color], iterable=_gen_named_color_values(Color)):
     BLACK: _Member
     DIM_GREY: _Member
     GREY: _Member
@@ -275,7 +285,7 @@ class ColorNamespace(
 def style():
     for x in SgrParameter:
         if x not in {38, 48}:
-            yield color_chain([x])
+            yield color_chain([SgrSequence([x])])
 
 
 class AnsiStyle(DynamicNamespace[color_chain], iterable=style()):
@@ -354,39 +364,56 @@ class AnsiStyle(DynamicNamespace[color_chain], iterable=style()):
 
 
 def background(__x: Color):
-    return color_chain(bg=__x, ansi_type='24b')
+    return color_chain([ColorStr(bg=__x)._sgr], ansi_type='24b')
 
 
 def foreground(__x: Color):
-    return color_chain(fg=__x, ansi_type='24b')
+    return color_chain([ColorStr(fg=__x)._sgr], ansi_type='24b')
 
 
 class AnsiBack(ColorNamespace, member_type=background):
     RESET = AnsiStyle.DEFAULT_BG_COLOR
 
     def __call__(self, bg: Union[Color, int, tuple[int, int, int]]):
-        return color_chain(bg=bg)
+        return color_chain([ColorStr(bg=bg)._sgr])
 
 
 class AnsiFore(ColorNamespace, member_type=foreground):
     RESET = AnsiStyle.DEFAULT_FG_COLOR
 
     def __call__(self, fg: Union[Color, int, tuple[int, int, int]]):
-        return color_chain(fg=fg)
+        return color_chain([ColorStr(fg=fg)._sgr])
 
 
 class _color_ns_getter:
-    mapping = (
-        {name.casefold(): color.rgb for name, color in ColorNamespace.asdict().items()}
-        .items()
-        .mapping
-    )
+    def __contains__(self, __key):
+        if type(__key) is str:
+            return self._normalize_key(__key) in self.__dict__['__members__']
+        return False
+
+    def __getitem__(self, __key: str):
+        return self.__dict__['__members__'][self._normalize_key(__key)]
+
+    def __getattr__(self, __name):
+        return getattr(self.__dict__['__members__'], __name)
+
+    @lru_cache(maxsize=1)
+    def __new__(cls):
+        inst = object.__new__(cls)
+        inst.__dict__['__members__'] = dict.items(
+            {
+                name.casefold(): color.rgb
+                for name, color in ColorNamespace.asdict().items()
+            }
+        ).mapping
+        inst.__dict__ |= inst.__dict__['__members__']
+        return inst
 
     def __str__(self):
         return str(
             {
                 str(ColorStr(k, fg=v, ansi_type='24b')): v
-                for k, v in type(self).mapping.items()
+                for k, v in self.__dict__['__members__'].items()
             }
         )
 
@@ -395,29 +422,13 @@ class _color_ns_getter:
     def _normalize_key(__key: str):
         return __key.translate({0x20: 0x5F}).casefold()
 
-    def __contains__(self, __key):
-        if type(__key) is str:
-            return self._normalize_key(__key) in self.mapping
-        return False
-
     def keys(self):
-        return self.mapping.keys()
-
-    def __getitem__(self, __key: str):
-        return self.mapping[self._normalize_key(__key)]
-
-    def __getattr__(self, __name):
-        try:
-            return getattr(self.mapping, __name)
-        except AttributeError as e:
-            msg = str(e)
-            msg = msg.replace(type(self.mapping).__name__, type(self).__name__)
-            err = AttributeError(msg)
-            err.__cause__ = e.__cause__
-            raise err
+        return self.__dict__['__members__'].keys()
 
 
 def rgb_dispatch(*names: str):
+    color_ns: SupportsKeysAndGetItem[str, Int3Tuple] = _color_ns_getter()
+
     def decorator(__f):
         def fix_signature(__f):
             from .._typing import eval_annotation
@@ -484,7 +495,6 @@ def rgb_dispatch(*names: str):
                     bound.arguments[name] = color_ns[value]
             return __f(*bound.args, **bound.kwargs)
 
-        color_ns: SupportsKeysAndGetItem[str, Int3Tuple] = _color_ns_getter()
         rgb_args, variadic = set[str](), set[str]()
         wrapper_sig = fix_signature(__f)
         if not hasattr(__f, '__text_signature__'):
@@ -505,6 +515,7 @@ def rgb_dispatch(*names: str):
 
 def _make_named_color_map() -> ...:
     class NamedColorMapping(dict):
+
         def __setitem__(self, *args: Never):
             raise NotImplementedError
 

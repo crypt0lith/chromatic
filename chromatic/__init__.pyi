@@ -87,4 +87,4 @@ from .image import (
     reshape_ansi,
     to_sgr_array,
 )
-from .image._glyph_proc import get_glyph_masks, sort_glyphs, ttf_extract_codepoints
+from .image._glyph import get_glyph_masks, sort_glyphs, ttf_extract_codepoints

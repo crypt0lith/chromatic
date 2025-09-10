@@ -137,7 +137,7 @@ def named_colors():
 @DEMO_FUNCS.register
 def color_cube():
     """Print the ANSI256 6x6x6 color cube"""
-    fmt_code = lambda n: f"\x1b[48;5;{n}m{n: >4}"
+    fmt_code = lambda n: cm.ColorStr(f"\x1b[48;5;{n}m{n: >4}", reset=False)
     ansi_256_codes = iter(range(0x100))
     for i in range(0x10):
         if i and i % 8 == 0:
@@ -210,7 +210,7 @@ def color_table():
     ]
     for style in style_params:
         print(
-            cm.ColorStr(f"{cm.SgrParameter.__qualname__}.{style.name}").update_sgr(
+            cm.ColorStr(f"{cm.SgrParameter.__qualname__}.{style.name}").add_sgr_param(
                 style
             ),
             end=('\n' if style is style_params[-1] else "\x1b[0m".ljust(8)),

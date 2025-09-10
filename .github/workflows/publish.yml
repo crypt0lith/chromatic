@@ -1,15 +1,14 @@
 on:
-  release:
-    types: [published]
-
+  push:
+    tags:
+      - "v*.*.*"
+permissions:
+  contents: write
+  id-token: write
 jobs:
-  build-and-publish:
-    if: ${{ !github.event.release.draft && !github.event.release.prerelease }}
+  build-publish-release:
     runs-on: ubuntu-latest
     environment: pypi
-    permissions:
-      id-token: write
-      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -20,3 +19,11 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           print-hash: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/*

@@ -61,6 +61,7 @@ type SquareMatrix[_I: int, _SCT: generic] = ShapedNDArray[TupleOf2[_I], _SCT]
 type GlyphArray[_SCT: generic] = SquareMatrix[L[24], _SCT]
 type TupleOf2[_T] = tuple[_T, _T]
 type TupleOf3[_T] = tuple[_T, _T, _T]
+type TupleOf4[_T] = tuple[_T, _T, _T, _T]
 
 Float3Tuple: TypeAlias = TupleOf3[float]
 Int3Tuple: TypeAlias = TupleOf3[int]

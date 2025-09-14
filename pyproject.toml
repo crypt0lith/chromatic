@@ -5,7 +5,18 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chromatic-python"
 dynamic = ["version"]
+description = "ANSI art image processing and colored terminal text"
+readme = "README.md"
 requires-python = ">=3.12"
+keywords = ["ansi", "ascii", "art", "font", "image", "terminal", "parser"]
+authors = [{ name = "crypt0lith" }]
+license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "numpy>=1.25.2,<2.6",
     "pillow>=10.1,!=11.2.*,<12.0",
@@ -17,20 +28,9 @@ dependencies = [
     "fonttools",
     "lazy_loader",
 ]
-authors = [{ name = "crypt0lith" }]
-description = "ANSI art image processing and colored terminal text"
-readme = "README.md"
-license-files = ["LICENSE"]
-keywords = ["ansi", "ascii", "art", "font", "image", "terminal", "parser"]
-classifiers = [
-    "Programming Language :: Python :: 3.12",
-    "Operating System :: OS Independent",
-    "Topic :: Software Development :: Libraries :: Python Modules",
-    "Typing :: Typed",
-]
 
 [project.urls]
-Homepage = "https://github.com/crypt0lith/chromatic"
+repository = "https://github.com/crypt0lith/chromatic.git"
 
 [tool.setuptools_scm]
 write_to = "chromatic/_version.py"

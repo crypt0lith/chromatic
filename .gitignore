@@ -1,2 +1,27 @@
-/chromatic/data/userfont.json
-/tests/_*
+# editor temp/backup files
+*.bak
+*.diff
+.idea/
+*.tmp
+.vscode
+
+# compiled source
+*.dll
+*.exe
+*.o
+*.o.d
+*.py[ocd]
+*.so
+*.mod
+
+# python files
+build
+build-*
+dist
+doc/build
+*.egg-info
+venv/
+
+# this project
+data/userfont.json
+tests/_*

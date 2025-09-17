@@ -1,1 +1,20 @@
-* text=auto
+# python sources
+*.py	text diff=python
+*.pyi	text diff=python
+
+# documents
+*.md	text diff=markdown
+*.txt	text
+
+# graphics
+*.png	binary
+*.jpg	binary
+*.jpeg	binary
+*.ttf	binary
+*.ttc	binary
+
+# serialization
+*.json	text
+*.toml	text
+*.yaml	text
+*.yml	text

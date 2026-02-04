@@ -56,7 +56,7 @@ from ..color.core import (
     sgr_pattern,
 )
 from ..color.palette import rgb_dispatch
-from ..data import UserFont, userfont
+from ..data import UserFont, userfont, VGA437
 
 if TYPE_CHECKING:
     from _typeshed import SupportsRead
@@ -509,7 +509,7 @@ def img2ascii(
 
 def img2ascii(
     __img: RGBImageLike | PathLike[str] | str,
-    __font: FontArgType = userfont['vga437'],
+    __font: FontArgType = VGA437,
     factor: int = 200,
     char_set: Iterable[str] = None,
     sort_glyphs: bool | type[reversed] = True,
@@ -566,9 +566,7 @@ def img2ascii(
     if char_set is None:
         from ._curses import ascii_printable, cp437_printable
 
-        chars_getter = dict.get(
-            {userfont['vga437']: cp437_printable}, __font, ascii_printable
-        )
+        chars_getter = dict.get({VGA437: cp437_printable}, __font, ascii_printable)
         char_set = shuffle_char_set(chars_getter())
     elif type(char_set) is not str:
         char_set = ''.join(char_set)
@@ -587,7 +585,7 @@ def img2ascii(
 @rgb_dispatch('bg')
 def img2ansi(
     __img: RGBImageLike | PathLike[str] | str,
-    __font: FontArgType = userfont['vga437'],
+    __font: FontArgType = VGA437,
     factor: int = 200,
     char_set: Iterable[str] = None,
     ansi_type: AnsiColorParam = DEFAULT_ANSI,
@@ -685,7 +683,7 @@ def img2ansi(
 @rgb_dispatch('fg', 'bg')
 def ascii2img(
     __s: str,
-    font: FontArgType = userfont['vga437'],
+    font: FontArgType = VGA437,
     font_size=16,
     *,
     fg: Int3Tuple | str = (0, 0, 0),
@@ -737,7 +735,7 @@ def ascii2img(
 @rgb_dispatch('fg_default', 'bg_default')
 def ansi2img(
     __ansi_array: list[list[ColorStr]],
-    font: FontArgType = userfont['vga437'],
+    font: FontArgType = VGA437,
     font_size=16,
     *,
     fg_default: Int3Tuple | TupleOf4[int] | str = (170, 170, 170),
@@ -836,7 +834,7 @@ def ansi2img(
 
 def ansify(
     __img: RGBImageLike | PathLike[str] | str,
-    font: FontArgType = userfont['vga437'],
+    font: FontArgType = VGA437,
     font_size: int = 16,
     *,
     factor: int = 200,
@@ -1115,7 +1113,7 @@ def to_sgr_array(__s: str, ansi_type: AnsiColorParam = None):
 def render_ans(
     __s: str,
     shape: TupleOf2[int],
-    font: FontArgType = userfont['vga437'],
+    font: FontArgType = VGA437,
     font_size: int = 16,
     *,
     bg_default: Int3Tuple | TupleOf4[int] | str = (0, 0, 0),
@@ -1230,7 +1228,7 @@ class AnsiImage:
         return self._shape
 
     def render(
-        self, font: FontArgType = userfont['vga437'], font_size: int = 16, **kwargs
+        self, font: FontArgType = VGA437, font_size: int = 16, **kwargs
     ) -> ImageType:
         return ansi2img(self._getvalue(), font, font_size, **kwargs)
 
@@ -1304,9 +1302,7 @@ def scaled_hu_moments(arr: ShapedNDArray[TupleOf2[int], np.uint8]):
 
 
 def approx_gridlike(
-    fp: PathLike[str] | str,
-    font: FontArgType = userfont['vga437'],
-    shape: TupleOf2[int] = None,
+    fp: PathLike[str] | str, font: FontArgType = VGA437, shape: TupleOf2[int] = None
 ):
     from ._curses import cp437_printable
 

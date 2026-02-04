@@ -18,6 +18,7 @@
 build
 build-*
 dist
+_version.py
 doc/build
 *.egg-info
 venv/

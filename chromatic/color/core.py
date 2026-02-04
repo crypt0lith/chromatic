@@ -1575,7 +1575,7 @@ def _collect_masks(
     return masks
 
 
-class color_chain:
+class color_chain(Sequence[tuple[SgrSequence, str]]):
     @staticmethod
     def _is_mask_seq(obj):
         if isinstance(obj, Sequence):
@@ -1622,9 +1622,10 @@ class color_chain:
             while True:
                 try:
                     idx, (sgr, s) = next(it)
+                    sgr = sgr.copy()
                     while idx + 1 < maxlen and not s:
                         idx, xs = next(it)
-                        sgr += xs[0]; s = xs[1]    # fmt: skip
+                        sgr += xs[0]; s = xs[1]  # fmt: skip
                     else:
                         out.append((sgr, s))
                 except StopIteration:
@@ -1632,6 +1633,18 @@ class color_chain:
         else:
             out = self.masks
         return self._from_masks_unchecked(out, ansi_type=self._ansi_type)
+
+    def merge(self, *other):
+        if not other:
+            return self
+        masks = self.masks
+        for x in other:
+            for sgr, s in x:
+                if not masks[-1][-1]:
+                    masks[-1] = masks[-1][0] + sgr, s
+                else:
+                    masks.append((sgr, s))
+        return self._from_masks_unchecked(masks, ansi_type=self._ansi_type)
 
     def __add__(self, other):
         try:
@@ -1665,6 +1678,11 @@ class color_chain:
     def __len__(self):
         return len(self._masks)
 
+    def __or__(self, other):
+        if _issubclass(other.__class__, self.__class__):
+            return self.merge(other)
+        return NotImplemented
+
     def __radd__(self, other):
         if isinstance(other, ColorStr):
             return self._from_masks_unchecked(
@@ -1685,8 +1703,8 @@ class color_chain:
         return NotImplemented
 
     def __repr__(self):
-        return "{.__name__}({})".format(
-            type(self),
+        return "{.__class__.__name__}({})".format(
+            self,
             ', '.join(
                 [
                     repr([f"{sgr}{s}" for sgr, s in self._masks]),

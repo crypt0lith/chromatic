@@ -724,7 +724,7 @@ def ascii2img(
     n_rows, n_cols = map(len, (lines, lines[0]))
     cw, ch = _get_bbox_shape(font)
     iw, ih = (int(i * j) for i, j in zip((cw, ch), (n_cols, n_rows)))
-    (r, g, b) = tuple(map(int, bg))
+    r, g, b = tuple(map(int, bg))
     img = Image.new('RGB', (iw, ih), (r, g, b))
     draw = ImageDraw.Draw(img)
     y_offset = 0
@@ -802,7 +802,7 @@ def ansi2img(
     else:
         conv = lambda x: x
         img = Image.new('RGB', (iw, ih), bg_default)
-        
+
     draw = ImageDraw.Draw(img)
     y_offset = 0
     for row in __ansi_array:
@@ -903,12 +903,11 @@ def _is_csi_param(__c: str) -> TypeGuard[Literal[';'] | LiteralDigit]:
 def cursor_or_sgr_pattern():
     sgr_re = sgr_pattern().pattern.removeprefix(r'\x1b\[')
     return re.compile(
-        rf"(?:\x1b\[(?:(?P<cursor>\d*[A-G]|\d*(?:;\d*)?H)|(?P<sgr>{sgr_re})))?(?P<text>[^\x1b]*)"
+        r"(?:\x1b\[(?:(?P<cursor>\d*[A-G]|\d*(?:;\d*)?H)"
+        r"|(?P<carriage_return>\r)"
+        rf"|(?P<sgr>{sgr_re})))?(?P<text>[^\x1b]*)"
     )
 
-
-_compile = re.compile
-_compile = lru_cache(maxsize=1)(_compile)
 
 def _sub_bold_colors(lines: Iterable[str]) -> Iterator[str]:
     """Yield lines with bold foreground colors normalized to their ESC[9(n)m variants.
@@ -916,46 +915,52 @@ def _sub_bold_colors(lines: Iterable[str]) -> Iterator[str]:
     Previous colors are also forwarded at each SGR position, if they are not overridden.
     """
     type TupleOf5[_T] = tuple[_T, _T, _T, _T, _T]
-    ansi_16c_fg_std = range(30, 38)
-    ansi_16c_fg_bold = range(90, 98)
 
     def sub(m: re.Match):
         nonlocal bold_bit, prev_colors
 
         params: list[Int3Tuple | TupleOf5[int] | int] = []
         nums = map(int, m[0].removeprefix('\x1b[').removesuffix('m').split(';'))
-        for i in nums:
-            if i in {38, 48}:
+        for n in nums:
+            if n in {38, 48}:
                 j = next(nums)
                 if j == 5:
-                    extended_param = (i, j, next(nums))
+                    extended_param = (n, j, next(nums))
                 elif j == 2:
-                    extended_param = (i, j, *(next(nums) for _ in range(3)))
+                    extended_param = (n, j, *(next(nums) for _ in range(3)))
                 else:
                     raise ValueError("invalid ansi color")
                 params.append(extended_param)
                 continue
-            elif i == 0:
+            elif n == 0:
                 bold_bit = False
                 prev_colors.clear()
-            elif i == 1:
+            elif n == 1:
                 bold_bit = True
-                for k, v in prev_colors.items():
-                    if len(v) == 1 and v[0] in ansi_16c_fg_std:
-                        prev_colors[k][0] += 60
-            elif i == 22:
+                for k, values in prev_colors.items():
+                    if k != 'fg':
+                        continue
+                    for idx, v in enumerate(values):
+                        if 30 <= v <= 38:
+                            prev_colors[k][idx] += 60
+                prev_colors.setdefault('fg', [97])
+            elif n == 22:
                 bold_bit = False
-                for k, v in prev_colors.items():
-                    if len(v) == 1 and v[0] in ansi_16c_fg_bold:
-                        prev_colors[k][0] -= 60
-            elif bold_bit and i in ansi_16c_fg_std:
-                i += 60
-            params.append(i)
+                for k, values in prev_colors.items():
+                    if k != 'fg':
+                        continue
+                    for idx, v in enumerate(values):
+                        if 90 <= v <= 98:
+                            prev_colors[k][idx] -= 60
+                prev_colors.setdefault('fg', [37])
+            elif bold_bit and 30 <= n <= 38:
+                n += 60
+            params.append(n)
         sgr = SgrSequence(
-            i
+            n
             for xs in [prev_colors.values(), params]
             for x in xs
-            for i in ([x] if isinstance(x, int) else x)
+            for n in ([x] if isinstance(x, int) else x)
         )
         for p in sgr:
             if p.is_color():
@@ -965,13 +970,32 @@ def _sub_bold_colors(lines: Iterable[str]) -> Iterator[str]:
                 )
         return f"{sgr}"
 
+    bold_bit = False
+    prev_colors: dict[str, list[int]] = {}
     for line in lines:
-        bold_bit = False
-        prev_colors = {}
         yield sgr_pattern().sub(sub, line)
 
 
-def reshape_ansi(__str: str, w: int, h: int) -> str:
+def _utf8_bytes(cp: int) -> Iterator[int]:
+    """yield the UTF-8 bytes of the ordinal value of a character"""
+
+    if cp <= 0x7F:
+        yield cp
+    elif cp <= 0x7FF:
+        yield 0b11000000 | (cp >> 6)
+        yield 0b10000000 | (cp & 0b00111111)
+    elif cp <= 0xFFFF:
+        yield 0b11100000 | (cp >> 12)
+        yield 0b10000000 | ((cp >> 6) & 0b00111111)
+        yield 0b10000000 | (cp & 0b00111111)
+    else:
+        yield 0b11110000 | (cp >> 18)
+        yield 0b10000000 | ((cp >> 12) & 0b00111111)
+        yield 0b10000000 | ((cp >> 6) & 0b00111111)
+        yield 0b10000000 | (cp & 0b00111111)
+
+
+def reshape_ansi(__s: str, w: int, h: int) -> str:
     def cursor() -> Generator[tuple[int, int], tuple[int, int], None]:
         idx, total = 0, h * w
         while idx < total:
@@ -981,87 +1005,101 @@ def reshape_ansi(__str: str, w: int, h: int) -> str:
             else:
                 idx += 1
 
-    def write_cell(content: str, *, incr=False):
-        nonlocal x, y
-        if content == '\n':
-            x = min(x + 1, h - 1)
-            y = 0
-            cur.send((x, y))
+    def write_cell(ch: str):
+        nonlocal y, x
+        if ch == '\n':
+            y = min(y + 1, h - 1)
+            x = 0
+            cur.send((y, x))
             return
-        elif arr[x][y] == '\x00':
-            arr[x][y] = content
         else:
-            arr[x][y] += content
-        if incr:
-            x, y = next(cur)
+            arr[y][x] = seq, ord(ch)
+        y, x = next(cur)
 
-    iter_matches = cursor_or_sgr_pattern().finditer
-    
-    arr = [['\x00'] * w for _ in range(h)]
+    cursor_or_sgr_finditer = cursor_or_sgr_pattern().finditer
+
+    arr: list[list[tuple[SgrSequence | None, int]]] = [
+        [(None, 0) for _ in range(w)] for _ in range(h)
+    ]
     cur = cursor()
-    x, y = next(cur)
-    for line in _sub_bold_colors(__str.splitlines()):
-        for m in iter_matches(line + '\n'):
-            if cg := m['cursor']:
-                write_cell(' ')
-                param, code = cg[:-1], cg[-1]
-                if code == 'H':
-                    if ';' in param:
-                        x, y = (int(i or 1) - 1 for i in param.partition(';')[::2])
+    seq = SgrSequence()
+    y, x = next(cur)
+    for line in _sub_bold_colors(__s.split('\n')):
+        try:
+            for m in cursor_or_sgr_finditer(line + '\n'):
+                if cg := m['cursor']:
+                    param, code = cg[:-1], cg[-1]
+                    if code == 'H':
+                        if ';' in param:
+                            y, x = (int(i or 1) - 1 for i in param.partition(';')[::2])
+                        else:
+                            y = int(param or 1) - 1
+                            x = 0
                     else:
-                        x = int(param or 1) - 1
-                        y = 0
-                else:
-                    n = int(param or 1)
-                    match code:
-                        case 'A':
-                            x = max(0, x - n)
-                        case 'B':
-                            x = min(h - 1, x + n)
-                        case 'C':
-                            y = min(w - 1, y + n)
-                        case 'D':
-                            y = max(0, y - n)
-                        case 'E':
-                            x += n
-                            y = 0
-                        case 'F':
-                            x -= n
-                            y = 0
-                        case 'G':
-                            y = n - 1
-                cur.send((x, y))
-            elif sgr := m['sgr']:
-                write_cell(f"\x1b[{sgr}")
-            for ch in m['text']:
-                write_cell(ch, incr=True)
+                        n = int(param or 1)
+                        match code:
+                            case 'A':
+                                y = max(0, y - n)
+                            case 'B':
+                                y = min(h - 1, y + n)
+                            case 'C':
+                                x = min(w - 1, x + n)
+                            case 'D':
+                                x = max(0, x - n)
+                            case 'E':
+                                y += n
+                                x = 0
+                            case 'F':
+                                y -= n
+                                x = 0
+                            case 'G':
+                                x = n - 1
+                    cur.send((y, x))
+                elif m['carriage_return']:
+                    cur.send((y, 0))
+                elif m['sgr']:
+                    seq = SgrSequence(m['sgr'].encode().removesuffix(b'm'))
+                for c in m['text']:
+                    write_cell(c)
+        except StopIteration:
+            break
 
-    any_ansi_seq = _compile(r"\x1b\[\d*(?:;\d*)*[A-HJ-KS-Tmf]")
-    ansi_ws_base = rf"(\s+)((?:{any_ansi_seq.pattern})+)(\s*)"
-    ansi_ws_prefix = _compile('^' + ansi_ws_base)
-    ansi_ws_suffix = _compile(ansi_ws_base + '$')
-    
-    out_lines = []
+    out = []
+    prev: SgrSequence | None = None
     for row in arr:
-        out_row = ''.join(cell.translate({0: ' '}) for cell in row)
-        lhs, rhs = map(' '.__mul__, divmod(w - len(any_ansi_seq.sub('', out_row)), 2))
-        line = f"{lhs}{out_row}{rhs}"
-        for pat in (ansi_ws_prefix, ansi_ws_suffix):
-            while m := pat.search(line):
-                line = ''.join([line[:m.start()], m[2], m[1], m[3], line[m.end():]])
-        out_lines.append(line)
-    return '\n'.join(out_lines)
+        if not row:
+            continue
+        buf = bytearray()
+        maxlen = len(row)
+        indices = enumerate(row)
+        while True:
+            try:
+                i, [sgr, b] = next(indices)
+                j = i + 1
+                if sgr and sgr != prev:
+                    buf.extend(bytes(sgr))
+                    prev = sgr
+                buf.extend(_utf8_bytes(b))
+                while j < maxlen and sgr == row[j][0]:
+                    j += 1
+                for _ in range(i + 1, j):
+                    _, [_, b] = next(indices)
+                    buf.extend(_utf8_bytes(b))
+            except StopIteration:
+                break
+        out.append(buf.decode())
+    return '\n'.join(out).translate({0: ' '})
 
 
 @lru_cache
-def to_sgr_array(__str: str, ansi_type: AnsiColorParam = None):
+def to_sgr_array(__s: str, ansi_type: AnsiColorParam = None):
     ansi_typ = DEFAULT_ANSI if ansi_type is None else get_ansi_type(ansi_type)
     new_cs = partial(ColorStr, ansi_type=ansi_typ, reset=False)
-    iter_matches = cursor_or_sgr_pattern().finditer
+    cursor_or_sgr_finditer = cursor_or_sgr_pattern().finditer
     xs = []
-    for line in _sub_bold_colors(__str.splitlines()):
+    for line in _sub_bold_colors(__s.split('\n')):
         x = []
-        for m in iter_matches(line):
+        for m in cursor_or_sgr_finditer(line):
             text = m["text"]
             if m["sgr"]:
                 sgr = SgrSequence(map(int, m["sgr"].removesuffix('m').split(';')))
@@ -1103,10 +1141,7 @@ def render_ans(
         'auto' will determine background color dynamically.
     """
     return ansi2img(
-        to_sgr_array(reshape_ansi(__s, *shape)),
-        font,
-        font_size,
-        bg_default=bg_default,
+        to_sgr_array(reshape_ansi(__s, *shape)), font, font_size, bg_default=bg_default
     )
 
 
@@ -1120,7 +1155,7 @@ def read_ans(__buf: SupportsRead[str] | TextIOWrapper[str]) -> str:
     content = __buf.read().translate({0: ' '})
     if ~(sauce_idx := content.rfind('\x1aSAUCE00')):
         content = content[:sauce_idx]
-    if hasattr(__buf, 'encoding') and __buf.encoding == 'cp437':
+    if getattr(__buf, 'encoding', None) == 'cp437':
         from ._curses import translate_cp437
 
         content = translate_cp437(content, ignore=(0x0A, 0x1A, 0x1B))
@@ -1130,14 +1165,11 @@ def read_ans(__buf: SupportsRead[str] | TextIOWrapper[str]) -> str:
 class AnsiImage:
 
     @classmethod
-    def open[AnyStr: (
-        str,
-        bytes,
-    )](
+    def open[AnyStr: (str, bytes)](
         cls,
         fp: int | PathLike[AnyStr] | AnyStr,
         shape: TupleOf2[int] = None,
-        encoding: str = 'cp437',
+        encoding: Optional[str] = 'cp437',
         ansi_type: AnsiColorParam = DEFAULT_ANSI,
     ) -> Self:
         """Construct an `AnsiImage` object from a text file.
@@ -1164,7 +1196,6 @@ class AnsiImage:
         inst._ansi_format = get_ansi_type(ansi_type)
         inst.file = open(fp, mode='r', encoding=encoding or None)
         if shape is None:
-            
             shape = get_terminal_size()
         inst._shape = shape
         return inst
@@ -1176,14 +1207,9 @@ class AnsiImage:
             raise ValueError("ambiguous value attribute")
         if attr_name == 'file':
             file: TextIOWrapper[str] = self.__dict__.pop(attr_name)
-            setattr(
-                self,
-                'data',
-                to_sgr_array(
-                    reshape_ansi(read_ans(file), *self.shape),
-                    ansi_type=self.ansi_format,
-                ),
-            )
+            s = reshape_ansi(read_ans(file), *self.shape)
+            arr = to_sgr_array(s, ansi_type=self.ansi_format)
+            setattr(self, 'data', arr)
             file.close()
         return self.data
 
@@ -1283,7 +1309,7 @@ def approx_gridlike(
     shape: TupleOf2[int] = None,
 ):
     from ._curses import cp437_printable
-    
+
     if shape is None:
         shape = get_terminal_size()
 

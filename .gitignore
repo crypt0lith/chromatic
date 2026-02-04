@@ -18,10 +18,11 @@
 build
 build-*
 dist
+_version.py
 doc/build
 *.egg-info
 venv/
 
 # this project
-data/userfont.json
+userfont.json
 tests/_*

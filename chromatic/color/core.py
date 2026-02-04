@@ -280,15 +280,22 @@ class ansicolor4Bit(colorbytes):
     """ANSI 4-bit color format.
 
     Supports 16 colors:
-        * 8 standard colors:
-            {0: black, 1: red, 2: green, 3: yellow, 4: blue, 5: magenta, 6: cyan, 7: white}
-        * 8 bright colors, each mapping to a standard color (bright = standard + 8).
+
+    * 8 standard colors:
+        {0: black, 1: red, 2: green, 3: yellow, 4: blue, 5: magenta, 6: cyan, 7: white}
+
+    * 8 bright colors, each mapping to a standard color (bright = standard + 8).
 
     Color codes use escape sequences of the form:
-        * `CSI 30–37 m` for standard foreground colors.
-        * `CSI 40–47 m` for standard background colors.
-        * `CSI 90–97 m` for bright foreground colors.
-        * `CSI 100–107 m` for bright background colors.
+
+    * `CSI 30–37 m` for standard foreground colors.
+
+    * `CSI 40–47 m` for standard background colors.
+
+    * `CSI 90–97 m` for bright foreground colors.
+
+    * `CSI 100–107 m` for bright background colors.
+
     Where `CSI` (Control Sequence Introducer) is `ESC[`.
 
     Examples
@@ -310,13 +317,19 @@ class ansicolor8Bit(colorbytes):
     """ANSI 8-Bit color format.
 
     Supports 256 colors, mapped to the following value ranges:
-        * (0, 15): Corresponds to ANSI 4-bit colors.
-        * (16, 231): Represents a 6x6x6 RGB color cube.
-        * (232, 255): Greyscale colors, from black to white.
+
+    * (0, 15): Corresponds to ANSI 4-bit colors.
+
+    * (16, 231): Represents a 6x6x6 RGB color cube.
+
+    * (232, 255): Greyscale colors, from black to white.
 
     Color codes use escape sequences of the form:
-        * `CSI 38;5;(n) m` for foreground colors.
-        * `CSI 48;5;(n) m` for background colors.
+
+    * `CSI 38;5;(n) m` for foreground colors.
+
+    * `CSI 48;5;(n) m` for background colors.
+
     Where `CSI` (Control Sequence Introducer) is `ESC[` and `n` is an unsigned 8-bit integer.
 
     Examples
@@ -340,8 +353,11 @@ class ansicolor24Bit(colorbytes):
     Supports all colors in the RGB color space (16,777,216 total).
 
     Color codes use escape sequences of the form:
-        * `CSI 38;2;(r);(g);(b) m` for foreground colors.
-        * `CSI 48;2;(r);(g);(b) m` for background colors.
+
+    * `CSI 38;2;(r);(g);(b) m` for foreground colors.
+
+    * `CSI 48;2;(r);(g);(b) m` for background colors.
+
     Where `CSI` (Control Sequence Introducer) is `ESC[` and `r,g,b` are unsigned 8-bit integers.
 
     Examples
@@ -523,10 +539,11 @@ def rgb2ansi_escape(fmt, mode, rgb):
 class Color(int):
     """
     Color([x]) -> color
+
     Color(x, base=10) -> color
 
-        Convert a number or string into a color, or return Color(0) if no arguments are given.
-        Accepts the same arguments as int, but the value must be in range 0,0xFFFFFF (incl).
+    Convert a number or string into a color, or return Color(0) if no arguments are given.
+    Accepts the same arguments as int, but the value must be in range 0,0xFFFFFF (incl).
     """
 
     def __new__(cls, *args, **kwargs):
@@ -553,7 +570,7 @@ class Color(int):
 
 
 def randcolor():
-    """Return a random color as a Color object."""
+    """Return a random color as a `Color` object"""
     return Color.from_bytes(random.randbytes(3))
 
 
@@ -620,7 +637,9 @@ class SgrParamBuffer[_T]:
 def _get_sgr_nums(__x: bytes) -> list[int]:
     """Return a list of integers from a bytestring of ANSI SGR parameters.
 
-    Roughly, bitwise equivalent to `list(map(int, bytes().split(b';')))`.
+    Roughly, bitwise equivalent to:
+
+        list(map(int, bytes().split(b';')))
     """
     if __x.isdigit():
         return [int(__x)]
@@ -654,10 +673,9 @@ def _get_sgr_nums(__x: bytes) -> list[int]:
             return res
 
 
-def _iter_normalized_sgr[_T: (
-    Buffer,
-    SupportsInt,
-)](__iter: bytes | bytearray | Iterable[_T]) -> Iterator[int | AnsiColorFormat]:
+def _iter_normalized_sgr[_T: (Buffer, SupportsInt)](
+    __iter: bytes | bytearray | Iterable[_T],
+) -> Iterator[int | AnsiColorFormat]:
     if _issubclass(type(__iter), (bytes, bytearray)):
         __iter = __iter.split(b';')
     elt: object | Any
@@ -1019,9 +1037,10 @@ def _colorstr[_T](
 
 
 class _IntFloatMixin:
-    """Mixin for ColorStr -> int/float conversion
+    """Mixin for `ColorStr` -> `int`/`float` conversion
 
-    Notes:
+    Notes
+    -----
         If supplying 'base' to `int`, CPython ignores `nb_int` due to `PyUnicode_Check`.
         Use `ColorStr.base_str` directly in that case.
     """
@@ -1084,12 +1103,13 @@ class ColorStr(str, _IntFloatMixin):
 
     def recolor(self, *args, **kwargs):
         """ColorStr.recolor(self, __value, *, absolute=False) -> ColorStr
+
         ColorStr.recolor(self, *, fg=None, bg=None, absolute=False) -> ColorStr
 
         Return a copy of self with a new color spec.
 
         If no arguments are given, returns self unchanged.
-        If __value is given and a ColorStr, return self with the colors of __value.
+        If __value is given and a `ColorStr`, return self with the colors of __value.
         Else, use keyword arguments { 'fg', 'bg' } for colors.
         Any other mix of arguments will fail outright,
         since __value along with { fg=... | bg=... } is ambiguous which to use for colors.
@@ -1575,7 +1595,7 @@ def _collect_masks(
     return masks
 
 
-class color_chain:
+class color_chain(Sequence[tuple[SgrSequence, str]]):
     @staticmethod
     def _is_mask_seq(obj):
         if isinstance(obj, Sequence):
@@ -1615,6 +1635,7 @@ class color_chain:
         raise TypeError
 
     def shrink(self):
+        """Return a copy where SGR sequences are joined for spans of empty string parts"""
         if self:
             maxlen = len(self._masks)
             it = enumerate(self._masks)
@@ -1622,9 +1643,10 @@ class color_chain:
             while True:
                 try:
                     idx, (sgr, s) = next(it)
+                    sgr = sgr.copy()
                     while idx + 1 < maxlen and not s:
                         idx, xs = next(it)
-                        sgr += xs[0]; s = xs[1]    # fmt: skip
+                        sgr += xs[0]; s = xs[1]  # fmt: skip
                     else:
                         out.append((sgr, s))
                 except StopIteration:
@@ -1632,6 +1654,18 @@ class color_chain:
         else:
             out = self.masks
         return self._from_masks_unchecked(out, ansi_type=self._ansi_type)
+
+    def merge(self, *other):
+        if not other:
+            return self
+        masks = self.masks
+        for x in other:
+            for sgr, s in x:
+                if not masks[-1][-1]:
+                    masks[-1] = masks[-1][0] + sgr, s
+                else:
+                    masks.append((sgr, s))
+        return self._from_masks_unchecked(masks, ansi_type=self._ansi_type)
 
     def __add__(self, other):
         try:
@@ -1665,6 +1699,11 @@ class color_chain:
     def __len__(self):
         return len(self._masks)
 
+    def __or__(self, other):
+        if _issubclass(other.__class__, self.__class__):
+            return self.merge(other)
+        return NotImplemented
+
     def __radd__(self, other):
         if isinstance(other, ColorStr):
             return self._from_masks_unchecked(
@@ -1685,8 +1724,8 @@ class color_chain:
         return NotImplemented
 
     def __repr__(self):
-        return "{.__name__}({})".format(
-            type(self),
+        return "{.__class__.__name__}({})".format(
+            self,
             ', '.join(
                 [
                     repr([f"{sgr}{s}" for sgr, s in self._masks]),

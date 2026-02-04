@@ -1,5 +1,5 @@
 from os import PathLike
-from typing import AnyStr
+from typing import AnyStr, Final
 from types import MappingProxyType
 
 from PIL.ImageFont import FreeTypeFont
@@ -17,6 +17,8 @@ class UserFont:
     def to_truetype(self) -> FreeTypeFont: ...
 
 userfont: MappingProxyType[str, UserFont]
+VGA437: Final[UserFont] = userfont['vga437']
+DEFAULT_FONT = VGA437
 
 def register_userfont(
     fp: AnyStr | PathLike[AnyStr],

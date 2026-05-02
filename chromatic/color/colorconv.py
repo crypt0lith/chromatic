@@ -26,6 +26,7 @@ __all__ = [
 from functools import lru_cache
 from operator import mul, truediv
 from typing import Final, Literal, SupportsInt, TypeGuard
+from types import MappingProxyType as mappingproxy
 
 import numpy as np
 
@@ -249,7 +250,7 @@ def rgb2lab(rgb: RGBVectorLike) -> Float3Tuple:
     return xyz2lab(xyz)
 
 
-ANSI_4BIT_RGB: Final[list[Int3Tuple]] = [
+ANSI_4BIT_RGB: Final[tuple[Int3Tuple, ...]] = (
     (0, 0, 0),  # black
     (170, 0, 0),  # red
     (0, 170, 0),  # green
@@ -266,7 +267,7 @@ ANSI_4BIT_RGB: Final[list[Int3Tuple]] = [
     (255, 85, 255),  # bright magenta
     (85, 255, 255),  # bright cyan
     (255, 255, 255),  # bright white
-]
+)
 
 
 def ansi_4bit_to_rgb(value: int):
@@ -304,7 +305,7 @@ def _4b_lookup() -> dict[Int3Tuple, Int3Tuple]:
     return table
 
 
-ANSI_4BIT_RGB_MAP = _4b_lookup()
+ANSI_4BIT_RGB_MAP = mappingproxy(_4b_lookup())
 
 
 def _quantize_rgb(rgb: RGBVectorLike):

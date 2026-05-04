@@ -44,22 +44,21 @@ from sklearn.cluster import DBSCAN
 
 from ..color.colorconv import nearest_ansi_4bit_rgb, nearest_ansi_8bit_rgb
 from ..color.core import (
-    Color,
-    ColorStr,
     DEFAULT_ANSI,
     SGR_RESET_S,
+    Color,
+    ColorStr,
     SgrSequence,
-    ansicolor24Bit,
     ansicolor4Bit,
     ansicolor8Bit,
+    ansicolor24Bit,
     get_ansi_type,
     sgr_pattern,
 )
 from ..color.palette import rgb_dispatch
-from ..data import UserFont, userfont, VGA437
+from ..data import VGA437, UserFont, userfont
 
 if TYPE_CHECKING:
-    from _typeshed import SupportsRead
     from typing import (
         Any,
         AnyStr,
@@ -75,7 +74,9 @@ if TYPE_CHECKING:
         TypeGuard,
         Union,
     )
-    from ..color.core import AnsiColorParam, AnsiColorType
+
+    from _typeshed import SupportsRead
+
     from .._typing import (
         FontArgType,
         GreyscaleArray,
@@ -88,6 +89,7 @@ if TYPE_CHECKING:
         TupleOf2,
         TupleOf4,
     )
+    from ..color.core import AnsiColorParam, AnsiColorType
 
     LiteralDigit: TypeAlias = Sequence[
         Literal['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
@@ -213,12 +215,12 @@ def shuffle_char_set(chars: Iterable[str]):
     return ''.join(xs)
 
 
-def render_font_str(__s: str, font: FontArgType):
+def render_font_str(s: str, /, font: FontArgType):
     """Render a string as an image using the specified font.
 
     Parameters
     ----------
-    __s : str
+    s : str
         The string to render.
 
     font : FontArgType
@@ -234,10 +236,10 @@ def render_font_str(__s: str, font: FontArgType):
     ValueError
         If the string is empty.
     """
-    __s = __s.expandtabs(4)
+    s = s.expandtabs(4)
     font = get_font_object(font)
-    if len(__s) > 1:
-        lines = __s.splitlines()
+    if len(s) > 1:
+        lines = s.splitlines()
         maxlen = max(map(len, lines))
         stacked = np.vstack(
             [
@@ -251,17 +253,17 @@ def render_font_str(__s: str, font: FontArgType):
             ]
         )
         return Image.fromarray(stacked)
-    return render_font_char(__s, font)
+    return render_font_char(s, font)
 
 
 def render_font_char(
-    __c: str, font: FontArgType, size=(24, 24), fill: Int3Tuple = (0xFF, 0xFF, 0xFF)
+    c: str, /, font: FontArgType, size=(24, 24), fill: Int3Tuple = (0xFF, 0xFF, 0xFF)
 ):
     """Render a one-character string as an image.
 
     Parameters
     ----------
-    __c : str
+    c : str
         Character to be rendered.
 
     font : FontArgType
@@ -282,28 +284,28 @@ def render_font_char(
     ------
         ValueError : If the input string is longer than a single character.
     """
-    if len(__c) > 1:
+    if len(c) > 1:
         raise ValueError(
             f"{render_font_char.__name__}() expected a character, "
-            f"but string of length {len(__c)} found"
+            f"but string of length {len(c)} found"
         )
     img = Image.new('RGB', size=size)
     draw = ImageDraw.Draw(img)
     font_obj = get_font_object(font)
-    bbox = draw.textbbox((0, 0), __c, font=font_obj)
+    bbox = draw.textbbox((0, 0), c, font=font_obj)
     x_offset, y_offset = (
         (size[i] - (bbox[i + 2] - bbox[i])) // 2 - bbox[i] for i in range(2)
     )
-    draw.text((x_offset, y_offset), __c, font=font_obj, fill=fill)
+    draw.text((x_offset, y_offset), c, font=font_obj, fill=fill)
     return img
 
 
-def get_rgb_array(__img: str | PathLike[str] | RGBImageLike):
+def get_rgb_array(img: str | PathLike[str] | RGBImageLike, /):
     """Convert an input image into an RGB array.
 
     Parameters
     ----------
-    __img : RGBImageLike | PathLike[str] | str
+    img : RGBImageLike | PathLike[str] | str
         Input image or path to the image.
 
     Returns
@@ -318,12 +320,10 @@ def get_rgb_array(__img: str | PathLike[str] | RGBImageLike):
     TypeError
         If the input is not a valid image or path.
     """
-    if hasattr(__img, '__fspath__'):
-        img = ski.io.imread(os.fspath(__img))
-    elif isinstance(__img, str):
-        img = ski.io.imread(__img)
-    else:
-        img = __img
+    if hasattr(img, '__fspath__'):
+        img = ski.io.imread(os.fspath(img))
+    elif isinstance(img, str):
+        img = ski.io.imread(img)
     if not _is_rgb_array(img):
         if _is_image(img):
             img = img.convert('RGB')
@@ -397,7 +397,7 @@ def ansi_quantize(
     try:
         quantizer = _ANSI_QUANTIZERS[ansi_type]
     except KeyError:
-        from .._typing import unionize, type_error_msg
+        from .._typing import type_error_msg, unionize
 
         err = TypeError(
             type_error_msg(
@@ -473,20 +473,19 @@ def scale_saturation(img: RGBArray, alpha: float = None) -> RGBArray:
     return img
 
 
-def _get_asciidraw_vars(__img: str | PathLike[str] | RGBImageLike, __font: FontArgType):
-    img = get_rgb_array(__img)
-    font = get_font_object(__font)
-    return img, font
+def _get_asciidraw_vars(img: str | PathLike[str] | RGBImageLike, font: FontArgType, /):
+    return get_rgb_array(img), get_font_object(font)
 
 
-def _get_bbox_shape(__font: FreeTypeFont):
-    return cast(tuple[float, float], __font.getbbox(' ')[2:])
+def _get_bbox_shape(font: FreeTypeFont, /):
+    return cast(tuple[float, float], font.getbbox(' ')[2:])
 
 
 @overload
 def img2ascii(
-    __img: RGBImageLike | str | PathLike[str],
-    __font: FontArgType = ...,
+    img: RGBImageLike | str | PathLike[str],
+    font: FontArgType = ...,
+    /,
     factor: int = ...,
     char_set: Optional[str] = ...,
     sort_glyphs: bool | type[reversed] = ...,
@@ -497,8 +496,9 @@ def img2ascii(
 
 @overload
 def img2ascii(
-    __img: RGBImageLike | str | PathLike[str],
-    __font: FontArgType = ...,
+    img: RGBImageLike | str | PathLike[str],
+    font: FontArgType = ...,
+    /,
     factor: int = ...,
     char_set: Optional[str] = ...,
     sort_glyphs: bool | type[reversed] = ...,
@@ -508,8 +508,9 @@ def img2ascii(
 
 
 def img2ascii(
-    __img: RGBImageLike | PathLike[str] | str,
-    __font: FontArgType = VGA437,
+    img: RGBImageLike | PathLike[str] | str,
+    font: FontArgType = VGA437,
+    /,
     factor: int = 200,
     char_set: Iterable[str] = None,
     sort_glyphs: bool | type[reversed] = True,
@@ -520,21 +521,21 @@ def img2ascii(
 
     Parameters
     ----------
-    __img : RGBImageLike | PathLike[str] | str
+    img : RGBImageLike | PathLike[str] | str
         Base image being converted to ASCII.
 
-    __font : FontArgType
+    font : FontArgType
         Font to use for glyph comparisons and representation.
 
     factor : int
         Length of each line in characters per line in `output_str`. Affects level of detail.
 
     char_set : Iterable[str], optional
-        Characters to be mapped to greyscale values of `__img`.
+        Characters to be mapped to greyscale values of 'img'.
 
     sort_glyphs : {True, False, ``reversed``}
         Specifies to sort `char_set` or leave it unsorted before mapping to greyscale.
-        Glyph bitmasks obtained from `__font` are compared when sorting the string.
+        Glyph bitmasks obtained from 'font' are compared when sorting the string.
         ``reversed`` specifies reverse sorting order.
 
     ret_img : bool, default=False
@@ -555,7 +556,7 @@ def img2ascii(
     --------
     ascii2img : Render an ASCII string as an image.
     """
-    img, font = _get_asciidraw_vars(__img, __font)
+    img, font = _get_asciidraw_vars(img, font)
     greyscale: MatrixLike[np.uint8] = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
     img_shape = greyscale.shape
     img_aspect = img_shape[-1] / img_shape[0]
@@ -566,7 +567,7 @@ def img2ascii(
     if char_set is None:
         from ._curses import ascii_printable, cp437_printable
 
-        chars_getter = dict.get({VGA437: cp437_printable}, __font, ascii_printable)
+        chars_getter = dict.get({VGA437: cp437_printable}, font, ascii_printable)
         char_set = shuffle_char_set(chars_getter())
     elif type(char_set) is not str:
         char_set = ''.join(char_set)
@@ -584,8 +585,9 @@ def img2ascii(
 
 @rgb_dispatch('bg')
 def img2ansi(
-    __img: RGBImageLike | PathLike[str] | str,
-    __font: FontArgType = VGA437,
+    img: RGBImageLike | PathLike[str] | str,
+    font: FontArgType = VGA437,
+    /,
     factor: int = 200,
     char_set: Iterable[str] = None,
     ansi_type: AnsiColorParam = DEFAULT_ANSI,
@@ -597,10 +599,10 @@ def img2ansi(
 
     Parameters
     ----------
-    __img : RGBImageLike | PathLike[str] | str
+    img : RGBImageLike | PathLike[str] | str
         Base image or path to image being convert into ANSI.
 
-    __font : FontArgType
+    font : FontArgType
         Font to use for glyph comparisons and representation.
 
     factor : int
@@ -609,7 +611,7 @@ def img2ansi(
     char_set : Iterable[str], optional
         The literal string or sequence of strings to use for greyscale interpolation and
         visualization.
-        If None (default), the character set will be determined based on the `__font` parameter.
+        If None (default), the character set will be determined based on the 'font' parameter.
 
     ansi_type : AnsiColorParam
         ANSI color format to map the RGB values to.
@@ -620,7 +622,7 @@ def img2ansi(
 
     sort_glyphs : {True, False, ``reversed``}
         Specifies to sort `char_set` or leave it unsorted before mapping to greyscale.
-        Glyph bitmasks obtained from `__font` are compared when sorting the string.
+        Glyph bitmasks obtained from 'font' are compared when sorting the string.
         ``reversed`` specifies reverse sorting order.
 
     equalize : {True, False, 'white_point'}
@@ -653,7 +655,7 @@ def img2ansi(
         ansi_type = get_ansi_type(ansi_type)
     bg_wrapper = ColorStr('%s', bg=bg, ansi_type=ansi_type, reset=False)
     base_ascii, color_arr = img2ascii(
-        __img, __font, factor, char_set, sort_glyphs, ret_img=True
+        img, font, factor, char_set, sort_glyphs, ret_img=True
     )
     lines = base_ascii.splitlines()
     h, w = map(len, (lines, lines[0]))
@@ -682,7 +684,8 @@ def img2ansi(
 
 @rgb_dispatch('fg', 'bg')
 def ascii2img(
-    __s: str,
+    s: str,
+    /,
     font: FontArgType = VGA437,
     font_size=16,
     *,
@@ -693,7 +696,7 @@ def ascii2img(
 
     Parameters
     ----------
-    __s : str
+    s : str
         The ASCII string to convert into an image.
 
     font : FontArgType
@@ -718,7 +721,7 @@ def ascii2img(
     img2ascii : Convert an image into an ASCII string.
     """
     font = truetype(get_font_object(font, retpath=True), font_size)
-    lines = __s.split('\n')
+    lines = s.split('\n')
     n_rows, n_cols = map(len, (lines, lines[0]))
     cw, ch = _get_bbox_shape(font)
     iw, ih = (int(i * j) for i, j in zip((cw, ch), (n_cols, n_rows)))
@@ -734,7 +737,8 @@ def ascii2img(
 
 @rgb_dispatch('fg_default', 'bg_default')
 def ansi2img(
-    __ansi_array: list[list[ColorStr]],
+    ansi_array: list[list[ColorStr]],
+    /,
     font: FontArgType = VGA437,
     font_size=16,
     *,
@@ -745,7 +749,7 @@ def ansi2img(
 
     Parameters
     ----------
-    __ansi_array : list[list[ColorStr]]
+    ansi_array : list[list[ColorStr]]
         A 2D list of ``ColorStr`` objects
 
     font : FontArgType
@@ -774,13 +778,13 @@ def ansi2img(
     --------
     img2ansi : Create an ANSI array from an input image, font, and character set.
     """
-    if not (n_rows := len(__ansi_array)):
+    if not (n_rows := len(ansi_array)):
         raise ValueError('ANSI string input is empty')
     font = truetype(get_font_object(font, retpath=True), font_size)
     row_height = _get_bbox_shape(font)[-1]
     max_row_width = max(
         sum(font.getbbox(color_str.base_str)[2] for color_str in row)
-        for row in __ansi_array
+        for row in ansi_array
     )
     fg_fallback = fg_default
     bg_fallback = (0, 0, 0)
@@ -803,7 +807,7 @@ def ansi2img(
 
     draw = ImageDraw.Draw(img)
     y_offset = 0
-    for row in __ansi_array:
+    for row in ansi_array:
         x_offset = 0
         for cs in row:
             text_width = font.getbbox(cs.base_str)[2]
@@ -833,7 +837,8 @@ def ansi2img(
 
 
 def ansify(
-    __img: RGBImageLike | PathLike[str] | str,
+    img: RGBImageLike | PathLike[str] | str,
+    /,
     font: FontArgType = VGA437,
     font_size: int = 16,
     *,
@@ -847,7 +852,7 @@ def ansify(
 ):
     return ansi2img(
         img2ansi(
-            __img,
+            img,
             font,
             factor=factor,
             char_set=char_set,
@@ -863,38 +868,36 @@ def ansify(
     )
 
 
-def _is_array(__obj: Any) -> TypeGuard[np.ndarray]:
-    return isinstance(__obj, np.ndarray)
+def _is_array(obj: Any, /) -> TypeGuard[np.ndarray]:
+    return isinstance(obj, np.ndarray)
 
 
-def _is_rgb_array(__obj: Any) -> TypeGuard[RGBArray]:
-    return _is_array(__obj) and __obj.ndim == 3 and np.issubdtype(__obj.dtype, np.uint8)
+def _is_rgb_array(obj: Any, /) -> TypeGuard[RGBArray]:
+    return _is_array(obj) and obj.ndim == 3 and np.issubdtype(obj.dtype, np.uint8)
 
 
-def _is_greyscale_array(__obj: Any) -> TypeGuard[GreyscaleArray]:
-    return (
-        _is_array(__obj) and __obj.ndim == 2 and np.issubdtype(__obj.dtype, np.float64)
-    )
+def _is_greyscale_array(obj: Any, /) -> TypeGuard[GreyscaleArray]:
+    return _is_array(obj) and obj.ndim == 2 and np.issubdtype(obj.dtype, np.float64)
 
 
-def _is_greyscale_glyph(__obj: Any) -> TypeGuard[GreyscaleGlyphArray]:
-    return _is_greyscale_array(__obj) and __obj.shape == (24, 24)
+def _is_greyscale_glyph(obj: Any, /) -> TypeGuard[GreyscaleGlyphArray]:
+    return _is_greyscale_array(obj) and obj.shape == (24, 24)
 
 
-def _is_image(__obj: Any) -> TypeGuard[ImageType]:
-    return isinstance(__obj, ImageType)
+def _is_image(obj: Any, /) -> TypeGuard[ImageType]:
+    return isinstance(obj, ImageType)
 
 
-def _is_rgb_image(__obj: Any) -> TypeGuard[ImageType]:
-    return _is_image(__obj) and __obj.mode == 'RGB'
+def _is_rgb_image(obj: Any, /) -> TypeGuard[ImageType]:
+    return _is_image(obj) and obj.mode == 'RGB'
 
 
-def _is_rgb_imagelike(__obj: Any) -> TypeGuard[Union[RGBArray, ImageType]]:
-    return _is_rgb_array(__obj) or _is_rgb_image(__obj)
+def _is_rgb_imagelike(obj: Any, /) -> TypeGuard[Union[RGBArray, ImageType]]:
+    return _is_rgb_array(obj) or _is_rgb_image(obj)
 
 
-def _is_csi_param(__c: str) -> TypeGuard[Literal[';'] | LiteralDigit]:
-    return __c == ';' or __c.isdigit()
+def _is_csi_param(c: str, /) -> TypeGuard[Literal[';'] | LiteralDigit]:
+    return c == ';' or c.isdigit()
 
 
 @lru_cache(maxsize=1)
@@ -993,7 +996,7 @@ def _utf8_bytes(cp: int) -> Iterator[int]:
         yield 0b10000000 | (cp & 0b00111111)
 
 
-def reshape_ansi(__s: str, w: int, h: int) -> str:
+def reshape_ansi(s: str, /, w: int, h: int) -> str:
     def cursor() -> Generator[tuple[int, int], tuple[int, int], None]:
         idx, total = 0, h * w
         while idx < total:
@@ -1022,7 +1025,7 @@ def reshape_ansi(__s: str, w: int, h: int) -> str:
     cur = cursor()
     seq = SgrSequence()
     y, x = next(cur)
-    for line in _sub_bold_colors(__s.split('\n')):
+    for line in _sub_bold_colors(s.split('\n')):
         try:
             for m in cursor_or_sgr_finditer(line + '\n'):
                 if cg := m['cursor']:
@@ -1090,12 +1093,12 @@ def reshape_ansi(__s: str, w: int, h: int) -> str:
 
 
 @lru_cache
-def to_sgr_array(__s: str, ansi_type: AnsiColorParam = None):
+def to_sgr_array(s: str, /, ansi_type: AnsiColorParam = None):
     ansi_typ = DEFAULT_ANSI if ansi_type is None else get_ansi_type(ansi_type)
     new_cs = partial(ColorStr, ansi_type=ansi_typ, reset=False)
     cursor_or_sgr_finditer = cursor_or_sgr_pattern().finditer
     xs = []
-    for line in _sub_bold_colors(__s.split('\n')):
+    for line in _sub_bold_colors(s.split('\n')):
         x = []
         for m in cursor_or_sgr_finditer(line):
             text = m["text"]
@@ -1111,7 +1114,8 @@ def to_sgr_array(__s: str, ansi_type: AnsiColorParam = None):
 
 
 def render_ans(
-    __s: str,
+    s: str,
+    /,
     shape: TupleOf2[int],
     font: FontArgType = VGA437,
     font_size: int = 16,
@@ -1122,7 +1126,7 @@ def render_ans(
 
     Parameters
     ----------
-    __s : str
+    s : str
         Literal ANSI text.
 
     shape : tuple[int, int]
@@ -1139,21 +1143,21 @@ def render_ans(
         'auto' will determine background color dynamically.
     """
     return ansi2img(
-        to_sgr_array(reshape_ansi(__s, *shape)), font, font_size, bg_default=bg_default
+        to_sgr_array(reshape_ansi(s, *shape)), font, font_size, bg_default=bg_default
     )
 
 
-def read_ans(__buf: SupportsRead[str] | TextIOWrapper[str]) -> str:
+def read_ans(buf: SupportsRead[str] | TextIOWrapper[str], /) -> str:
     """Interpret a text buffer as an .ANS file and return the content as a string.
 
-    Extends 'cp437' translation if `__buf.encoding='cp437'`, and truncates any SAUCE metadata.
+    Extends 'cp437' translation if `buf.encoding='cp437'`, and truncates any SAUCE metadata.
     Otherwise, this is just a text file read operation.
     """
 
-    content = __buf.read().translate({0: ' '})
+    content = buf.read().translate({0: ' '})
     if ~(sauce_idx := content.rfind('\x1aSAUCE00')):
         content = content[:sauce_idx]
-    if getattr(__buf, 'encoding', None) == 'cp437':
+    if getattr(buf, 'encoding', None) == 'cp437':
         from ._curses import translate_cp437
 
         content = translate_cp437(content, ignore=(0x0A, 0x1A, 0x1B))

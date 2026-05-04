@@ -16,9 +16,9 @@ import chromatic as cm
 
 class FunctionNamespace:
 
-    def register[**P, R](self, __func: Callable[P, R] | FunctionType) -> Callable[P, R]:
-        setattr(self, __func.__name__.casefold(), __func)
-        return __func
+    def register[**P, R](self, f: Callable[P, R] | FunctionType, /) -> Callable[P, R]:
+        setattr(self, f.__name__.casefold(), f)
+        return f
 
 
 DEMO_FUNCS = FunctionNamespace()
@@ -301,8 +301,8 @@ class _time_wrapper[**P, R]:
 
 
 def print_help(ns: dict[str, FunctionType], choices: dict[int, str]):
-    from textwrap import wrap
     from shutil import get_terminal_size
+    from textwrap import wrap
 
     columns = get_terminal_size().columns
     print("runs a demo function\n")
@@ -327,12 +327,12 @@ def main():
     ns: dict[str, FunctionType] = vars(DEMO_FUNCS)
     choices = dict(enumerate(sorted(ns)))
 
-    def get_choice(__s: str):
-        if __s.isdigit() and int(__s) in choices.keys():
-            return ns[choices[int(__s)]]
-        elif __s.casefold() in ns.keys():
-            return ns[__s.casefold()]
-        raise KeyError(__s)
+    def get_choice(s: str, /):
+        if s.isdigit() and int(s) in choices.keys():
+            return ns[choices[int(s)]]
+        elif s.casefold() in ns.keys():
+            return ns[s.casefold()]
+        raise KeyError(s)
 
     choice: FunctionType | None = None
     if len(sys.argv) > 1:

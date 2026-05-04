@@ -11,7 +11,7 @@ __all__ = [
 
 import PIL.Image
 
-from .userfont import DEFAULT_FONT, UserFont, VGA437, register_userfont, userfont
+from .userfont import DEFAULT_FONT, VGA437, UserFont, register_userfont, userfont
 
 def butterfly() -> PIL.Image.ImageFile.ImageFile: ...
 def escher() -> PIL.Image.ImageFile.ImageFile: ...

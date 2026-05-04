@@ -3,6 +3,7 @@ import functools
 import io
 import pstats
 import random
+import sys
 import time
 import unittest
 from inspect import isbuiltin, signature
@@ -14,9 +15,9 @@ from chromatic import (
     Color,
     ColorStr,
     SgrParameter,
-    ansicolor24Bit,
     ansicolor4Bit,
     ansicolor8Bit,
+    ansicolor24Bit,
     colorbytes,
 )
 from chromatic.color.colorconv import (
@@ -334,18 +335,38 @@ class TestColorStr(unittest.TestCase):
 
 
 def main():
-    inp_ = None
-    modes = dict(
-        enumerate([unittest.main, test_performance_benchmark, _rand_color_str_array])
-    )
-    while inp_ not in range(len(modes)):
-        try:
-            s = '\n'.join(f"{k}\t{v.__name__.lstrip('_')}" for k, v in modes.items())
-            inp_ = int(input(f'{s}\nselect testing mode> '))
-        except KeyboardInterrupt:
-            print('\nGoodbye!')
-            exit()
+    mode_groups = {
+        (xs[0], xs[1].__name__.lstrip("_")): xs[1]
+        for xs in enumerate(
+            [unittest.main, test_performance_benchmark, _rand_color_str_array]
+        )
+    }
+    modes = {k: v for xs, v in mode_groups.items() for k in xs}
+    if len(sys.argv[1:]) == 1:
+        inp_ = sys.argv[1].strip()
+        if inp_.isdigit():
+            inp_ = int(inp_)
+        if inp_ not in modes:
+            print(f"invalid option: {inp_!r}", file=sys.stderr)
+            return -1
+    elif len(sys.argv[1:]) > 1:
+        raise ValueError("too many arguments, expected only 1")
+    else:
+        inp_ = None
+        print(
+            *(f"{i}\t{x}" for i, x in mode_groups), sep="\n", end="\nselect testing mode"
+        )
+        while inp_ not in modes:
+            try:
+                inp_ = input("> ").strip()
+                if inp_.isdigit():
+                    inp_ = int(inp_)
+            except KeyboardInterrupt:
+                print('\nGoodbye!')
+                exit()
     selected = modes[inp_]
+    if selected is unittest.main:
+        sys.argv[1:] = []
     print(f'Running {selected.__qualname__!r}...')
     out = selected()
     if out is not None:
@@ -353,4 +374,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

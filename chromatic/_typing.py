@@ -7,8 +7,8 @@ import types
 from collections import OrderedDict, namedtuple
 from collections.abc import Callable as ABC_Callable
 from functools import reduce, wraps
-from numbers import Number
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Concatenate,
@@ -20,13 +20,12 @@ from typing import (
     ParamSpec,
     Protocol,
     Sequence,
-    TYPE_CHECKING,
     Type,
     TypeAlias,
     TypeAliasType,
+    TypedDict,
     TypeGuard,
     TypeVar,
-    TypedDict,
     Union,
     Unpack,
     cast,
@@ -36,19 +35,17 @@ from typing import (
     runtime_checkable,
 )
 
+from numpy import dtype, float64, generic, ndarray, uint8
+from numpy._typing import NDArray, _ArrayLike
 from PIL.Image import Image
 from PIL.ImageFont import FreeTypeFont
-from numpy import dtype, float64, generic, ndarray, number, uint8
-from numpy._typing import NDArray, _ArrayLike
 
 if TYPE_CHECKING:
     from .data import UserFont
 
 _P = ParamSpec('_P')
-_T = TypeVar('_T')
 _T_co = TypeVar('_T_co', covariant=True)
 _T_contra = TypeVar('_T_contra', contravariant=True)
-_AnyNumber_co = TypeVar('_AnyNumber_co', number, Number, covariant=True)
 
 type ArrayReducerFunc[_SCT: generic] = Callable[
     Concatenate[_ArrayLike[_SCT], _P], NDArray[_SCT]
@@ -180,16 +177,16 @@ def is_matching_type(value, typ):
             return False
 
 
-def is_matching_typed_dict(__d: dict, typed_dict: type[dict]) -> tuple[bool, str]:
-    if TypedDict not in getattr(__d, '__orig_bases__', ()):
-        return False, type_error_msg(__d, dict)
+def is_matching_typed_dict(d: dict, /, typed_dict: type[dict]) -> tuple[bool, str]:
+    if TypedDict not in getattr(d, '__orig_bases__', ()):
+        return False, type_error_msg(d, dict)
     expected = get_type_hints(typed_dict)
-    if unexpected := __d.keys() - expected:
+    if unexpected := d.keys() - expected:
         return False, f"unexpected keyword arguments: {unexpected}"
-    if missing := set(getattr(typed_dict, '__required_keys__', expected)) - __d.keys():
+    if missing := set(getattr(typed_dict, '__required_keys__', expected)) - d.keys():
         return False, f"missing required keys: {missing}"
     for name, typ in expected.items():
-        field = __d.get(name)
+        field = d.get(name)
         if field is None or is_matching_type(field, typ):
             continue
         return False, type_error_msg(
@@ -214,15 +211,14 @@ class SupportsUnion(Protocol[_T_contra, _T_co]):
     def __or__(self, x: _T_contra, /) -> _T_co: ...
 
 
-def unionize(__iterable: Iterable[SupportsUnion[_T_contra, _T_co]]) -> _T_co:
-    return reduce(op.or_, __iterable)
+def unionize(iterable: Iterable[SupportsUnion[_T_contra, _T_co]], /) -> _T_co:
+    return reduce(op.or_, iterable)
 
 
 _GenericAlias = type(Type[...]) | types.GenericAlias
 _UnionGenericType = type(Union[..., None])
 _LiteralGenericType = type(L[''])
 _CallableGenericType = type(Callable[[], ...]) | type(ABC_Callable[[], ...])
-_CallableType = type(Callable) | ABC_Callable
 
 
 class _BoundedDict[_KT, _VT](OrderedDict[_KT, _VT]):
@@ -346,11 +342,12 @@ def _sort_attrs(obj, tp_name, attr_names):
     return attr_names, field_names
 
 
-def subtype[_T](typ: _T) -> _T:
-    type TypeVarDict = dict[TypeVar, ...]
+type TypeVarDict = dict[TypeVar, ...]
 
-    def _serialize(__item: tuple[Any, Hashable]):
-        key, value = __item
+
+def subtype[_T](typ: _T) -> _T:
+    def _serialize(item: tuple[Any, Hashable], /):
+        key, value = item
         return _unique_attrs(key), hash(value)
 
     def _cache_key(tp, tvars: TypeVarDict):

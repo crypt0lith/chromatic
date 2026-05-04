@@ -71,15 +71,15 @@ from .colorconv import (
 )
 from .core import (
     CSI,
-    Color,
-    ColorStr,
     DEFAULT_ANSI,
     SGR_RESET,
+    Color,
+    ColorStr,
     SgrParameter,
     SgrSequence,
-    ansicolor24Bit,
     ansicolor4Bit,
     ansicolor8Bit,
+    ansicolor24Bit,
     color_chain,
     colorbytes,
     get_ansi_type,

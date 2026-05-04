@@ -1,6 +1,6 @@
 from os import PathLike
-from typing import AnyStr, Final
 from types import MappingProxyType
+from typing import AnyStr, Final
 
 from PIL.ImageFont import FreeTypeFont
 

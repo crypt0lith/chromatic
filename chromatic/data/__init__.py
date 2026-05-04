@@ -16,7 +16,7 @@ if "CHROMATIC_DATADIR" not in os.environ:
     os.environ["CHROMATIC_DATADIR"] = osp.dirname(__file__)
 
 from ._fetchers import _load
-from .userfont import userfont, register_userfont, UserFont, VGA437, DEFAULT_FONT
+from .userfont import DEFAULT_FONT, VGA437, UserFont, register_userfont, userfont
 
 
 def __dir__():

@@ -30,7 +30,7 @@ class AnsiFore(ColorNamespace[color_chain]):
 
     def __call__(self, fg: _ColorLike) -> color_chain: ...
 
-class AnsiStyle(DynamicNamespace[color_chain]):
+class AnsiStyle(DynamicNamespace):
     RESET: ClassVar[color_chain]
     BOLD: ClassVar[color_chain]
     FAINT: ClassVar[color_chain]
@@ -104,50 +104,18 @@ class AnsiStyle(DynamicNamespace[color_chain]):
     CYAN_BRIGHT_BG: ClassVar[color_chain]
     WHITE_BRIGHT_BG: ClassVar[color_chain]
 
-class DynamicNamespace[_VT](metaclass=DynamicNSMeta[_VT]):
-    @classmethod
-    def asdict(cls) -> dict[str, _VT]: ...
+class DynamicNamespace(metaclass=DynamicNSMeta): ...
 
-class DynamicNSMeta[_VT](type):
+class DynamicNSMeta(type):
     __members__: tuple[str, ...]
 
-    @classmethod
-    def __class_getitem__[_T](mcls: _T, _) -> _T: ...
     @classmethod
     def __prepare__(
         mcls, clsname: str, bases: tuple[type, ...], /, **kwds
     ) -> Mapping[str, object]: ...
-    @overload
-    def __new__(
-        mcls: type[Self],
-        clsname: str,
-        bases: tuple[type, ...],
-        namespace: dict[str, ...],
-        /,
-    ) -> Self: ...
-    @overload
-    def __new__(
-        mcls: type[Self],
-        clsname: str,
-        bases: tuple[type, ...],
-        namespace: dict[str, ...],
-        /,
-        *,
-        iterable: Iterable[_VT],
-    ) -> Self: ...
-    @overload
-    def __new__[_T](
-        mcls: type[Self],
-        clsname: str,
-        bases: tuple[type, ...],
-        namespace: dict[str, ...],
-        /,
-        *,
-        member_type: Callable[[_T], _VT],
-    ) -> Self: ...
-    def asdict(cls) -> dict[str, _VT]: ...
+    def asdict(cls) -> dict[str, Any]: ...
 
-class ColorNamespace[NamedColor = Color](DynamicNamespace[NamedColor]):
+class ColorNamespace[NamedColor = Color](DynamicNamespace):
     BLACK: NamedColor
     DIM_GREY: NamedColor
     GREY: NamedColor

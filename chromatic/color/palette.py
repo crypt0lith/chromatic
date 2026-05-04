@@ -8,6 +8,7 @@ from typing import (
     Iterable,
     Iterator,
     Mapping,
+    MutableMapping,
     Never,
     Union,
     final,
@@ -21,14 +22,9 @@ if TYPE_CHECKING:
     from _typeshed import SupportsKeysAndGetItem
 
 
-class DynamicNSMeta[_VT](type):
-
+class DynamicNSMeta(type):
     @classmethod
-    def __class_getitem__(mcls, _):
-        return mcls
-
-    @classmethod
-    def __prepare__(mcls, clsname, bases, /, **kwds):
+    def __prepare__(mcls, clsname, bases, /, **kwds) -> MutableMapping[str, object]:
         return {'__members__': ()}
 
     def __new__(mcls, clsname, bases, namespace, /, **kwds):
@@ -109,13 +105,11 @@ class DynamicNSMeta[_VT](type):
         return {member: getattr(cls, member) for member in cls.__members__}
 
 
-class DynamicNamespace[_T](metaclass=DynamicNSMeta[_T]): ...
+class DynamicNamespace(metaclass=DynamicNSMeta): ...
 
 
 @final
-class _Member[_T]:
-
-    def __new__(cls: type[_T]) -> _T: ...
+class _Member: ...
 
 
 def _gen_named_color_values[_T](__f: Callable[[int], _T] = int) -> Iterator[_T]:
@@ -140,7 +134,7 @@ def _gen_named_color_values[_T](__f: Callable[[int], _T] = int) -> Iterator[_T]:
         yield __f(x)
 
 
-class ColorNamespace(DynamicNamespace[Color], iterable=_gen_named_color_values(Color)):
+class ColorNamespace(DynamicNamespace, iterable=_gen_named_color_values(Color)):
     BLACK: _Member
     DIM_GREY: _Member
     GREY: _Member
@@ -288,7 +282,7 @@ def style():
             yield color_chain([SgrSequence([x])])
 
 
-class AnsiStyle(DynamicNamespace[color_chain], iterable=style()):
+class AnsiStyle(DynamicNamespace, iterable=style()):
     RESET: _Member
     BOLD: _Member
     FAINT: _Member

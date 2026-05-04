@@ -1,17 +1,7 @@
 __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']
 
 from types import MappingProxyType
-from typing import (
-    Any,
-    Callable,
-    ClassVar,
-    Iterable,
-    Literal,
-    Mapping,
-    Self,
-    TypeAlias,
-    overload,
-)
+from typing import Any, Callable, ClassVar, Literal, Mapping, TypeAlias, overload
 
 from .._typing import Int3Tuple
 from .core import Color, ColorStr, color_chain
@@ -259,7 +249,7 @@ class ColorNamespace[NamedColor = Color](DynamicNamespace):
 named_color: MappingProxyType[tuple[Literal['4b', '24b'], str], Color]
 
 @overload
-def rgb_dispatch[_F: Callable[..., Any]](__f: _F, /, *names: str) -> _F: ...
+def rgb_dispatch[_F: Callable[..., Any]](f: _F, /, *names: str) -> _F: ...
 @overload
 def rgb_dispatch[_F: Callable[..., Any]](*names: str) -> Callable[[_F], _F]: ...
 

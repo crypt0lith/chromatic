@@ -177,14 +177,14 @@ _ANSI256_KEY2I = {v: int(k) for k, v in _ANSI256_B2KEY.items()}
 
 
 @lru_cache
-def _issubclass(__cls: type, __class_or_tuple: type | UnionType | tuple[Any, ...]):
-    return issubclass(__cls, __class_or_tuple)
+def _issubclass(typ: type, class_or_tuple: type | UnionType | tuple[Any, ...], /):
+    return issubclass(typ, class_or_tuple)
 
 
 class colorbytes(bytes):
 
     @classmethod
-    def from_rgb(cls, __rgb):
+    def from_rgb(cls, rgb, /):
         """Construct a `colorbytes` object from an RGB key-value pair.
 
         Returns
@@ -211,11 +211,11 @@ class colorbytes(bytes):
 
         k: ColorDictKeys
         v: object | Any
-        match __rgb:
+        match rgb:
             case ('fg' | 'bg') as k, v:
                 pass
             case {'fg': _} | {'bg': _}:
-                k, v = dict(__rgb).popitem()
+                k, v = dict(rgb).popitem()
             case _:
                 raise ValueError
         r, g, b = (
@@ -228,17 +228,17 @@ class colorbytes(bytes):
         setattr(inst, '_rgb_dict', {k: (r, g, b)})
         return inst
 
-    def __new__(cls, __ansi):
-        objtype = type(__ansi)
-        if not _issubclass(objtype, (bytes, bytearray)):
+    def __new__(cls, ansi, /):
+        self_issubtype = bool(cls is not colorbytes)
+        objtype = ansi.__class__
+        if self_issubtype and objtype is cls:
+            return ansi
+        elif not _issubclass(objtype, (bytes, bytearray)):
             raise TypeError(
                 f"Expected bytes-like object, got {objtype.__name__!r} object instead"
             )
-        issubtype = bool(cls is not colorbytes)
-        if issubtype and objtype is cls:
-            return __ansi
         k: ColorDictKeys
-        match _unwrap_ansi_escape(__ansi):
+        match _unwrap_ansi_escape(ansi):
             case [color]:
                 k, rgb = _ANSI16C_I2KV[int(color)]
                 typ = ansicolor4Bit
@@ -255,12 +255,10 @@ class colorbytes(bytes):
             case _:
                 raise ValueError
         if typ is not cls:
-            if issubtype:
-                __ansi = rgb2ansi_escape(cls, mode=k, rgb=rgb)
+            if self_issubtype:
                 typ = cls
-            else:
-                __ansi = rgb2ansi_escape(typ, mode=k, rgb=rgb)
-        inst = super().__new__(typ, __ansi)
+            ansi = rgb2ansi_escape(typ, mode=k, rgb=rgb)
+        inst = super().__new__(typ, ansi)
         setattr(inst, '_rgb_dict', {k: rgb})
         return inst
 
@@ -430,7 +428,7 @@ _ANSI_FORMAT_MAP = {k: x for x in _ANSI_COLOR_TYPES for k in [x, x.alias]}
 
 
 @lru_cache(maxsize=len(_ANSI_COLOR_TYPES))
-def _is_ansi_type(typ: type):
+def _is_ansi_type(typ: type, /):
     try:
         return typ in _ANSI_COLOR_TYPES
     except TypeError:
@@ -438,27 +436,27 @@ def _is_ansi_type(typ: type):
 
 
 @lru_cache(maxsize=len(_ANSI_FORMAT_MAP))
-def get_ansi_type(typ):
+def get_ansi_type(typ, /):
     try:
         return _ANSI_FORMAT_MAP[typ]
-    except (TypeError, KeyError):
-        pass
-    if isinstance(typ, str):
-        raise ValueError(f"invalid ANSI color format alias: {typ!r}")
-    from .._typing import unionize
+    except (TypeError, KeyError) as e:
+        if isinstance(typ, str):
+            err = ValueError(f"invalid ANSI color format alias: {typ!r}")
+        else:
+            from .._typing import unionize
 
-    repr_getter = lambda t: (t if isinstance(t, type) else type(t))
-    err = TypeError(
-        "Expected {.__name__!r} or {}, got {.__name__!r} object instead".format(
-            str,
-            type[unionize(set(map(repr_getter, _ANSI_FORMAT_MAP.values())))],
-            repr_getter(typ),
-        )
-    )
-    raise err
+            subscript = unionize(set(_ANSI_FORMAT_MAP.values()))
+            err = TypeError(
+                "Expected {.__name__!r} or {}, got {.__name__!r} object instead".format(
+                    str,
+                    type[subscript],
+                    typ if isinstance(typ, type) else typ.__class__,
+                )
+            )
+        raise err from e
 
 
-def set_default_ansi(typ):
+def set_default_ansi(typ, /):
     """Sets the global `DEFAULT_ANSI` variable to the specified ANSI color format"""
     if valid_typ := get_ansi_type(typ):
         global DEFAULT_ANSI
@@ -476,18 +474,18 @@ def sgr_pattern():
     return re.compile(rf"\x1b\[(?:{sgr_param_re}(?:;{sgr_param_re})*)?m")
 
 
-def _split_ansi_escape(__s: str) -> list[tuple['SgrSequence', str]] | None:
+def _split_ansi_escape(s: str, /) -> list[tuple['SgrSequence', str]] | None:
     out = []
     i = 0
-    for m in sgr_pattern().finditer(__s):
-        text = __s[i : (j := m.start())]
+    for m in sgr_pattern().finditer(s):
+        text = s[i : (j := m.start())]
         if i != j:
             out.append(text)
         ansi = _unwrap_ansi_escape(m[0].encode())
         if any(ansi):
             out.append(SgrSequence(map(int, ansi)))
-    if i + 1 < len(__s):
-        out.append(__s[i:])
+    if i + 1 < len(s):
+        out.append(s[i:])
     if not any(isinstance(x, SgrSequence) for x in out):
         return
     n = len(out)
@@ -506,15 +504,15 @@ def _split_ansi_escape(__s: str) -> list[tuple['SgrSequence', str]] | None:
     ]
 
 
-def _unwrap_ansi_escape(__b: bytes | bytearray):
-    return bytes(__b.removeprefix(CSI).removesuffix(b'm')).split(b';')
+def _unwrap_ansi_escape(b: bytes | bytearray, /):
+    return bytes(b.removeprefix(CSI).removesuffix(b'm')).split(b';')
 
 
-def _concat_ansi_escape(__it: Iterable[bytes | bytearray]):
-    return b'\x1b[%sm' % b';'.join(__it)
+def _concat_ansi_escape(iterable: Iterable[bytes | bytearray], /):
+    return b'\x1b[%sm' % b';'.join(iterable)
 
 
-def rgb2ansi_escape(fmt, mode, rgb):
+def rgb2ansi_escape(fmt, /, mode, rgb):
     fmt = get_ansi_type(fmt)
     if len(rgb) != 3:
         raise ValueError('length of RGB value is not 3')
@@ -560,7 +558,7 @@ class Color(int):
         return Color(0xFFFFFF ^ self)
 
     @classmethod
-    def from_rgb(cls, rgb):
+    def from_rgb(cls, rgb, /):
         inst = super().__new__(cls, rgb2int(rgb))
         inst._rgb = int2rgb(inst)
         return inst
@@ -580,8 +578,8 @@ class SgrParamBuffer[_T]:
 
     __match_args__ = ('value',)
 
-    def __buffer__(self, __flags):
-        return self._value.__buffer__(__flags)
+    def __buffer__(self, flags, /):
+        return self._value.__buffer__(flags)
 
     def __bytes__(self):
         try:
@@ -590,24 +588,24 @@ class SgrParamBuffer[_T]:
             setattr(self, '_bytes', bytes(self._value))
             return self._bytes
 
-    def __eq__(self, other):
+    def __eq__(self, other, /):
         return self._value == other
 
     def __hash__(self):
         return hash(self._value)
 
-    def __init__(self, __value: Self | bytes = b''):
-        if __value.__class__ is self.__class__:
-            self._value = __value._value
-        elif _issubclass(__value.__class__, bytes):
-            self._value = __value
+    def __init__(self, value: Self | bytes = b'', /):
+        if value.__class__ is self.__class__:
+            self._value = value._value
+        elif _issubclass(value.__class__, bytes):
+            self._value = value
         else:
             err = TypeError(
                 str.format(
                     "expected {0.__class__.__name__!r} or bytes-like object, "
                     "got {1.__class__.__name__!r} instead",
                     self,
-                    __value,
+                    value,
                 )
             )
             raise err
@@ -635,24 +633,24 @@ class SgrParamBuffer[_T]:
 
 
 @lru_cache
-def _get_sgr_nums(__x: bytes) -> list[int]:
+def _get_sgr_nums(x: bytes, /) -> list[int]:
     """Return a list of integers from a bytestring of ANSI SGR parameters.
 
     Roughly, bitwise equivalent to:
 
         list(map(int, bytes().split(b';')))
     """
-    if __x.isdigit():
-        return [int(__x)]
-    __x = __x.removeprefix(CSI)[
-        : idx if ~(idx := __x.find(0x6D)) else None
-    ].removesuffix(b'm')
-    length = len(__x)
+    if x.isdigit():
+        return [int(x)]
+    x = x.removeprefix(CSI)[: idx if ~(idx := x.find(0x6D)) else None].removesuffix(
+        b'm'
+    )
+    length = len(x)
     mask_indices = enumerate(
         map(
             bool,
             int.to_bytes(
-                ~int.from_bytes(b';' * length) & int.from_bytes(__x), length=length
+                ~int.from_bytes(b';' * length) & int.from_bytes(x), length=length
             ),
         )
     )
@@ -662,7 +660,7 @@ def _get_sgr_nums(__x: bytes) -> list[int]:
         try:
             idx, not_delim = next(mask_indices)
             while not_delim:
-                buf.append(__x[idx] | 0x30)
+                buf.append(x[idx] | 0x30)
                 idx, not_delim = next(mask_indices)
             else:
                 if buf:
@@ -675,16 +673,16 @@ def _get_sgr_nums(__x: bytes) -> list[int]:
 
 
 def _iter_normalized_sgr[_T: (Buffer, SupportsInt)](
-    __iter: bytes | bytearray | Iterable[_T],
+    iterable: bytes | bytearray | Iterable[_T], /
 ) -> Iterator[int | AnsiColorFormat]:
-    if _issubclass(type(__iter), (bytes, bytearray)):
-        __iter = __iter.split(b';')
+    if isinstance(iterable, (bytes, bytearray)):
+        iterable = iterable.split(b';')
     elt: object | Any
-    for elt in __iter:
+    for elt in iterable:
         objtype = elt.__class__
         if objtype is SgrParamBuffer:
             elt = elt._value
-            if _issubclass(type(elt), colorbytes):
+            if _issubclass(elt.__class__, colorbytes):
                 yield elt
             else:
                 yield int(elt)
@@ -708,7 +706,7 @@ def _iter_normalized_sgr[_T: (Buffer, SupportsInt)](
 
 
 def _co_yield_colorbytes(
-    __iter: Iterator[int],
+    iterable: Iterator[int], /
 ) -> Generator[bytes | AnsiColorFormat, int, None]:
     d: dict[int, ColorDictKeys] = {38: 'fg', 48: 'bg'}
     obj = b''
@@ -716,41 +714,42 @@ def _co_yield_colorbytes(
         value = yield obj
         try:
             key = d[value]
-            kind = next(__iter)
-            if kind == 5:
-                obj = ansicolor8Bit(b'%d;%d;%d' % (value, kind, next(__iter)))
-            else:
-                r, g, b = (next(__iter) for _ in range(3))
-                obj = ansicolor24Bit.from_rgb((key, (r, g, b)))
         except KeyError:
             if value in _ANSI16C_I2KV:
                 obj = ansicolor4Bit.from_rgb(_ANSI16C_I2KV[value])
             else:
                 obj = b'%d' % value
+        else:
+            kind = next(iterable)
+            if kind == 5:
+                obj = ansicolor8Bit(b'%d;%d;%d' % (value, kind, next(iterable)))
+            else:
+                r, g, b = (next(iterable) for _ in range(3))
+                obj = ansicolor24Bit.from_rgb((key, (r, g, b)))
 
 
-def _gen_colorbytes(__iter: Iterable[int]) -> Iterator[bytes | AnsiColorFormat]:
-    gen = iter(__iter)
+def _gen_colorbytes(iterable: Iterable[int], /) -> Iterator[bytes | AnsiColorFormat]:
+    gen = iter(iterable)
     color_coro = _co_yield_colorbytes(gen)
     next(color_coro)
     for value in gen:
-        if _is_ansi_type(type(value)):
+        if _is_ansi_type(value.__class__):
             yield value
         else:
             yield color_coro.send(value)
 
 
-def _iter_sgr[_T: (Buffer, SupportsInt)](__x: bytes | bytearray | Iterable[_T]):
-    return _gen_colorbytes(_iter_normalized_sgr(__x))
+def _iter_sgr[_T: (Buffer, SupportsInt)](x: bytes | bytearray | Iterable[_T], /):
+    return _gen_colorbytes(_iter_normalized_sgr(x))
 
 
-def _is_ansi_std_16c(__value: bytes):
-    return __value.isdigit() and int(__value) in _ANSI16C_STD
+def _is_ansi_std_16c(value: bytes, /):
+    return value.isdigit() and int(value) in _ANSI16C_STD
 
 
 @lru_cache(maxsize=len(_SGR_PARAM_VALUES))
-def _is_sgr_param(__value: int):
-    return __value in _SGR_PARAM_VALUES
+def _is_sgr_param(value: int, /):
+    return value in _SGR_PARAM_VALUES
 
 
 class SgrSequence(MutableSequence[SgrParamBuffer]):
@@ -881,7 +880,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
             )
             return typ
 
-    def __add__(self, other):
+    def __add__(self, other, /):
         if isinstance(other, self.__class__):
             return self.__class__(x for xs in (self, other) for x in xs)
         return NotImplemented
@@ -942,8 +941,8 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
                 if cur_idx == index:
                     delattr(self, attr)
 
-    def __getitem__(self, __index):
-        return self._sgr_params[__index]
+    def __getitem__(self, index, /):
+        return self._sgr_params[index]
 
     def __init__(self, iterable=None, /) -> None:
         if iterable is None:
@@ -1147,8 +1146,8 @@ def _colorstr[_T](
         raise err
     suffix = SGR_RESET_S if reset else ''
     inst: Any = supercls.__new__(
-        supercls.__thisclass__, f"{sgr}{base_str}{suffix}"
-    )  # noqa
+        supercls.__thisclass__, f"{sgr}{base_str}{suffix}"  # type: ignore
+    )
     inst.__dict__ |= {
         '_sgr': sgr,
         '_base_str': base_str,
@@ -1199,7 +1198,7 @@ class ColorStr(str, _IntFloatMixin):
         """
         return str(self._sgr), self.base_str, self._reset
 
-    def as_ansi_type(self, __ansi_type):
+    def as_ansi_type(self, ansi_type, /):
         """Convert all ANSI colors in the `ColorStr` to a single ANSI type.
 
         Parameters
@@ -1214,7 +1213,7 @@ class ColorStr(str, _IntFloatMixin):
             Otherwise, return reformatted `ColorStr`.
 
         """
-        ansi_type = get_ansi_type(__ansi_type)
+        ansi_type = get_ansi_type(ansi_type)
         if self.rgb_dict and ansi_type is not self.ansi_format:
             sgr = self._sgr.copy()
             sgr.set_colors(sgr.rgb_dict, ansi_type)
@@ -1224,17 +1223,17 @@ class ColorStr(str, _IntFloatMixin):
         return self
 
     def recolor(self, *args, **kwargs):
-        """ColorStr.recolor(self, __value, *, absolute=False) -> ColorStr
+        """ColorStr.recolor(self, value, /, *, absolute=False) -> ColorStr
 
         ColorStr.recolor(self, *, fg=None, bg=None, absolute=False) -> ColorStr
 
         Return a copy of self with a new color spec.
 
         If no arguments are given, returns self unchanged.
-        If __value is given and a `ColorStr`, return self with the colors of __value.
+        If 'value' is given and a `ColorStr`, return self with the colors of 'value'.
         Else, use keyword arguments { 'fg', 'bg' } for colors.
         Any other mix of arguments will fail outright,
-        since __value along with { fg=... | bg=... } is ambiguous which to use for colors.
+        since 'value' along with { fg=... | bg=... } is ambiguous which to use for colors.
         The 'absolute' keyword can be used with either signature.
 
         Keyword Args
@@ -1323,10 +1322,10 @@ class ColorStr(str, _IntFloatMixin):
         sgr[:] = only_colors
         return self._weak_var_update(sgr=sgr)
 
-    def add_sgr_param(self, __x: SgrParameter):
-        if __x.__class__ is not SgrParameter:
-            __x = SgrParameter(__x)
-        bx = SgrParamBuffer(b'%d' % __x)
+    def add_sgr_param(self, x: SgrParameter, /):
+        if x.__class__ is not SgrParameter:
+            x = SgrParameter(x)
+        bx = SgrParamBuffer(b'%d' % x)
         if bx in self._sgr:
             return self
         sgr = self._sgr.copy()
@@ -1338,10 +1337,10 @@ class ColorStr(str, _IntFloatMixin):
         }
         return inst
 
-    def remove_sgr_param(self, __x: SgrParameter):
-        if __x.__class__ is not SgrParameter:
-            __x = SgrParameter(__x)
-        bx = SgrParamBuffer(b'%d' % __x)
+    def remove_sgr_param(self, x: SgrParameter, /):
+        if x.__class__ is not SgrParameter:
+            x = SgrParameter(x)
+        bx = SgrParamBuffer(b'%d' % x)
         if bx not in self._sgr:
             return self
         sgr = self._sgr.copy()
@@ -1386,29 +1385,29 @@ class ColorStr(str, _IntFloatMixin):
     def casefold(self):
         return self._weak_var_update(base_str=self.base_str.casefold())
 
-    def center(self, __width, __fillchar=' '):
-        return self._weak_var_update(base_str=self.base_str.center(__width, __fillchar))
+    def center(self, width, fillchar=' ', /):
+        return self._weak_var_update(base_str=self.base_str.center(width, fillchar))
 
-    def count(self, x, *args):
+    def count(self, x, /, *args):
         return self.base_str.count(x, *args)
 
-    def endswith(self, __suffix, *args):
-        return self.base_str.endswith(__suffix, *args)
+    def endswith(self, suffix, /, *args):
+        return self.base_str.endswith(suffix, *args)
 
-    def expandtabs(self, tabsize=8):
+    def expandtabs(self, /, tabsize=8):
         return self._weak_var_update(base_str=self.base_str.expandtabs(tabsize))
 
-    def find(self, __sub, *args):
-        return self.base_str.find(__sub, *args)
+    def find(self, sub, /, *args):
+        return self.base_str.find(sub, *args)
 
     def format(self, *args, **kwargs):
         return self._weak_var_update(base_str=self.base_str.format(*args, **kwargs))
 
-    def format_map(self, __mapping):
-        return self._weak_var_update(base_str=self.base_str.format_map(__mapping))
+    def format_map(self, mapping, /):
+        return self._weak_var_update(base_str=self.base_str.format_map(mapping))
 
-    def index(self, __sub: str, *args):
-        return self.base_str.index(__sub, *args)
+    def index(self, sub, /, *args):
+        return self.base_str.index(sub, *args)
 
     def isalnum(self):
         return self.base_str.isalnum()
@@ -1446,54 +1445,52 @@ class ColorStr(str, _IntFloatMixin):
     def isupper(self):
         return self.base_str.isupper()
 
-    def join(self, __iterable):
+    def join(self, iterable, /):
         return self._weak_var_update(
             base_str=self.base_str.join(
-                getattr(elt, 'base_str', elt) for elt in __iterable
+                getattr(elt, 'base_str', elt) for elt in iterable
             )
         )
 
-    def ljust(self, __width, __fillchar=' '):
-        return self._weak_var_update(base_str=self.base_str.ljust(__width, __fillchar))
+    def ljust(self, width, fillchar=' ', /):
+        return self._weak_var_update(base_str=self.base_str.ljust(width, fillchar))
 
     def lower(self):
         return self._weak_var_update(base_str=self.base_str.lower())
 
-    def lstrip(self, __chars=None):
-        return self._weak_var_update(base_str=self.base_str.lstrip(__chars))
+    def lstrip(self, chars=None, /):
+        return self._weak_var_update(base_str=self.base_str.lstrip(chars))
 
-    def partition(self, __sep):
+    def partition(self, sep, /):
         lhs, sep, rhs = (
-            self._weak_var_update(base_str=s) for s in self.base_str.partition(__sep)
+            self._weak_var_update(base_str=s) for s in self.base_str.partition(sep)
         )
         return lhs, sep, rhs
 
-    def removeprefix(self, __prefix):
-        return self._weak_var_update(base_str=self.base_str.removeprefix(__prefix))
+    def removeprefix(self, prefix, /):
+        return self._weak_var_update(base_str=self.base_str.removeprefix(prefix))
 
-    def removesuffix(self, __prefix):
-        return self._weak_var_update(base_str=self.base_str.removesuffix(__prefix))
+    def removesuffix(self, prefix, /):
+        return self._weak_var_update(base_str=self.base_str.removesuffix(prefix))
 
-    def replace(self, __old, __new, __count=-1):
-        return self._weak_var_update(
-            base_str=self.base_str.replace(__old, __new, __count)
-        )
+    def replace(self, old, new, /, count=-1):
+        return self._weak_var_update(base_str=self.base_str.replace(old, new, count))
 
-    def rfind(self, __sub, *args):
-        return self.base_str.rfind(__sub, *args)
+    def rfind(self, sub, /, *args):
+        return self.base_str.rfind(sub, *args)
 
-    def rindex(self, __sub, *args):
-        return self.base_str.rindex(__sub, *args)
+    def rindex(self, sub, /, *args):
+        return self.base_str.rindex(sub, *args)
 
-    def rjust(self, __width, __fillchar=' '):
-        return self._weak_var_update(base_str=self.base_str.rjust(__width, __fillchar))
+    def rjust(self, width, fillchar=' ', /):
+        return self._weak_var_update(base_str=self.base_str.rjust(width, fillchar))
 
-    def rstrip(self, __chars=None):
-        return self._weak_var_update(base_str=self.base_str.rstrip(__chars))
+    def rstrip(self, chars=None, /):
+        return self._weak_var_update(base_str=self.base_str.rstrip(chars))
 
-    def rpartition(self, __sep):
+    def rpartition(self, sep, /):
         lhs, sep, rhs = (
-            self._weak_var_update(base_str=s) for s in self.base_str.rpartition(__sep)
+            self._weak_var_update(base_str=s) for s in self.base_str.rpartition(sep)
         )
         return lhs, sep, rhs
 
@@ -1515,11 +1512,11 @@ class ColorStr(str, _IntFloatMixin):
             for s in self.base_str.splitlines(keepends=keepends)
         ]
 
-    def startswith(self, __prefix, *args):
-        return self.base_str.startswith(__prefix, *args)
+    def startswith(self, prefix, /, *args):
+        return self.base_str.startswith(prefix, *args)
 
-    def strip(self, __chars=None):
-        return self._weak_var_update(base_str=self.base_str.strip(__chars))
+    def strip(self, chars=None, /):
+        return self._weak_var_update(base_str=self.base_str.strip(chars))
 
     def swapcase(self):
         return self._weak_var_update(base_str=self.base_str.swapcase())
@@ -1527,16 +1524,16 @@ class ColorStr(str, _IntFloatMixin):
     def title(self):
         return self._weak_var_update(base_str=self.base_str.title())
 
-    def translate(self, __table):
-        return self._weak_var_update(base_str=self.base_str.translate(__table))
+    def translate(self, table, /):
+        return self._weak_var_update(base_str=self.base_str.translate(table))
 
     def upper(self):
         return self._weak_var_update(base_str=self.base_str.upper())
 
-    def zfill(self, __width):
-        return self._weak_var_update(base_str=self.base_str.zfill(__width))
+    def zfill(self, width, /):
+        return self._weak_var_update(base_str=self.base_str.zfill(width))
 
-    def __add__(self, other):
+    def __add__(self, other, /):
         if isinstance(other, self.__class__):
             return self._weak_var_update(
                 sgr=self._sgr + other._sgr, base_str=self.base_str + other.base_str
@@ -1545,28 +1542,28 @@ class ColorStr(str, _IntFloatMixin):
             return self._weak_var_update(base_str=self.base_str + other)
         return NotImplemented
 
-    def __contains__(self, __key: str):
-        return self.base_str.__contains__(__key)
+    def __contains__(self, key: str, /):
+        return self.base_str.__contains__(key)
 
-    def __eq__(self, other):
+    def __eq__(self, other, /):
         if _issubclass(other.__class__, self.__class__):
             return hash(self) == hash(other)
         return NotImplemented
 
-    def __format__(self, format_spec=''):
+    def __format__(self, format_spec='', /):
         if format_spec.endswith('b'):
             for alias in ('24b', '8b', '4b'):
                 format_spec = format_spec.rpartition(alias)[0]
                 return str(self.as_ansi_type(alias)).__format__(format_spec)
         return super().__format__(format_spec)
 
-    def __ge__(self, other):
+    def __ge__(self, other, /):
         return self.base_str.__ge__(other)
 
-    def __getitem__(self, __key):
-        return self._weak_var_update(base_str=self.base_str[__key])
+    def __getitem__(self, key, /):
+        return self._weak_var_update(base_str=self.base_str[key])
 
-    def __gt__(self, other):
+    def __gt__(self, other, /):
         return self.base_str.__gt__(other)
 
     def __hash__(self):
@@ -1585,33 +1582,33 @@ class ColorStr(str, _IntFloatMixin):
         for c in self.base_str:
             yield self._weak_var_update(base_str=c)
 
-    def __le__(self, other):
+    def __le__(self, other, /):
         return self.base_str.__le__(other)
 
     def __len__(self):
         return len(self.base_str)
 
-    def __lt__(self, other):
+    def __lt__(self, other, /):
         return self.base_str.__lt__(other)
 
-    def __matmul__(self, other):
+    def __matmul__(self, other, /):
         """Return a new `ColorStr` with the base string of `self` and colors of `other`"""
         if isinstance(other, ColorStr):
             return self._weak_var_update(sgr=other._sgr.copy(), reset=other.reset)
         return NotImplemented
 
-    def __mod__(self, __value):
-        return self._weak_var_update(base_str=self.base_str % __value)
+    def __mod__(self, value, /):
+        return self._weak_var_update(base_str=self.base_str % value)
 
-    def __mul__(self, __value):
-        return self._weak_var_update(base_str=self.base_str * __value)
+    def __mul__(self, value, /):
+        return self._weak_var_update(base_str=self.base_str * value)
 
     __rmul__ = __mul__
 
-    def __new__(cls, obj=_unset, *args, **kwargs):
+    def __new__(cls, obj=_unset, /, *args, **kwargs):
         return _colorstr(super(), obj, *args, **kwargs)  # noqa
 
-    def __radd__(self, other):
+    def __radd__(self, other, /):
         if isinstance(other, SgrSequence):
             return self._weak_var_update(sgr=(other + self._sgr))
         return NotImplemented
@@ -1619,7 +1616,7 @@ class ColorStr(str, _IntFloatMixin):
     def __repr__(self):
         return f"{self.__class__.__name__}({super().__repr__()})"
 
-    def __xor__(self, other):
+    def __xor__(self, other, /):
         """Return copy of self with colors ^ other colors"""
 
         k: L['fg', 'bg']
@@ -1719,7 +1716,7 @@ def _collect_masks(
 
 class color_chain(Sequence[tuple[SgrSequence, str]]):
     @staticmethod
-    def _is_mask_seq(obj):
+    def _is_mask_seq(obj, /):
         if isinstance(obj, Sequence):
             for x in obj:
                 match x:
@@ -1732,7 +1729,7 @@ class color_chain(Sequence[tuple[SgrSequence, str]]):
         return False
 
     @classmethod
-    def _from_masks_unchecked(cls, masks, ansi_type):
+    def _from_masks_unchecked(cls, masks, /, ansi_type):
         inst = object.__new__(cls)
         inst._ansi_type = ansi_type
         inst._masks = []
@@ -1749,7 +1746,7 @@ class color_chain(Sequence[tuple[SgrSequence, str]]):
         return inst
 
     @classmethod
-    def from_masks(cls, masks, ansi_type=None):
+    def from_masks(cls, masks, /, ansi_type=None):
         if cls._is_mask_seq(masks):
             return cls._from_masks_unchecked(
                 masks, ansi_type if ansi_type is None else get_ansi_type(ansi_type)
@@ -1789,7 +1786,7 @@ class color_chain(Sequence[tuple[SgrSequence, str]]):
                     masks.append((sgr, s))
         return self._from_masks_unchecked(masks, ansi_type=self._ansi_type)
 
-    def __add__(self, other):
+    def __add__(self, other, /):
         try:
             masks = _collect_masks(
                 other, masks=deepcopy(self._masks), ansi_type=self._ansi_type
@@ -1805,28 +1802,28 @@ class color_chain(Sequence[tuple[SgrSequence, str]]):
     def __bool__(self):
         return bool(self._masks)
 
-    def __call__(self, __obj=''):
-        return f"{self}{__obj}\x1b[0m"
+    def __call__(self, obj='', /):
+        return f"{self}{obj}\x1b[0m"
 
-    def __getitem__(self, __index):
-        return self.masks[__index]
+    def __getitem__(self, index, /):
+        return self.masks[index]
 
-    def __init__(self, __iterable=None, *, ansi_type=None):
+    def __init__(self, iterable=None, /, *, ansi_type=None):
         self._ansi_type = None
         if ansi_type is not None:
             self._ansi_type = get_ansi_type(ansi_type)
-        __iterable = __iterable or []
-        self._masks = _collect_masks(*__iterable, ansi_type=self._ansi_type)
+        iterable = iterable or []
+        self._masks = _collect_masks(*iterable, ansi_type=self._ansi_type)
 
     def __len__(self):
         return len(self._masks)
 
-    def __or__(self, other):
+    def __or__(self, other, /):
         if _issubclass(other.__class__, self.__class__):
             return self.merge(other)
         return NotImplemented
 
-    def __radd__(self, other):
+    def __radd__(self, other, /):
         if isinstance(other, ColorStr):
             return self._from_masks_unchecked(
                 [_color_str_to_mask(other), *self.masks],

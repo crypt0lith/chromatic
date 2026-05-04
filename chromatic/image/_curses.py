@@ -70,29 +70,29 @@ CP437_TRANS_TABLE = MappingProxyType(
 
 @overload
 def translate_cp437[_T: (int, str)](
-    __x: str, *, ignore: _T | Iterable[_T] = ...
+    x: str, /, *, ignore: _T | Iterable[_T] = ...
 ) -> str: ...
 
 
 @overload
 def translate_cp437[_T: (int, str)](
-    __iter: Iterable[str], *, ignore: _T | Iterable[_T] = ...
+    iterable: Iterable[str], /, *, ignore: _T | Iterable[_T] = ...
 ) -> Iterator[str]: ...
 
 
 def translate_cp437(
-    __x: str | Iterable[str], *, ignore: int | Iterable[int] = None
+    x: str | Iterable[str], /, *, ignore: int | Iterable[int] = None
 ) -> str | Iterator[str]:
-    keys_view = set(CP437_TRANS_TABLE.keys())
+    keys = set(CP437_TRANS_TABLE.keys())
     if ignore is not None:
         if isinstance(ignore, Iterable):
-            keys_view.difference_update(ignore)
+            keys.difference_update(ignore)
         else:
-            keys_view.discard(ignore)
-    trans_table = {k: v for (k, v) in CP437_TRANS_TABLE.items() if k in keys_view}
-    if not isinstance(__x, str):
-        return map(lambda s: str.translate(s, trans_table), __x)
-    return __x.translate(trans_table)
+            keys.discard(ignore)
+    trans_table = {k: v for (k, v) in CP437_TRANS_TABLE.items() if k in keys}
+    if not isinstance(x, str):
+        return map(lambda s: str.translate(s, trans_table), x)
+    return x.translate(trans_table)
 
 
 def cp437_printable():

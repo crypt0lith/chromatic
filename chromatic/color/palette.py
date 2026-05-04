@@ -112,7 +112,7 @@ class DynamicNamespace(metaclass=DynamicNSMeta): ...
 class _Member: ...
 
 
-def _gen_named_color_values[_T](__f: Callable[[int], _T] = int) -> Iterator[_T]:
+def _gen_named_color_values[_T](f: Callable[[int], _T] = int, /) -> Iterator[_T]:
     for x in (
         0x000000, 0x696969, 0x808080, 0xA9A9A9, 0xC0C0C0, 0xD3D3D3, 0xF5F5F5, 0xFFFFFF, 0x800000,
         0x8B0000, 0xFF0000, 0xB22222, 0xA52A2A, 0xCD5C5C, 0xF08080, 0xBC8F8F, 0xFFE4E1, 0xFFFAFA,
@@ -131,7 +131,7 @@ def _gen_named_color_values[_T](__f: Callable[[int], _T] = int) -> Iterator[_T]:
         0x8B008B, 0xC71585, 0xFF00FF, 0xFF1493, 0xDA70D6, 0xFF69B4, 0xEE82EE, 0xDDA0DD, 0xFFF0F5,
         0xDC143C, 0xDB7093, 0xFFB6C1, 0xFFC0CB  # fmt: skip
     ):
-        yield __f(x)
+        yield f(x)
 
 
 class ColorNamespace(DynamicNamespace, iterable=_gen_named_color_values(Color)):
@@ -357,12 +357,12 @@ class AnsiStyle(DynamicNamespace, iterable=style()):
     WHITE_BRIGHT_BG: _Member
 
 
-def background(__x: Color):
-    return color_chain([ColorStr(bg=__x)._sgr], ansi_type='24b')
+def background(x: Color, /):
+    return color_chain([ColorStr(bg=x)._sgr], ansi_type='24b')
 
 
-def foreground(__x: Color):
-    return color_chain([ColorStr(fg=__x)._sgr], ansi_type='24b')
+def foreground(x: Color, /):
+    return color_chain([ColorStr(fg=x)._sgr], ansi_type='24b')
 
 
 class AnsiBack(ColorNamespace, member_type=background):
@@ -435,16 +435,16 @@ class _color_ns_getter:
 def rgb_dispatch(*names: str):
     color_ns: SupportsKeysAndGetItem[str, Int3Tuple] = _color_ns_getter()
 
-    def decorator(__f):
-        def fix_signature(__f):
+    def decorator(f, /):
+        def fix_signature(f, /):
             from .._typing import eval_annotation
 
             nonlocal names, rgb_args, variadic
             try:
-                argspec = getfullargspec(__f)
-                sig = signature(__f)
+                argspec = getfullargspec(f)
+                sig = signature(f)
             except TypeError:
-                if not (isbuiltin(__f) or getattr(__f, '__module__', '') == 'builtins'):
+                if not (isbuiltin(f) or getattr(f, '__module__', '') == 'builtins'):
                     raise
                 return signature(lambda *args, **kwargs: ...)
             variadic = {
@@ -475,7 +475,7 @@ def rgb_dispatch(*names: str):
                         union_repr = f"{annotation} | str"
                         try:
                             annotation = eval_annotation(
-                                union_repr, globals=__f.__globals__
+                                union_repr, globals=f.__globals__
                             )
                         except NameError:
                             annotation = union_repr
@@ -499,13 +499,13 @@ def rgb_dispatch(*names: str):
                     )
                 elif value in color_ns:
                     bound.arguments[name] = color_ns[value]
-            return __f(*bound.args, **bound.kwargs)
+            return f(*bound.args, **bound.kwargs)
 
         rgb_args, variadic = set[str](), set[str]()
-        wrapper_sig = fix_signature(__f)
-        if not hasattr(__f, '__text_signature__'):
-            setattr(__f, '__signature__', wrapper_sig)
-        return update_wrapper(wrapper, __f)
+        wrapper_sig = fix_signature(f)
+        if not hasattr(f, '__text_signature__'):
+            setattr(f, '__signature__', wrapper_sig)
+        return update_wrapper(wrapper, f)
 
     if names and callable(names[0]):
         func, *names = names
@@ -522,18 +522,18 @@ def rgb_dispatch(*names: str):
 def _make_named_color_map() -> ...:
     class NamedColorMapping(dict):
 
-        def __setitem__(self, *args: Never):
+        def __setitem__(self, *_) -> Never:
             raise NotImplementedError
 
-        def __getitem__(self, __key: tuple[str, str]):
+        def __getitem__(self, key: tuple[str, str], /):
             try:
-                k1, k2 = __key
+                k1, k2 = key
                 if type(k2) is not str:
                     raise TypeError
                 return super().__getitem__((k1, k2.upper()))
             except (TypeError, KeyError, ValueError):
                 pass
-            raise KeyError(__key)
+            raise KeyError(key)
 
     return NamedColorMapping(
         ((k1, k2), rgb)
@@ -581,7 +581,7 @@ def named_color_idents():
     ]
 
 
-def __getattr__(name: str) -> ...:
+def __getattr__(name: str, /) -> ...:
     try:
         return globals().setdefault(
             name, {'Back': AnsiBack, 'Fore': AnsiFore, 'Style': AnsiStyle}[name]()

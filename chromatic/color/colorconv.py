@@ -41,11 +41,11 @@ from .._typing import (
 
 
 @lru_cache
-def _supports_int(typ: type) -> TypeGuard[type[SupportsInt]]:
+def _supports_int(typ: type, /) -> TypeGuard[type[SupportsInt]]:
     return issubclass(typ, SupportsInt)
 
 
-def is_u24(value, *, strict: bool = False):
+def is_u24(value, *, strict: bool = False) -> bool:
     """Check if value is an unsigned 24-bit integer.
 
     Parameters
@@ -61,44 +61,46 @@ def is_u24(value, *, strict: bool = False):
         Raised when `strict=True` and value is not u24
     """
     if _supports_int(value.__class__):
-        if 0 <= int(value) <= 0xFFFFFF:
+        if 0 <= int(value) < (1 << 24):
             return True
         elif not strict:
             return False
     raise ValueError(f"{value!r} is not u24")
 
 
-def hexstr2rgb(__str: str) -> Int3Tuple:
-    n = len(__str)
+def hexstr2rgb(s: str, /) -> Int3Tuple:
+    n = len(s)
     if n % 4 == 0:  # trunc alpha
         n *= 3
         n //= 4
-        __str = __str[:n]
+        s = s[:n]
     if n == 3:  # rgb -> rrggbb
-        __str = ''.join(c * 2 for c in __str)
-    if is_u24(value := int(__str, 16), strict=True):
-        return int2rgb(value)
+        s = ''.join(c * 2 for c in s)
+    x = int(s, 16)
+    if not 0 <= x < (1 << 24):
+        raise ValueError(f"{x:#x} is not u24")
+    return int2rgb(x)
 
 
-def rgb2hexstr(rgb: RGBVectorLike) -> str:
+def rgb2hexstr(rgb: RGBVectorLike, /) -> str:
     return "%02x%02x%02x" % tuple(rgb)
 
 
-def rgb2int(rgb: RGBVectorLike) -> int:
+def rgb2int(rgb: RGBVectorLike, /) -> int:
     r, g, b = map(int, rgb)
     return r << 16 | g << 8 | b
 
 
-def int2rgb(__x: int) -> Int3Tuple:
+def int2rgb(x: int, /) -> Int3Tuple:
     try:
-        return getattr(__x, 'rgb')
+        return getattr(x, 'rgb')
     except AttributeError:
         pass
-    x = int(__x) & 0xFFFFFF
+    x = int(x) & 0xFFFFFF
     return (x >> 16) & 0xFF, (x >> 8) & 0xFF, x & 0xFF
 
 
-def xyz2lab(xyz: FloatSequence) -> Float3Tuple:
+def xyz2lab(xyz: FloatSequence, /) -> Float3Tuple:
     x, y, z = (
         n ** (1 / 3) if n > 0.008856 else (7.787 * n) + (16 / 116)
         for n in map(truediv, xyz, (95.047, 100.0, 108.883))
@@ -109,7 +111,7 @@ def xyz2lab(xyz: FloatSequence) -> Float3Tuple:
     return L, a, b
 
 
-def lab2xyz(lab: FloatSequence) -> Float3Tuple:
+def lab2xyz(lab: FloatSequence, /) -> Float3Tuple:
     L, a, b = lab
     y = (L + 16) / 116
     x = a / 500 + y
@@ -134,19 +136,19 @@ M_RGB2XYZ = np.array(
 M_XYZ2RGB = np.linalg.inv(M_RGB2XYZ)
 
 
-def rgb2xyz(rgb: RGBPixel) -> Float3Tuple:
+def rgb2xyz(rgb: RGBPixel, /) -> Float3Tuple:
     x, y, z = M_RGB2XYZ @ (np.array(rgb, dtype=np.float64) / 255.0)
     return x, y, z
 
 
-def xyz2rgb(xyz: ShapedNDArray[tuple[Literal[3]], np.float64]) -> Int3Tuple:
+def xyz2rgb(xyz: ShapedNDArray[tuple[Literal[3]], np.float64], /) -> Int3Tuple:
     r, g, b = (
         np.clip(M_XYZ2RGB @ np.array(xyz, dtype=np.float64), 0.0, 1.0) * 255.0
     ).astype(int)
     return r, g, b
 
 
-def hsl2rgb(hsl: FloatSequence) -> Int3Tuple:
+def hsl2rgb(hsl: FloatSequence, /) -> Int3Tuple:
     h, s, L = hsl
     h /= 360
     h %= 1
@@ -175,7 +177,7 @@ def hsl2rgb(hsl: FloatSequence) -> Int3Tuple:
     return r, g, b
 
 
-def rgb2hsl(rgb: RGBVectorLike) -> Float3Tuple:
+def rgb2hsl(rgb: RGBVectorLike, /) -> Float3Tuple:
     r, g, b = (x / 255.0 for x in rgb)
     m, _, v = sorted([r, g, b])
     L = (m + v) / 2
@@ -197,7 +199,7 @@ def rgb2hsl(rgb: RGBVectorLike) -> Float3Tuple:
     return (360 * h, s, L)
 
 
-def hsv2rgb(hsv: FloatSequence) -> Int3Tuple:
+def hsv2rgb(hsv: FloatSequence, /) -> Int3Tuple:
     h, s, v = hsv
     c = v * s
     x = c * (1 - abs((h / 60) % 2 - 1))
@@ -221,7 +223,7 @@ def hsv2rgb(hsv: FloatSequence) -> Int3Tuple:
     return r, g, b
 
 
-def rgb2hsv(rgb: RGBVectorLike) -> Float3Tuple:
+def rgb2hsv(rgb: RGBVectorLike, /) -> Float3Tuple:
     r, g, b = (x / 255.0 for x in rgb)
     m, v = sorted([r, g, b])[::2]
     delta = v - m
@@ -240,12 +242,12 @@ def rgb2hsv(rgb: RGBVectorLike) -> Float3Tuple:
     return h, s, v
 
 
-def lab2rgb(lab: FloatSequence) -> Int3Tuple:
+def lab2rgb(lab: FloatSequence, /) -> Int3Tuple:
     xyz = lab2xyz(lab)
     return xyz2rgb(np.array(xyz, dtype=np.float64))
 
 
-def rgb2lab(rgb: RGBVectorLike) -> Float3Tuple:
+def rgb2lab(rgb: RGBVectorLike, /) -> Float3Tuple:
     xyz = rgb2xyz(rgb)
     return xyz2lab(xyz)
 
@@ -270,7 +272,7 @@ ANSI_4BIT_RGB: Final[tuple[Int3Tuple, ...]] = (
 )
 
 
-def ansi_4bit_to_rgb(value: int):
+def ansi_4bit_to_rgb(value: int, /):
     offset = 0
     if value > 37:
         if value <= 47:
@@ -308,23 +310,23 @@ def _4b_lookup() -> dict[Int3Tuple, Int3Tuple]:
 ANSI_4BIT_RGB_MAP = mappingproxy(_4b_lookup())
 
 
-def _quantize_rgb(rgb: RGBVectorLike):
+def _quantize_rgb(rgb: RGBVectorLike, /):
     r, g, b = rgb
     return min(r >> 3, 0x1F), min(g >> 3, 0x1F), min(b >> 3, 0x1F)
 
 
-def nearest_ansi_4bit_rgb(value: RGBVectorLike) -> Int3Tuple:
+def nearest_ansi_4bit_rgb(value: RGBVectorLike, /) -> Int3Tuple:
     return ANSI_4BIT_RGB_MAP[_quantize_rgb(value)]
 
 
-def nearest_ansi_8bit_rgb(value: RGBVectorLike) -> Int3Tuple:
+def nearest_ansi_8bit_rgb(value: RGBVectorLike, /) -> Int3Tuple:
     try:
         return ansi_8bit_to_rgb(rgb_to_ansi_8bit(value))
     except ValueError:
         raise ValueError(f"invalid RGB value: {value!r}") from None
 
 
-def ansi_8bit_to_rgb(value: int):
+def ansi_8bit_to_rgb(value: int, /):
     if 0 <= value < 16:
         return ANSI_4BIT_RGB[value]
     elif value < 232:
@@ -336,7 +338,7 @@ def ansi_8bit_to_rgb(value: int):
     raise ValueError(f"expected an unsigned 8-bit integer, got {value}")
 
 
-def rgb_to_ansi_8bit(rgb: RGBVectorLike) -> int:
+def rgb_to_ansi_8bit(rgb: RGBVectorLike, /) -> int:
     if len(set(rgb)) == 1:
         c = rgb[0]
         if c < 8:
@@ -348,6 +350,6 @@ def rgb_to_ansi_8bit(rgb: RGBVectorLike) -> int:
     return 16 + (36 * r) + (6 * g) + b
 
 
-def rgb_diff(rgb1: Int3Tuple, rgb2: Int3Tuple) -> Int3Tuple:
+def rgb_diff(rgb1: Int3Tuple, rgb2: Int3Tuple, /) -> Int3Tuple:
     lab1, lab2 = map(rgb2lab, (rgb1, rgb2))
     return lab2rgb([(i + j) / 2 for i, j in zip(lab1, lab2)])

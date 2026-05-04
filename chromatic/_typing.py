@@ -9,6 +9,7 @@ from collections.abc import Callable as ABC_Callable
 from functools import reduce, wraps
 from numbers import Number
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Concatenate,
@@ -20,13 +21,12 @@ from typing import (
     ParamSpec,
     Protocol,
     Sequence,
-    TYPE_CHECKING,
     Type,
     TypeAlias,
     TypeAliasType,
+    TypedDict,
     TypeGuard,
     TypeVar,
-    TypedDict,
     Union,
     Unpack,
     cast,
@@ -36,10 +36,10 @@ from typing import (
     runtime_checkable,
 )
 
-from PIL.Image import Image
-from PIL.ImageFont import FreeTypeFont
 from numpy import dtype, float64, generic, ndarray, number, uint8
 from numpy._typing import NDArray, _ArrayLike
+from PIL.Image import Image
+from PIL.ImageFont import FreeTypeFont
 
 if TYPE_CHECKING:
     from .data import UserFont

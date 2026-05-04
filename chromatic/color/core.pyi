@@ -16,7 +16,6 @@ __all__ = [
 ]
 
 import re
-from _typeshed import ConvertibleToInt, SupportsKeysAndGetItem
 from collections.abc import Buffer
 from enum import IntEnum
 from types import MappingProxyType
@@ -28,25 +27,26 @@ from typing import (
     Literal as L,
     Mapping,
     MutableSequence,
-    Optional,
     Self,
     Sequence,
     SupportsIndex,
     SupportsInt,
     TypeAlias,
+    TypedDict,
     TypeGuard,
     TypeIs,
     TypeVar,
-    TypedDict,
     Union,
     Unpack,
     overload,
 )
 
+from _typeshed import ConvertibleToInt, SupportsKeysAndGetItem
+
 from chromatic._typing import (
-    Ansi24BitAlias,
     Ansi4BitAlias,
     Ansi8BitAlias,
+    Ansi24BitAlias,
     AnsiColorAlias,
     ColorDictKeys,
     Int3Tuple,

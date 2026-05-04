@@ -3,10 +3,10 @@ import os
 import os.path as osp
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import AnyStr, TYPE_CHECKING
+from typing import TYPE_CHECKING, AnyStr
 
 if TYPE_CHECKING:
-    from typing import TypedDict, Required
+    from typing import Required, TypedDict
 
     class _UserFontDict(TypedDict, total=False):
         font: Required[str]
@@ -113,7 +113,7 @@ def register_userfont(
 
 
 def _validate_default_font(name='vga437'):
-    from ._fetchers import filehash, _fetch_remote
+    from ._fetchers import _fetch_remote, filehash
 
     if name in userfont and (
         filehash(userfont[name])

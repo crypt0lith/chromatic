@@ -3,19 +3,19 @@ __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_col
 from functools import lru_cache, update_wrapper
 from inspect import getfullargspec, isbuiltin, signature
 from typing import (
+    TYPE_CHECKING,
     Callable,
     Iterable,
     Iterator,
     Mapping,
     Never,
-    TYPE_CHECKING,
     Union,
     final,
 )
 
+from .._typing import Int3Tuple
 from .colorconv import ANSI_4BIT_RGB
 from .core import Color, ColorStr, SgrParameter, SgrSequence, color_chain
-from .._typing import Int3Tuple
 
 if TYPE_CHECKING:
     from _typeshed import SupportsKeysAndGetItem

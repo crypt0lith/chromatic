@@ -3,16 +3,16 @@ from __future__ import annotations
 __all__ = ['get_glyph_masks', 'ttf_extract_codepoints', 'sort_glyphs']
 
 from os import PathLike
-from typing import Literal, overload, Sequence, Union
+from typing import Literal, Sequence, Union, overload
 
 import numpy as np
 from fontTools.ttLib import TTFont
 from numpy import float64, uint8
 from scipy.ndimage import distance_transform_edt
 
+from .._typing import FontArgType, GlyphArray, GlyphBitmask, ShapedNDArray
 from ._array import otsu_mask
 from ._curses import ascii_printable
-from .._typing import FontArgType, GlyphArray, GlyphBitmask, ShapedNDArray
 
 
 @overload

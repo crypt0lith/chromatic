@@ -25,8 +25,8 @@ __all__ = [
 
 from functools import lru_cache
 from operator import mul, truediv
-from typing import Final, Literal, SupportsInt, TypeGuard
 from types import MappingProxyType as mappingproxy
+from typing import Final, Literal, SupportsInt, TypeGuard
 
 import numpy as np
 

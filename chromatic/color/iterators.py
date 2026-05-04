@@ -3,9 +3,9 @@ from typing import Callable, Iterable, Iterator, Literal, Sequence, SupportsInde
 
 import numpy as np
 
-from .colorconv import int2rgb, hsl2rgb, rgb2int, rgb2hsl
-from .core import Color
 from .._typing import Float3Tuple, Int3Tuple
+from .colorconv import hsl2rgb, int2rgb, rgb2hsl, rgb2int
+from .core import Color
 
 
 def _resolve_replacement_indices(

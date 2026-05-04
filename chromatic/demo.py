@@ -301,8 +301,8 @@ class _time_wrapper[**P, R]:
 
 
 def print_help(ns: dict[str, FunctionType], choices: dict[int, str]):
-    from textwrap import wrap
     from shutil import get_terminal_size
+    from textwrap import wrap
 
     columns = get_terminal_size().columns
     print("runs a demo function\n")

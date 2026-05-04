@@ -47,6 +47,7 @@ from typing import (
 
 import numpy as np
 
+from .._typing import AnsiColorAlias, ColorDictKeys, Int3Tuple
 from .colorconv import (
     ansi_4bit_to_rgb,
     ansi_8bit_to_rgb,
@@ -56,7 +57,6 @@ from .colorconv import (
     rgb2int,
     rgb_to_ansi_8bit,
 )
-from .._typing import AnsiColorAlias, ColorDictKeys, Int3Tuple
 
 CSI: Final[bytes] = b'\x1b['
 SGR_RESET: Final[bytes] = b'\x1b[0m'

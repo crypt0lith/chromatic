@@ -44,22 +44,21 @@ from sklearn.cluster import DBSCAN
 
 from ..color.colorconv import nearest_ansi_4bit_rgb, nearest_ansi_8bit_rgb
 from ..color.core import (
-    Color,
-    ColorStr,
     DEFAULT_ANSI,
     SGR_RESET_S,
+    Color,
+    ColorStr,
     SgrSequence,
-    ansicolor24Bit,
     ansicolor4Bit,
     ansicolor8Bit,
+    ansicolor24Bit,
     get_ansi_type,
     sgr_pattern,
 )
 from ..color.palette import rgb_dispatch
-from ..data import UserFont, userfont, VGA437
+from ..data import VGA437, UserFont, userfont
 
 if TYPE_CHECKING:
-    from _typeshed import SupportsRead
     from typing import (
         Any,
         AnyStr,
@@ -75,7 +74,9 @@ if TYPE_CHECKING:
         TypeGuard,
         Union,
     )
-    from ..color.core import AnsiColorParam, AnsiColorType
+
+    from _typeshed import SupportsRead
+
     from .._typing import (
         FontArgType,
         GreyscaleArray,
@@ -88,6 +89,7 @@ if TYPE_CHECKING:
         TupleOf2,
         TupleOf4,
     )
+    from ..color.core import AnsiColorParam, AnsiColorType
 
     LiteralDigit: TypeAlias = Sequence[
         Literal['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
@@ -397,7 +399,7 @@ def ansi_quantize(
     try:
         quantizer = _ANSI_QUANTIZERS[ansi_type]
     except KeyError:
-        from .._typing import unionize, type_error_msg
+        from .._typing import type_error_msg, unionize
 
         err = TypeError(
             type_error_msg(

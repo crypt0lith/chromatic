@@ -34,6 +34,7 @@ def filehash(fp: int | AnyStr | os.PathLike[AnyStr], alg='sha256'):
 def _fetch_remote(relpath: str, out_path: str):
     import re
     import urllib.request
+
     from chromatic import __version__
 
     version = re.sub(r"\.dev0\+.+$", '', __version__)

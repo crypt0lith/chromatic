@@ -13,8 +13,8 @@ from typing import (
     overload,
 )
 
-from .core import Color, ColorStr, color_chain
 from .._typing import Int3Tuple
+from .core import Color, ColorStr, color_chain
 
 _ColorLike: TypeAlias = int | Color | Int3Tuple
 

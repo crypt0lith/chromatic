@@ -386,44 +386,56 @@ class AnsiFore(ColorNamespace, member_type=foreground):
 
 
 class _color_ns_getter:
-    def __contains__(self, __key):
-        if type(__key) is str:
-            return self._normalize_key(__key) in self.__dict__['__members__']
-        return False
+    def __contains__(self, key, /):
+        try:
+            _ = self[key]
+        except (KeyError, TypeError):
+            return False
+        else:
+            return True
 
-    def __getitem__(self, __key: str):
-        return self.__dict__['__members__'][self._normalize_key(__key)]
+    def __getitem__(self, key: str, /):
+        return getattr(self, '__members__')[self._normalize_key(key)]
 
-    def __getattr__(self, __name):
-        return getattr(self.__dict__['__members__'], __name)
+    def __getattr__(self, name, /):
+        if not isinstance(name, str):
+            raise TypeError
+        try:
+            return self[name]
+        except KeyError:
+            pass
+        raise AttributeError(f"{self.__class__.__name__!r} has no attribute {name!r}")
 
     @lru_cache(maxsize=1)
     def __new__(cls):
+        from types import MappingProxyType as mappingproxy
+
         inst = object.__new__(cls)
-        inst.__dict__['__members__'] = dict.items(
+        members = mappingproxy(
             {
                 name.casefold(): color.rgb
                 for name, color in ColorNamespace.asdict().items()
             }
-        ).mapping
-        inst.__dict__ |= inst.__dict__['__members__']
+        )
+        setattr(inst, '__members__', members)
+        vars(inst).update(members)
         return inst
 
     def __str__(self):
         return str(
             {
                 str(ColorStr(k, fg=v, ansi_type='24b')): v
-                for k, v in self.__dict__['__members__'].items()
+                for k, v in getattr(self, '__members__').items()
             }
         )
 
     @staticmethod
     @lru_cache
-    def _normalize_key(__key: str):
-        return __key.translate({0x20: 0x5F}).casefold()
+    def _normalize_key(key: str, /):
+        return key.translate({0x20: 0x5F}).casefold()
 
     def keys(self):
-        return self.__dict__['__members__'].keys()
+        return getattr(self, '__members__').keys()
 
 
 def rgb_dispatch(*names: str):

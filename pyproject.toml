@@ -7,12 +7,12 @@ name = "chromatic-python"
 dynamic = ["version"]
 description = "ANSI art image processing and colored terminal text"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13,<4.0"
 keywords = ["ansi", "ascii", "art", "font", "image", "terminal", "parser"]
 authors = [{ name = "crypt0lith" }]
 license = "MIT"
 classifiers = [
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
@@ -47,3 +47,11 @@ preview = true
 skip-magic-trailing-comma = true
 skip-string-normalization = true
 target-version = ["py313"]
+
+[tool.isort]
+profile = "black"
+split_on_trailing_comma = false
+combine_as_imports = true
+
+[tool.pyright]
+pythonPlatform = "All"

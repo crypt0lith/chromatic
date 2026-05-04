@@ -381,9 +381,11 @@ class AnsiFore(ColorNamespace, member_type=foreground):
 
 class _color_ns_getter:
     def __contains__(self, key, /):
+        if not isinstance(key, str):
+            return False
         try:
             _ = self[key]
-        except (KeyError, TypeError):
+        except KeyError:
             return False
         else:
             return True

@@ -952,7 +952,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
             self._sgr_params = iterable._sgr_params.copy()
             for attr in ("_bg_idx", "_fg_idx"):
                 try:
-                    idx = getattr(self, attr)
+                    idx = getattr(iterable, attr)
                 except AttributeError:
                     continue
                 setattr(self, attr, idx)
@@ -1027,24 +1027,36 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
     __hash__ = None
 
     def clear_colors(self):
-        self._sgr_params = [p for p in self._sgr_params if not p.is_color()]
+        self._sgr_params[:] = [p for p in self._sgr_params if not p.is_color()]
         self._bg_idx = self._fg_idx = None
 
     def set_colors(self, iterable, /, ansi_type=DEFAULT_ANSI):
         new_colors = dict(iterable)
+        if not new_colors:
+            return
         if not new_colors.keys() <= {"bg", "fg"}:
             raise ValueError
         if new_colors.items() == {("bg", None), ("fg", None)}:
             return self.clear_colors()
+        self._sgr_params[:] = [
+            p
+            for p in self._sgr_params
+            if not (p.is_color() and p._value._rgb_dict.keys() & new_colors)
+        ]
+        for k in {"bg", "fg"} - new_colors.keys():
+            try:
+                delattr(self, f"_{k}_idx")
+            except AttributeError:
+                pass
         for k, v in new_colors.items():
+            idx_key = f"_{k}_idx"
             if v is None:
-                while getattr(self, k, None) is not None:
-                    delattr(self, k)
+                setattr(self, idx_key, None)
             else:
                 new_idx = len(self._sgr_params)
                 x = ansi_type.from_rgb((k, v)).to_param_buffer()
                 self._sgr_params.append(x)
-                setattr(self, f"_{k}_idx", new_idx)
+                setattr(self, idx_key, new_idx)
 
     rgb_dict = property(
         lambda self: {

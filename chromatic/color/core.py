@@ -16,6 +16,7 @@ __all__ = [
     'rgb2ansi_escape',
 ]
 
+import operator as op
 import os
 import random
 import re
@@ -753,34 +754,117 @@ def _is_sgr_param(__value: int):
 
 
 class SgrSequence(MutableSequence[SgrParamBuffer]):
-    def _update_colors(self):
-        def _iter_values():
-            if self._rgb_dict:
-                self._rgb_dict.clear()
-            rgb_keys = self._rgb_dict.keys()
-            for x in reversed(self._sgr_params):
-                if x.is_color():
-                    if x._value._rgb_dict.keys() <= rgb_keys:
+    class _color_descriptor:
+        def __set_name__(self, objtype, name, /):
+            self.__objclass__ = objtype
+            self.key = name
+            self.idx = f"_{name}_idx"
+
+        def __get__(self, inst, objtype=None):
+            if inst is None:
+                return self
+            try:
+                idx = getattr(inst, self.idx)
+            except AttributeError:
+                params = inst._sgr_params
+                for i in reversed(range(len(params))):
+                    x = params[i]
+                    if not x.is_color():
                         continue
-                    self._rgb_dict |= x._value._rgb_dict
-                yield x
+                    rgb = x._value._rgb_dict
+                    if self.key not in rgb:
+                        continue
+                    setattr(inst, self.idx, i)
+                    return rgb[self.key]
+                else:
+                    setattr(inst, self.idx, None)
+                    return
+            else:
+                if idx is None:
+                    return
+                rgb = inst._sgr_params[idx]._value._rgb_dict
+                return rgb[self.key]
 
-        self._sgr_params[:] = _iter_values()
-        self._sgr_params.reverse()
+        def __set__(self, inst, value, /):
+            if inst is None:
+                raise TypeError
+            if value is None:
+                return delattr(inst, self.key)
+            params = inst._sgr_params
+            idx = hi = None
+            for i in reversed(range(len(params))):
+                x = params[i]
+                if not x.is_color():
+                    continue
+                rgb = x._value._rgb_dict
+                if self.key in rgb:
+                    if rgb[self.key] != value:
+                        if hi is None:
+                            hi = i
+                        continue
+                    elif hi is None:
+                        setattr(inst, self.idx, i)
+                        return
+                    else:
+                        idx = i
+                        break
+            else:
+                raise ValueError
+            x = params[idx]
+            params[idx] = params[hi]
+            params[hi] = x
+            setattr(inst, self.idx, hi)
 
-    def insert(self, __index, __value):
-        if __value.__class__ is not SgrParamBuffer:
-            __value = SgrParamBuffer(__value)
-        self._sgr_params.insert(__index, __value)
-        if __value.is_color():
-            self._update_colors()
+        def __delete__(self, inst, /):
+            if inst is None:
+                raise TypeError
+            idx = getattr(inst, self.idx, None)
+            if idx is None:
+                return
+            params = inst._sgr_params
+            new_idx = None
+            for i in reversed(range(len(params))):
+                if i == idx:
+                    continue
+                x = params[i]
+                if not x.is_color():
+                    continue
+                if self.key in x._value._rgb_dict:
+                    new_idx = i
+                    break
+            setattr(inst, self.idx, new_idx)
 
-    def extend(self, __iter):
-        self._sgr_params.extend(map(SgrParamBuffer, _iter_sgr(__iter)))
-        self._update_colors()
+    bg = _color_descriptor()
+    fg = _color_descriptor()
+
+    def insert(self, index, value, /):
+        if value.__class__ is not SgrParamBuffer:
+            value = SgrParamBuffer(value)
+        if value.is_color():
+            n = len(self._sgr_params)
+            if index >= n:
+                index = n
+            elif index < 0:
+                index = max(0, n + index)
+            for k in value._value._rgb_dict:
+                attr = f"_{k}_idx"
+                cur_idx = getattr(self, attr, None)
+                if cur_idx is None:
+                    cur_idx = -1
+                if cur_idx < index:
+                    self._sgr_params.insert(index, value)
+                    setattr(self, attr, index)
+                    return
+        self._sgr_params.insert(index, value)
+
+    def extend(self, iterable, /):
+        n = len(self)
+        for x in map(SgrParamBuffer, _iter_sgr(iterable)):
+            self.insert(n, x)
+            n += 1
 
     def is_color(self):
-        return any(p.is_color() for p in self)
+        return bool(self.bg or self.fg)
 
     def is_reset(self):
         return any(p.is_reset() for p in self)
@@ -811,60 +895,94 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
     def __copy__(self):
         inst = object.__new__(self.__class__)
         inst._sgr_params = self._sgr_params.copy()
-        inst._rgb_dict = self._rgb_dict.copy()
+        for attr in ("_bg_idx", "_fg_idx"):
+            try:
+                idx = getattr(self, attr)
+            except AttributeError:
+                continue
+            setattr(inst, attr, idx)
         return inst
 
     copy = __copy__
 
-    def __deepcopy__(self, memo):
+    def __deepcopy__(self, memo, /):
         inst = memo[id(self)] = object.__new__(self.__class__)
         inst._sgr_params = deepcopy(self._sgr_params, memo)
-        inst._rgb_dict = deepcopy(self._rgb_dict, memo)
+        for attr in ("_bg_idx", "_fg_idx"):
+            try:
+                idx = getattr(self, attr)
+            except AttributeError:
+                continue
+            setattr(inst, attr, idx)
         return inst
 
-    def __delitem__(self, __index):
-        del self._sgr_params[__index]
-        self._update_colors()
+    def __delitem__(self, index, /):
+        n = len(self._sgr_params)
+        if isinstance(index, slice):
+            del self._sgr_params[index]
+            indices = range(*index.indices(n))
+            for attr in ("_bg_idx", "_fg_idx"):
+                try:
+                    cur_idx = getattr(self, attr)
+                except AttributeError:
+                    continue
+                if cur_idx is None or cur_idx not in indices:
+                    continue
+                delattr(self, attr)
+        else:
+            del self._sgr_params[index]
+            index = op.index(index)
+            if index < 0:
+                index += n
+            for attr in ("_bg_idx", "_fg_idx"):
+                try:
+                    cur_idx = getattr(self, attr)
+                except AttributeError:
+                    continue
+                if cur_idx == index:
+                    delattr(self, attr)
 
     def __getitem__(self, __index):
         return self._sgr_params[__index]
 
-    def __init__(self, __iter=None) -> None:
-        if __iter is None:
-            self._rgb_dict = {}
+    def __init__(self, iterable=None, /) -> None:
+        if iterable is None:
             self._sgr_params = []
-        elif isinstance(__iter, SgrSequence):
-            self._sgr_params = __iter._sgr_params.copy()
-            self._rgb_dict = __iter._rgb_dict.copy()
+        elif isinstance(iterable, SgrSequence):
+            self._sgr_params = iterable._sgr_params.copy()
+            for attr in ("_bg_idx", "_fg_idx"):
+                try:
+                    idx = getattr(self, attr)
+                except AttributeError:
+                    continue
+                setattr(self, attr, idx)
         else:
             colors: dict = {}
             elts: dict = {}
-            for elt in _iter_sgr(__iter):
+
+            def pop_color(key: str):
+                if key in colors:
+                    elts.pop(colors.pop(key))
+
+            for elt in _iter_sgr(iterable):
                 if elt in elts:
                     continue
-                match elt:
-                    case colorbytes():
-                        elt: AnsiColorFormat
-                        for k in elt.rgb_dict:
-                            x = colors.pop(k, None)
-                            if x is not None:
-                                elts.pop(x)
-                            colors[k] = elt
-                        elts[elt.to_param_buffer()] = None
-                        continue
-                    case b'0' | b'39' | b'49':
-                        if elt == b'0':
-                            elts.clear()
-                            colors.clear()
-                        else:
-                            if x := colors.pop({b'39': 'fg', b'49': 'bg'}[elt], None):
-                                elts.pop(x)
+                elif isinstance(elt, colorbytes):
+                    for k in elt.rgb_dict:
+                        pop_color(k)
+                        colors[k] = elt
+                    elts[elt.to_param_buffer()] = None
+                    continue
+                elif elt == b'0':
+                    elts.clear()
+                    colors.clear()
+                elif elt == b'39':
+                    pop_color('fg')
+                elif elt == b'49':
+                    pop_color('bg')
                 elts[SgrParamBuffer(elt)] = None
 
             self._sgr_params = list(elts)
-            self._rgb_dict = {
-                k: v for xs in colors.values() for k, v in xs._rgb_dict.items()
-            }
 
     def __iter__(self):
         return iter(self._sgr_params)
@@ -875,76 +993,68 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
     def __repr__(self):
         return f"{self.__class__.__name__}({list(self.values())})"
 
-    def __setitem__(self, __index, __value):
-        if isinstance(__index, slice):
-            self._sgr_params[__index] = map(SgrParamBuffer, _iter_sgr(__value))
+    def __setitem__(self, index, value, /):
+        n = len(self._sgr_params)
+        iterable = map(SgrParamBuffer, _iter_sgr(value))
+        if isinstance(index, slice):
+            self._sgr_params[index] = iterable
+            indices = range(*index.indices(n))
+            for attr in ("_bg_idx", "_fg_idx"):
+                try:
+                    cur_idx = getattr(self, attr)
+                except AttributeError:
+                    continue
+                if cur_idx is None or cur_idx not in indices:
+                    continue
+                delattr(self, attr)
         else:
-            __index: SupportsIndex
-            xs = _iter_sgr(__value)
-            x = next(xs)
-            i = 1
-            try:
-                _ = next(xs)
-            except StopIteration:
-                pass
-            else:
-                i += 1
-                raise ValueError(
-                    f"parsed {i + sum(1 for _ in xs)} sgr parameters, expected only 1"
-                )
-            self._sgr_params[__index] = SgrParamBuffer(x)
-        self._update_colors()
+            [item] = iterable
+            self._sgr_params[index] = item
+            index = op.index(index)
+            if index < 0:
+                index += n
+            for attr in ("_bg_idx", "_fg_idx"):
+                try:
+                    cur_idx = getattr(self, attr)
+                except AttributeError:
+                    continue
+                if cur_idx == index:
+                    delattr(self, attr)
 
     def __str__(self):
         return bytes(self).decode()
 
-    __slots__ = '_rgb_dict', '_sgr_params'
-
     __hash__ = None
 
-    @property
-    def bg(self):
-        return self._rgb_dict.get('bg')
-
-    @property
-    def fg(self):
-        return self._rgb_dict.get('fg')
-
-    @property
-    def rgb_dict(self):
-        return self._rgb_dict.items().mapping
-
-    @rgb_dict.deleter
-    def rgb_dict(self):
-        self._rgb_dict.clear()
+    def clear_colors(self):
         self._sgr_params = [p for p in self._sgr_params if not p.is_color()]
+        self._bg_idx = self._fg_idx = None
 
-    @rgb_dict.setter
-    def rgb_dict(self, __value):
-        match __value:
-            case Mapping() as mapping if __value.keys() <= {'fg', 'bg'}:
-                typ = DEFAULT_ANSI
-            case [Mapping() as mapping, type(__base__=base) as typ] if (
-                mapping.keys() <= {'fg', 'bg'} and base is colorbytes
-            ):
-                pass
-            case _:
-                raise ValueError
-        mapping: Mapping[ColorDictKeys, Int3Tuple]
-        typ: AnsiColorType
-        for k, v in mapping.items():
+    def set_colors(self, iterable, /, ansi_type=DEFAULT_ANSI):
+        new_colors = dict(iterable)
+        if not new_colors.keys() <= {"bg", "fg"}:
+            raise ValueError
+        if new_colors.items() == {("bg", None), ("fg", None)}:
+            return self.clear_colors()
+        for k, v in new_colors.items():
             if v is None:
-                if k in self._rgb_dict:
-                    self._sgr_params.pop(
-                        next(
-                            i
-                            for i, x in enumerate(self._sgr_params)
-                            if x.is_color() and k in x._value._rgb_dict
-                        )
-                    )
+                while getattr(self, k, None) is not None:
+                    delattr(self, k)
             else:
-                self._sgr_params.append(typ.from_rgb((k, v)).to_param_buffer())
-        self._update_colors()
+                new_idx = len(self._sgr_params)
+                x = ansi_type.from_rgb((k, v)).to_param_buffer()
+                self._sgr_params.append(x)
+                setattr(self, f"_{k}_idx", new_idx)
+
+    rgb_dict = property(
+        lambda self: {
+            k: v
+            for k, v in ((attr, getattr(self, attr)) for attr in ("bg", "fg"))
+            if v is not None
+        },
+        set_colors,
+        clear_colors,
+    )
 
 
 _END_RESET_PATTERN = re.compile(r"\x1b\[0?m$")
@@ -990,7 +1100,7 @@ def _colorstr[_T](
         reset = bool(reset)
     if ansi_type is not _unset:
         ansi_type = get_ansi_type(ansi_type)
-    elif not sgr._rgb_dict:
+    elif not sgr.is_color():
         ansi_type = DEFAULT_ANSI
     else:
         ansi_type = max(
@@ -1095,7 +1205,7 @@ class ColorStr(str, _IntFloatMixin):
         ansi_type = get_ansi_type(__ansi_type)
         if self.rgb_dict and ansi_type is not self.ansi_format:
             sgr = self._sgr.copy()
-            sgr.rgb_dict = sgr._rgb_dict, ansi_type
+            sgr.set_colors(sgr.rgb_dict, ansi_type)
             inst = super().__new__(self.__class__, f"{sgr}{self.base_str}{self._reset}")
             inst.__dict__ |= vars(self) | {'_sgr': sgr, '_ansi_type': ansi_type}
             return inst
@@ -1166,8 +1276,8 @@ class ColorStr(str, _IntFloatMixin):
         else:
             if not (args or kwargs):
                 return self
-            default_fg = self._sgr._rgb_dict.get('fg')
-            default_bg = self._sgr._rgb_dict.get('bg')
+            default_fg = self._sgr.fg
+            default_bg = self._sgr.bg
         fg: Int3Tuple | None
         bg: Int3Tuple | None
         match args, kwargs:
@@ -1184,7 +1294,7 @@ class ColorStr(str, _IntFloatMixin):
                     else f"unexpected keywords: {set(kwargs)}"
                 )
         sgr = self._sgr.copy()
-        sgr.rgb_dict = {'fg': fg, 'bg': bg}, self.ansi_format
+        sgr.set_colors({"fg": fg, "bg": bg}, self.ansi_format)
         return self._weak_var_update(sgr=sgr)
 
     def strip_style(self):
@@ -1453,7 +1563,7 @@ class ColorStr(str, _IntFloatMixin):
     def __invert__(self):
         """Return a copy of `self` with inverted colors (color ^= 0xFFFFFF)"""
         sgr = self._sgr.copy()
-        sgr.rgb_dict = (
+        sgr.set_colors(
             {k: ~Color.from_rgb(v) for k, v in self._sgr.rgb_dict.items()},
             self.ansi_format,
         )
@@ -1517,7 +1627,7 @@ class ColorStr(str, _IntFloatMixin):
         if not xor_dict:
             return self
         sgr = self._sgr.copy()
-        sgr.rgb_dict = xor_dict, self.ansi_format
+        sgr.set_colors(xor_dict, self.ansi_format)
         return self._weak_var_update(sgr=sgr)
 
     @property
@@ -1536,13 +1646,13 @@ class ColorStr(str, _IntFloatMixin):
     @property
     def bg(self):
         """Background color"""
-        if bg := self._sgr._rgb_dict.get('bg'):
+        if bg := self._sgr.bg:
             return Color.from_rgb(bg)
 
     @property
     def fg(self):
         """Foreground color"""
-        if fg := self._sgr._rgb_dict.get('fg'):
+        if fg := self._sgr.fg:
             return Color.from_rgb(fg)
 
     @property
@@ -1591,7 +1701,7 @@ def _collect_masks(
             raise TypeError(elt.__class__.__name__)
     if ansi_type is not None:
         for i in range(len(masks)):
-            masks[i][0].rgb_dict = masks[i][0].rgb_dict, ansi_type
+            masks[i][0].set_colors(masks[i][0].rgb_dict, ansi_type)
     return masks
 
 
@@ -1621,7 +1731,7 @@ class color_chain(Sequence[tuple[SgrSequence, str]]):
                     if ansi_type is None:
                         sgr.rgb_dict = dict.fromkeys([k])
                     else:
-                        sgr.rgb_dict = dict.fromkeys([k]), ansi_type
+                        sgr.set_colors(dict.fromkeys([k]), ansi_type)
             inst._masks.append((sgr, s))
             prev_fg, prev_bg = sgr.fg, sgr.bg
         return inst

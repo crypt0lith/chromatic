@@ -474,7 +474,11 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
     ): ...
     def __iter__(self) -> Iterator[SgrParamBuffer]: ...
 
+    __slots__ = ("_sgr_params", "_bg_idx", "_fg_idx")
     _sgr_params: list[SgrParamBuffer]
+    _bg_idx: int | None
+    _fg_idx: int | None
+
     rgb_dict = property(
         lambda self: dict[ColorDictKeys, Int3Tuple](), set_colors, clear_colors
     )

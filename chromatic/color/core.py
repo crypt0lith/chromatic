@@ -753,11 +753,15 @@ def _is_sgr_param(value: int, /):
 
 
 class SgrSequence(MutableSequence[SgrParamBuffer]):
+    _idx_attrs = ("_bg_idx", "_fg_idx")
+    __slots__ = ("_sgr_params", *_idx_attrs)
+
     class _color_descriptor:
         def __set_name__(self, objtype, name, /):
             self.__objclass__ = objtype
             self.key = name
             self.idx = f"_{name}_idx"
+            assert self.idx in objtype._idx_attrs
 
         def __get__(self, inst, objtype=None):
             if inst is None:
@@ -894,7 +898,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
     def __copy__(self):
         inst = object.__new__(self.__class__)
         inst._sgr_params = self._sgr_params.copy()
-        for attr in ("_bg_idx", "_fg_idx"):
+        for attr in self._idx_attrs:
             try:
                 idx = getattr(self, attr)
             except AttributeError:
@@ -907,7 +911,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
     def __deepcopy__(self, memo, /):
         inst = memo[id(self)] = object.__new__(self.__class__)
         inst._sgr_params = deepcopy(self._sgr_params, memo)
-        for attr in ("_bg_idx", "_fg_idx"):
+        for attr in self._idx_attrs:
             try:
                 idx = getattr(self, attr)
             except AttributeError:
@@ -920,7 +924,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
         if isinstance(index, slice):
             del self._sgr_params[index]
             indices = range(*index.indices(n))
-            for attr in ("_bg_idx", "_fg_idx"):
+            for attr in self._idx_attrs:
                 try:
                     cur_idx = getattr(self, attr)
                 except AttributeError:
@@ -933,7 +937,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
             index = op.index(index)
             if index < 0:
                 index += n
-            for attr in ("_bg_idx", "_fg_idx"):
+            for attr in self._idx_attrs:
                 try:
                     cur_idx = getattr(self, attr)
                 except AttributeError:
@@ -949,7 +953,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
             self._sgr_params = []
         elif isinstance(iterable, SgrSequence):
             self._sgr_params = iterable._sgr_params.copy()
-            for attr in ("_bg_idx", "_fg_idx"):
+            for attr in self._idx_attrs:
                 try:
                     idx = getattr(iterable, attr)
                 except AttributeError:
@@ -998,7 +1002,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
         if isinstance(index, slice):
             self._sgr_params[index] = iterable
             indices = range(*index.indices(n))
-            for attr in ("_bg_idx", "_fg_idx"):
+            for attr in self._idx_attrs:
                 try:
                     cur_idx = getattr(self, attr)
                 except AttributeError:
@@ -1012,7 +1016,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
             index = op.index(index)
             if index < 0:
                 index += n
-            for attr in ("_bg_idx", "_fg_idx"):
+            for attr in self._idx_attrs:
                 try:
                     cur_idx = getattr(self, attr)
                 except AttributeError:

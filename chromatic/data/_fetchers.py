@@ -33,6 +33,7 @@ def filehash(fp: int | AnyStr | os.PathLike[AnyStr], alg='sha256'):
 
 def _fetch_remote(relpath: str, out_path: str):
     import re
+    import sys
     import urllib.request
 
     from chromatic import __version__
@@ -40,6 +41,7 @@ def _fetch_remote(relpath: str, out_path: str):
     version = re.sub(r"\.dev0\+.+$", '', __version__)
     remote_dir = f"crypt0lith/chromatic/raw/v{version}/chromatic/data"
     url = f"https://github.com/{remote_dir}/{relpath}"
+    print(f"fetching {url!r}...", file=sys.stderr)
     return urllib.request.urlretrieve(url, out_path)[0]
 
 

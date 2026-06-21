@@ -15,10 +15,6 @@ if TYPE_CHECKING:
         encoding: str
 
 
-os.environ.setdefault("CHROMATIC_DATADIR", osp.dirname(__file__))
-os.environ["CHROMATIC_FONTDIR"] = osp.join(os.environ["CHROMATIC_DATADIR"], "fonts")
-if not osp.exists(os.environ["CHROMATIC_FONTDIR"]):
-    os.mkdir(os.environ["CHROMATIC_FONTDIR"])
 
 _TRUETYPE_EXT = frozenset({'.ttf', '.ttc'})
 

@@ -1,15 +1,13 @@
-import os
-import os.path as osp
-from typing import AnyStr
-
-os.environ.setdefault("CHROMATIC_DATADIR", osp.dirname(__file__))
+from os import PathLike
+from pathlib import Path
 
 
 def _load_registry() -> dict[str, str]:
-    reg_path = osp.join(os.environ["CHROMATIC_DATADIR"], 'registry.json')
-    if not osp.exists(reg_path):
-        raise RuntimeError("missing 'registry.json': please reinstall chromatic-python")
-    with open(reg_path, mode='rb') as reg:
+    reg_fname = "registry.json"
+    reg_path = Path(__file__).parent / reg_fname
+    if not reg_path.exists():
+        raise RuntimeError(f"missing {reg_fname!r}: please reinstall chromatic-python")
+    with reg_path.open("rb") as reg:
         import json
 
         return json.load(reg)
@@ -18,7 +16,7 @@ def _load_registry() -> dict[str, str]:
 registry = _load_registry()
 
 
-def filehash(fp: int | AnyStr | os.PathLike[AnyStr], alg='sha256'):
+def filehash(fp: str | PathLike[str], alg='sha256'):
     import hashlib
 
     if alg not in hashlib.algorithms_available:
@@ -46,10 +44,11 @@ def _fetch_remote(relpath: str, out_path: str):
 
 
 def _fetch(basename: str):
-    abspath = osp.join(os.environ["CHROMATIC_DATADIR"], basename)
-    if osp.exists(abspath) and filehash(abspath) == registry[basename]:
-        return abspath
-    return _fetch_remote(basename, abspath)
+    fp = Path(__file__).parent / basename
+    if fp.exists() and filehash(fp) == registry[basename]:
+        return str(fp)
+    else:
+        return _fetch_remote(basename, str(fp))
 
 
 def _load(basename: str):

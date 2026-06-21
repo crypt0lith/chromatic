@@ -104,8 +104,9 @@ def _load_userfonts(userfont_json: Path) -> dict[str, _UserfontDict]:
 def _load_userfonts_from_dir(font_dir: Path, sync=False) -> dict[str, UserFont] | None:
     if not font_dir.is_dir():
         raise NotADirectoryError(f"{font_dir}")
+    userfont_json = font_dir / "userfont.json"
     try:
-        d = _load_userfonts(font_dir / "userfont.json")
+        d = _load_userfonts(userfont_json)
     except FileNotFoundError:
         return
     nonexistent = set()
@@ -121,6 +122,7 @@ def _load_userfonts_from_dir(font_dir: Path, sync=False) -> dict[str, UserFont] 
         for k in nonexistent:
             del d[k]
         if not d:
+            _try_delete_file(userfont_json)
             return
     return {k: UserFont(**v) for k, v in d.items()}
 
@@ -141,6 +143,17 @@ def _dump_userfonts(
         d[k] = v
     with userfont_json.open("w") as f:
         json.dump(d, f, indent="\t", sort_keys=True)
+
+
+def _try_delete_file(path: str | os.PathLike[str]) -> bool:
+    path = Path(path)
+    if os.name != "nt" and not os.access(path.parent.absolute(), os.W_OK | os.X_OK):
+        return False
+    try:
+        os.remove(path)
+        return True
+    except OSError:
+        return False
 
 
 def _get_font_dir():
@@ -230,6 +243,33 @@ def register_userfont(
     metadata["font"] = os.path.abspath(fp)
     _userfonts[name] = UserFont(**metadata)
     _dump_userfonts({name: metadata | {"font": fp.name}}, font_dir)
+
+
+def unregister_userfont(name: str, /, delete=False):
+    if name == _ROOT_FONT_KEY:
+        raise ValueError(f"cannot unregister root default font: {name!r}")
+    try:
+        obj = _userfonts.pop(name)
+    except KeyError as err:
+        raise ValueError(f"invalid font: {name!r}") from err
+    base_dir = obj._base_dir
+    userfont_json = base_dir.joinpath("userfont.json")
+    with userfont_json.open("r") as f:
+        d = json.load(f)
+    del d[name]
+    if d:
+        with userfont_json.open("w") as f:
+            json.dump(d, f, indent="\t", sort_keys=True)
+    else:
+        # safe try-delete userfont.json because it is empty
+        _try_delete_file(userfont_json)
+    if delete is True:
+        # unsafe unlink font file when explicitly passed
+        base_dir.joinpath(obj.font).unlink()
+
+
+def delete_userfont(name: str, /):
+    return unregister_userfont(name, delete=True)
 
 
 def _fetch_default_font():

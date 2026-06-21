@@ -23,7 +23,7 @@ class UserFont:
     def __fspath__(self) -> str: ...
     def to_truetype(self) -> FreeTypeFont: ...
 
-userfonts: MappingProxyType[str, UserFont]
+userfonts: Final[MappingProxyType[str, UserFont]]
 
 def register_userfont(
     fp: str | PathLike[str],
@@ -36,6 +36,8 @@ def register_userfont(
     is_default: bool = ...,
     symlink: bool = False,
 ) -> None: ...
+def unregister_userfont(name: str, /, delete=False) -> None: ...
+def delete_userfont(name: str, /) -> None: ...
 
 VGA437: Final[UserFont]
 DEFAULT_FONT: Final[UserFont]

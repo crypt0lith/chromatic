@@ -101,18 +101,27 @@ def _load_userfonts(userfont_json: Path) -> dict[str, _UserfontDict]:
     return d
 
 
-def _load_userfonts_from_dir(font_dir: Path):
+def _load_userfonts_from_dir(font_dir: Path, sync=False) -> dict[str, UserFont] | None:
     if not font_dir.is_dir():
         raise NotADirectoryError(f"{font_dir}")
     try:
         d = _load_userfonts(font_dir / "userfont.json")
     except FileNotFoundError:
         return
-    for v in d.values():
+    nonexistent = set()
+    for k, v in d.items():
         font_abspath = os.path.normpath(font_dir.joinpath(v["font"]).absolute())
         if not os.path.isfile(font_abspath):
+            if sync and not os.path.exists(font_abspath):
+                nonexistent.add(k)
+                continue
             raise FileNotFoundError(font_abspath)
         v.update(font=font_abspath)
+    if sync and nonexistent:
+        for k in nonexistent:
+            del d[k]
+        if not d:
+            return
     return {k: UserFont(**v) for k, v in d.items()}
 
 
@@ -248,7 +257,7 @@ def _validate_default_font():
 
 def _init_default_font():
     if _ROOT_FONT_DIR.exists():
-        d = _load_userfonts_from_dir(_ROOT_FONT_DIR)
+        d = _load_userfonts_from_dir(_ROOT_FONT_DIR, sync=True)
         if d is not None:
             _userfonts.update(d)
             return _validate_default_font()
@@ -266,7 +275,7 @@ def _init_user_fonts():
     user_font_dir = _get_font_dir()
     if not user_font_dir.exists():
         return
-    d = _load_userfonts_from_dir(user_font_dir)
+    d = _load_userfonts_from_dir(user_font_dir, sync=True)
     if d is None:
         return
     if _ROOT_FONT_KEY in d:

@@ -1,3 +1,12 @@
+__all__ = [
+    "DEFAULT_FONT",
+    "UserFont",
+    "VGA437",
+    "delete_userfont",
+    "register_userfont",
+    "unregister_userfont",
+    "userfonts",
+]
 import json
 import os
 import sys
@@ -48,6 +57,7 @@ class UserFont:
 
 _userfonts = dict[str, UserFont]()
 userfonts = mappingproxy(_userfonts)
+DEFAULT_FONT: UserFont
 
 
 class _UserfontDict(tp.TypedDict, total=False):

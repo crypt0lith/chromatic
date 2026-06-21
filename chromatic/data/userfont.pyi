@@ -1,3 +1,12 @@
+__all__ = [
+    "DEFAULT_FONT",
+    "UserFont",
+    "VGA437",
+    "delete_userfont",
+    "register_userfont",
+    "unregister_userfont",
+    "userfonts",
+]
 from os import PathLike
 from types import MappingProxyType
 from typing import Final

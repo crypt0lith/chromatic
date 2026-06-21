@@ -1,15 +1,8 @@
 import math
-import os
 import sys
 import time
-from os import PathLike
-from pathlib import PurePath
-from random import choices as get_random
 from types import FunctionType
 from typing import Callable
-
-from numpy import ndarray
-from skimage.metrics import mean_squared_error
 
 import chromatic as cm
 
@@ -215,66 +208,6 @@ def color_table():
             ),
             end=('\n' if style is style_params[-1] else "\x1b[0m".ljust(8)),
         )
-
-
-def glyph_comparisons(__output_dir: str | PathLike[str] = None):
-
-    def _find_best_matches(
-        glyph_masks1: dict[str, ndarray], glyph_masks2: dict[str, ndarray]
-    ) -> dict[str, str]:
-        best_matches = {}
-        for char1, mask1 in glyph_masks1.items():
-            best_char = None
-            best_score = float('inf')
-            for char2, mask2 in glyph_masks2.items():
-                score = mean_squared_error(mask1, mask2)
-                if score < best_score:
-                    best_score = score
-                    best_char = char2
-            best_matches[char1] = best_char
-        return best_matches
-
-    if __output_dir and not os.path.isdir(__output_dir):
-        raise NotADirectoryError(__output_dir)
-    user_fonts = [pair := (cm.userfont['vga437'], cm.userfont['consolas']), pair[::-1]]
-    trans_table = str.maketrans({']': None, '0': ' ', '[': ' '})
-    char_set = cm.cp437_printable()
-    separator = '#' * 100
-    for font1, font2 in user_fonts:
-        glyph_masks_1 = cm.get_glyph_masks(font1, char_set, dist_transform=True)
-        glyph_masks_2 = cm.get_glyph_masks(font2, char_set, dist_transform=True)
-        best_matches_ = _find_best_matches(glyph_masks_1, glyph_masks_2)
-        txt = ''.join(
-            '->'.center(32, ' ')
-            .join(['{}'] * 2)
-            .format(
-                f"{font1.name}"
-                f"[{input_char!r}, {input_char.encode('unicode_escape').decode()!r}]",
-                f"{font2.name}"
-                f"[{matched_char!r}, {matched_char.encode('unicode_escape').decode()!r}]",
-            )
-            .center(100, ' ')
-            + '\n\n'
-            + '\n'.join(
-                ''.join(z).translate(trans_table)
-                for z in zip(
-                    f'{glyph_masks_1[input_char].astype(int)}\n'.splitlines(),
-                    f'{glyph_masks_2[matched_char].astype(int)}\n'.splitlines()[1:],
-                )
-            )
-            + separator.join(['\n'] * 2)
-            for input_char, matched_char in best_matches_.items()
-        )
-        if __output_dir is not None:
-            fname = (
-                PurePath(__output_dir)
-                / f"{'_to_'.join(font.name.lower() for font in (font1, font2))}.txt"
-            )
-            with open(fname, 'w', encoding='utf-8') as f:
-                f.write(txt)
-        else:
-            for glyph in get_random(txt.split(separator), k=len(char_set) // 2):
-                print(separator + glyph)
 
 
 class _time_wrapper[**P, R]:

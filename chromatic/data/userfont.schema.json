@@ -19,9 +19,14 @@
         },
         "encoding": {
           "type": "string"
+        },
+        "is_default": {
+          "type": "boolean"
         }
       },
-      "required": ["font"],
+      "required": [
+        "font"
+      ],
       "additionalProperties": false
     }
   }

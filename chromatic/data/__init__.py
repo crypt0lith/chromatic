@@ -10,11 +10,7 @@ __all__ = [
 ]
 
 from ._fetchers import _load
-from .userfont import DEFAULT_FONT, VGA437, UserFont, register_userfont, userfonts
-
-
-def __dir__():
-    return __all__[:]
+from .userfont import VGA437, UserFont, register_userfont, userfonts
 
 
 def butterfly():
@@ -27,3 +23,18 @@ def escher():
 
 def goblin_virus():
     return _load("goblin_virus.png")
+
+
+DEFAULT_FONT: UserFont
+
+
+def __dir__():
+    return __all__[:]
+
+
+def __getattr__(name, /):
+    if name == "DEFAULT_FONT":
+        from .userfont import DEFAULT_FONT
+
+        return DEFAULT_FONT
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

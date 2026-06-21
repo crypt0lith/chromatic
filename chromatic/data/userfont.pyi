@@ -1,6 +1,6 @@
 from os import PathLike
 from types import MappingProxyType
-from typing import AnyStr, Final
+from typing import Final
 
 from PIL.ImageFont import FreeTypeFont
 
@@ -9,24 +9,33 @@ class UserFont:
     size: int = ...
     index: int = ...
     encoding: str = ...
+    is_default: bool = ...
 
     def __init__(
-        self, font: str, *, size: int = ..., index: int = ..., encoding: str = ...
+        self,
+        font: str,
+        *,
+        size: int = ...,
+        index: int = ...,
+        encoding: str = ...,
+        is_default: bool = ...,
     ): ...
     def __fspath__(self) -> str: ...
     def to_truetype(self) -> FreeTypeFont: ...
 
 userfonts: MappingProxyType[str, UserFont]
-VGA437: Final[UserFont] = userfonts['vga437']
-DEFAULT_FONT = VGA437
 
 def register_userfont(
-    fp: AnyStr | PathLike[AnyStr],
+    fp: str | PathLike[str],
+    font_dir: str | PathLike[str] | None = None,
     *,
     name: str = ...,
     size: int = ...,
     index: int = ...,
     encoding: str = ...,
-    symlink: bool = True,
-    copy: bool = False,
-) -> UserFont: ...
+    is_default: bool = ...,
+    symlink: bool = False,
+) -> None: ...
+
+VGA437: Final[UserFont]
+DEFAULT_FONT: Final[UserFont]

@@ -44,18 +44,18 @@ class UserFont:
         return truetype(self, self.size, self.index, self.encoding)
 
 
-userfont: MappingProxyType[str, UserFont] = {}.items().mapping
+userfonts: MappingProxyType[str, UserFont] = {}.items().mapping
 
 
 def _load_userfonts():
-    global userfont
+    global userfonts
 
     userfont_json = osp.join(os.environ["CHROMATIC_DATADIR"], "userfont.json")
     if osp.exists(userfont_json):
         with open(userfont_json, mode='rb') as f:
             data = json.load(f)
-        userfont = {k: UserFont(**v) for k, v in data.items()}.items().mapping
-    return userfont
+        userfonts = {k: UserFont(**v) for k, v in data.items()}.items().mapping
+    return userfonts
 
 
 def _update_userfonts(*items: 'tuple[str, _UserFontDict]'):
@@ -70,7 +70,7 @@ def _update_userfonts(*items: 'tuple[str, _UserFontDict]'):
         with open(userfont_json, mode='w') as wf:
             json.dump(current, wf, indent='\t', sort_keys=True)  # type: ignore[arg-type]
         return _load_userfonts()
-    return userfont
+    return userfonts
 
 
 def register_userfont(
@@ -115,8 +115,8 @@ def register_userfont(
 def _validate_default_font(name='vga437'):
     from ._fetchers import _fetch_remote, filehash
 
-    if name in userfont and (
-        filehash(userfont[name])
+    if name in userfonts and (
+        filehash(userfonts[name])
         == "a8c767fa925624d28d9879c3a03a86204f78bce4decda0a206fd152bdd906c94"
     ):
         return
@@ -128,7 +128,7 @@ def _validate_default_font(name='vga437'):
 
 def _init_userfonts():
     _load_userfonts()
-    if not userfont:
+    if not userfonts:
         for fname in os.listdir(os.environ["CHROMATIC_FONTDIR"]):
             if osp.splitext(fname)[1] in _TRUETYPE_EXT:
                 register_userfont(osp.join(os.environ["CHROMATIC_FONTDIR"], fname))
@@ -136,4 +136,4 @@ def _init_userfonts():
 
 
 _init_userfonts()
-DEFAULT_FONT = VGA437 = userfont['vga437']
+DEFAULT_FONT = VGA437 = userfonts['vga437']

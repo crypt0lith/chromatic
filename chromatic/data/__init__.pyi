@@ -6,12 +6,12 @@ __all__ = [
     'escher',
     'goblin_virus',
     'register_userfont',
-    'userfont',
+    'userfonts',
 ]
 
 import PIL.Image
 
-from .userfont import DEFAULT_FONT, VGA437, UserFont, register_userfont, userfont
+from .userfont import DEFAULT_FONT, VGA437, UserFont, register_userfont, userfonts
 
 def butterfly() -> PIL.Image.ImageFile.ImageFile: ...
 def escher() -> PIL.Image.ImageFile.ImageFile: ...

@@ -21,7 +21,7 @@ DEMO_FUNCS = FunctionNamespace()
 def escher_dragon_ascii():
     """Displays the image-to-ASCII transform of 'Dragon' by M.C. Escher."""
     input_img = cm.data.escher()
-    font = cm.userfont['vga437']
+    font = cm.userfonts['vga437']
     char_set = r"  ._-~+<vX♦'^Vx>|πΦ0Ω#$║╫"
     ascii_str = cm.img2ascii(
         input_img, font, factor=240, char_set=char_set, sort_glyphs=True
@@ -34,7 +34,7 @@ def escher_dragon_ascii():
 def escher_dragon_256color():
     """Displays the image-to-ANSI transform of 'Dragon' by M.C. Escher in 8-bit color."""
     input_img = cm.data.escher()
-    font = cm.userfont['vga437']
+    font = cm.userfonts['vga437']
     ansi_array = cm.img2ansi(input_img, font, factor=240, ansi_type='8b', equalize=True)
     ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
     ansi_img.show()
@@ -47,7 +47,7 @@ def butterfly_16color():
     Good ol' C-x M-c M-butterfly...
     """
     input_img = cm.data.butterfly()
-    font = cm.data.userfont['vga437']
+    font = cm.userfonts['vga437']
     char_set = r"'·,•-_→+<>ⁿ*%⌂7√Iï∞πbz£9yîU{}1αHSw♥æ?GX╕╒éà⌡MF╝╩ΘûÇƒQ½☻Å¶┤▄╪║▒█"
     ansi_array = cm.img2ansi(
         input_img,
@@ -65,7 +65,7 @@ def butterfly_16color():
 def butterfly_truecolor():
     """Displays the image-to-ANSI transform of 'Spider Lily & Papilio xuthus' in 24-bit color."""
     input_img = cm.data.butterfly()
-    font = cm.userfont['vga437']
+    font = cm.userfonts['vga437']
     ansi_array = cm.img2ansi(
         input_img, font, factor=200, ansi_type='24b', equalize='white_point'
     )
@@ -76,7 +76,7 @@ def butterfly_truecolor():
 @DEMO_FUNCS.register
 def butterfly_randcolor():
     input_img = cm.data.butterfly()
-    font = cm.userfont['vga437']
+    font = cm.userfonts['vga437']
     ansi_array = cm.img2ansi(
         input_img, font, factor=200, ansi_type='8b', equalize='white_point'
     )
@@ -96,7 +96,7 @@ def butterfly_randcolor():
 def goblin_virus_truecolor():
     """`G-O-B-L-I-N VIRUS <https://imgur.com/n0Mng2P>`__"""
     input_img = cm.data.goblin_virus()
-    font = cm.userfont['vga437']
+    font = cm.userfonts['vga437']
     char_set = r'  .-|_⌐¬^:()═+<>v≥≤«*»x└┘π╛╘┴┐┌┬╧╚╙X╒╜╨#0╓╝╩╤╥│╔┤├╞╗╦┼╪║╟╠╫╣╬░▒▓█▄▌▐▀'
     ansi_array = cm.img2ansi(
         input_img, font, factor=200, char_set=char_set, ansi_type='24b', equalize=False

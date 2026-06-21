@@ -42,7 +42,7 @@ __all__ = [
     'sort_glyphs',
     'to_sgr_array',
     'ttf_extract_codepoints',
-    'userfont',
+    'userfonts',
     'set_default_ansi',
 ]
 from . import color, data, image
@@ -67,7 +67,7 @@ from .color import (
     rgb2int,
     set_default_ansi,
 )
-from .data import UserFont, register_userfont, userfont
+from .data import UserFont, register_userfont, userfonts
 from .image import (
     AnsiImage,
     ansi2img,

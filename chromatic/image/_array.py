@@ -56,7 +56,7 @@ from ..color.core import (
     sgr_pattern,
 )
 from ..color.palette import rgb_dispatch
-from ..data import VGA437, UserFont, userfont
+from ..data import VGA437, UserFont, userfonts
 
 if TYPE_CHECKING:
     from typing import (
@@ -183,8 +183,8 @@ def get_font_object(
                 return font
             case UserFont():
                 return font.to_truetype()
-            case str() if font in userfont:
-                return get_font_object(userfont[font])
+            case str() if font in userfonts:
+                return get_font_object(userfonts[font])
             case str() | PathLike():
                 return truetype(font, 24)
     raise TypeError(

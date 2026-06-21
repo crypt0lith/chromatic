@@ -16,8 +16,8 @@ class UserFont:
     def __fspath__(self) -> str: ...
     def to_truetype(self) -> FreeTypeFont: ...
 
-userfont: MappingProxyType[str, UserFont]
-VGA437: Final[UserFont] = userfont['vga437']
+userfonts: MappingProxyType[str, UserFont]
+VGA437: Final[UserFont] = userfonts['vga437']
 DEFAULT_FONT = VGA437
 
 def register_userfont(

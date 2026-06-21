@@ -6,7 +6,7 @@ __all__ = [
     'escher',
     'goblin_virus',
     'register_userfont',
-    'userfont',
+    'userfonts',
 ]
 
 import os
@@ -16,7 +16,7 @@ if "CHROMATIC_DATADIR" not in os.environ:
     os.environ["CHROMATIC_DATADIR"] = osp.dirname(__file__)
 
 from ._fetchers import _load
-from .userfont import DEFAULT_FONT, VGA437, UserFont, register_userfont, userfont
+from .userfont import DEFAULT_FONT, VGA437, UserFont, register_userfont, userfonts
 
 
 def __dir__():

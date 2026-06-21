@@ -8,6 +8,7 @@
 Chromatic is a library for processing and transforming ANSI escape sequences (colored terminal text).
 
 It offers a collection of algorithms and types for a variety of use cases:	
+
 - Image-to-ASCII / Image-to-ANSI conversions.
 - ANSI art rendering, with support for user-defined fonts.
 - A `ColorStr` type for low-level control over ANSI SGR strings.
@@ -16,16 +17,18 @@ It offers a collection of algorithms and types for a variety of use cases:
 - Et Cetera 😲
 
 ### Usage
+
 #### Image-to-ANSI conversion
 
 Convert an image into a 2d ANSI string array, and render the ANSI array as image:
+
 ```python
 from chromatic.color import ansicolor4Bit
 from chromatic.image import ansi2img, img2ansi
-from chromatic.data import userfont, butterfly
+from chromatic.data import userfonts, butterfly
 
 input_img = butterfly()
-font = userfont['vga437']
+font = userfonts['vga437']
 
 # `char_set` is used to translate luminance to characters 
 #            | <- index 0 is the 'darkest'
@@ -51,6 +54,7 @@ ansi_img.show()
 ```
 
 #### ColorStr
+
 ```python
 from chromatic import ColorStr
 
@@ -64,6 +68,7 @@ assert red_fg.ansi == b'\x1b[38;5;196m'
 ```
 
 `ColorStr` will parse raw SGR sequences, and accepts different types for `fg` and `bg`:
+
 ```python
 from chromatic import ColorStr
 
@@ -74,6 +79,7 @@ assert red_fg == ColorStr('[*]', fg=(0xFF, 0, 0), ansi_type='8b')
 ```
 
 ANSI color format can be specified with `ColorStr(ansi_type=...)`, or as a new object via `ColorStr.as_ansi_type()`:
+
 ```python
 from chromatic import ColorStr, ansicolor4Bit, ansicolor24Bit, ansicolor8Bit
 
@@ -81,7 +87,7 @@ from chromatic import ColorStr, ansicolor4Bit, ansicolor24Bit, ansicolor8Bit
 assert all(
 	ansi_type.alias == alias
 	for ansi_type, alias in [
-        (ansicolor4Bit, '4b'),
+		(ansicolor4Bit, '4b'),
 		(ansicolor8Bit, '8b'),
 		(ansicolor24Bit, '24b'),
 	]
@@ -96,6 +102,7 @@ assert a_16color.ansi_format is ansicolor4Bit and a_16color.ansi == b'\x1b[31m'
 ```
 
 Adding and removing SGR parameters from a `ColorStr`:
+
 ```python
 import chromatic as cm
 
@@ -115,10 +122,13 @@ assert bold_str == unbold_str + cm.SgrParameter.BOLD	# __add__ can also be used
 ```
 
 ### Installation
+
 Install the package using `pip`:
-```bash
+
+```shell
 pip install chromatic-python
 ```
 
 ### Credits
+
 Banner artwork: [main rules by Crasher (2002)](https://16colo.rs/pack/galza-14/CRS-MAIN.ANS)

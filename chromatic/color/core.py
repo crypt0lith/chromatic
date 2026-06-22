@@ -16,34 +16,20 @@ __all__ = [
     'rgb2ansi_escape',
 ]
 
+import collections.abc as abc
 import operator as op
 import os
 import random
 import re
 import sys
+import typing as tp
 from collections import Counter
-from collections.abc import Buffer, Mapping
 from copy import deepcopy
 from ctypes import byref
 from enum import IntEnum
 from functools import lru_cache
 from types import UnionType
-from typing import (
-    Any,
-    Final,
-    Generator,
-    Iterable,
-    Iterator,
-    Literal as L,
-    MutableSequence,
-    Self,
-    Sequence,
-    SupportsIndex,
-    SupportsInt,
-    TypeAlias,
-    TypeVar,
-    cast,
-)
+from typing import Literal as L
 
 import numpy as np
 
@@ -58,9 +44,9 @@ from .colorconv import (
     rgb_to_ansi_8bit,
 )
 
-CSI: Final[bytes] = b'\x1b['
-SGR_RESET: Final[bytes] = b'\x1b[0m'
-SGR_RESET_S: Final[str] = '\x1b[0m'
+CSI: tp.Final[bytes] = b'\x1b['
+SGR_RESET: tp.Final[bytes] = b'\x1b[0m'
+SGR_RESET_S: tp.Final[str] = '\x1b[0m'
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code#SGR
@@ -148,16 +134,12 @@ class SgrParameter(IntEnum):
 _SGR_PARAM_VALUES = frozenset(x.value for x in SgrParameter)
 
 # ansi 4bit {color code (int) ==> (key, RGB)}
-_ANSI16C_I2KV = cast(
-    dict[int, tuple[ColorDictKeys, Int3Tuple]],
-    {
-        v: (k, ansi_4bit_to_rgb(v))
-        for x in (
-            zip(('fg', 'bg'), (j, j + 10)) for i in (30, 90) for j in range(i, i + 8)
-        )
-        for (k, v) in x
-    },
-)
+_ANSI16C_I2KV: dict[int, tuple[ColorDictKeys, Int3Tuple]] = {
+    v: (k, ansi_4bit_to_rgb(v))
+    for i, k in enumerate(("fg", "bg"))
+    for x in (0, 60)
+    for v in (lambda n: range(n, n + 8))((30, 40)[i] + x)
+}
 
 # ansi 4bit {(key, RGB) ==> color code (int)}
 _ANSI16C_KV2I = {v: k for k, v in _ANSI16C_I2KV.items()}
@@ -177,11 +159,12 @@ _ANSI256_KEY2I = {v: int(k) for k, v in _ANSI256_B2KEY.items()}
 
 
 @lru_cache
-def _issubclass(typ: type, class_or_tuple: type | UnionType | tuple[Any, ...], /):
+def _issubclass(typ: type, class_or_tuple: type | UnionType | tuple[tp.Any, ...], /):
     return issubclass(typ, class_or_tuple)
 
 
 class colorbytes(bytes):
+    alias: tp.ClassVar[AnsiColorAlias]
 
     @classmethod
     def from_rgb(cls, rgb, /):
@@ -210,7 +193,6 @@ class colorbytes(bytes):
         """
 
         k: ColorDictKeys
-        v: object | Any
         match rgb:
             case ('fg' | 'bg') as k, v:
                 pass
@@ -220,10 +202,10 @@ class colorbytes(bytes):
                 raise ValueError
         r, g, b = (
             (int(x) & 0xFF for x in v)
-            if _issubclass(v.__class__, Iterable)
+            if _issubclass(v.__class__, abc.Iterable)
             else int2rgb(v)
         )
-        typ: AnsiColorType = DEFAULT_ANSI if cls is colorbytes else cls
+        typ = DEFAULT_ANSI if cls is colorbytes else cls
         inst = super().__new__(typ, rgb2ansi_escape(typ, mode=k, rgb=(r, g, b)))
         setattr(inst, '_rgb_dict', {k: (r, g, b)})
         return inst
@@ -417,13 +399,10 @@ else:
 
 DEFAULT_ANSI = ansicolor8Bit if is_vt_enabled() else ansicolor4Bit
 
-AnsiColorFormat: TypeAlias = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
-AnsiColorType: TypeAlias = type[AnsiColorFormat]
-AnsiColorParam: TypeAlias = AnsiColorAlias | AnsiColorType
-_AnsiColor_co = TypeVar('_AnsiColor_co', bound=colorbytes, covariant=True)
-_ANSI_COLOR_TYPES = cast(
-    frozenset[AnsiColorType], frozenset(colorbytes.__subclasses__())
-)
+AnsiColorFormat: tp.TypeAlias = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
+AnsiColorType: tp.TypeAlias = type[AnsiColorFormat]
+AnsiColorParam: tp.TypeAlias = AnsiColorAlias | AnsiColorType
+_ANSI_COLOR_TYPES = frozenset(colorbytes.__subclasses__())
 _ANSI_FORMAT_MAP = {k: x for x in _ANSI_COLOR_TYPES for k in [x, x.alias]}
 
 
@@ -508,7 +487,7 @@ def _unwrap_ansi_escape(b: bytes | bytearray, /):
     return bytes(b.removeprefix(CSI).removesuffix(b'm')).split(b';')
 
 
-def _concat_ansi_escape(iterable: Iterable[bytes | bytearray], /):
+def _concat_ansi_escape(iterable: abc.Iterable[bytes | bytearray], /):
     return b'\x1b[%sm' % b';'.join(iterable)
 
 
@@ -550,6 +529,7 @@ class Color(int):
         if is_u24(inst, strict=True):
             inst._rgb = int2rgb(inst)
             return inst
+        raise RuntimeError("unreachable")
 
     def __repr__(self):
         return "{0.__class__.__name__}(0x{0:06X})".format(self)
@@ -594,7 +574,7 @@ class SgrParamBuffer[_T]:
     def __hash__(self):
         return hash(self._value)
 
-    def __init__(self, value: Self | bytes = b'', /):
+    def __init__(self, value: tp.Self | bytes = b'', /):
         if value.__class__ is self.__class__:
             self._value = value._value
         elif _issubclass(value.__class__, bytes):
@@ -672,12 +652,12 @@ def _get_sgr_nums(x: bytes, /) -> list[int]:
             return res
 
 
-def _iter_normalized_sgr[_T: (Buffer, SupportsInt)](
-    iterable: bytes | bytearray | Iterable[_T], /
-) -> Iterator[int | AnsiColorFormat]:
+def _iter_normalized_sgr[_T: (abc.Buffer, tp.SupportsInt)](
+    iterable: bytes | bytearray | abc.Iterable[_T], /
+) -> abc.Iterator[int | AnsiColorFormat]:
     if isinstance(iterable, (bytes, bytearray)):
         iterable = iterable.split(b';')
-    elt: object | Any
+    elt: object | tp.Any
     for elt in iterable:
         objtype = elt.__class__
         if objtype is SgrParamBuffer:
@@ -688,14 +668,14 @@ def _iter_normalized_sgr[_T: (Buffer, SupportsInt)](
                 yield int(elt)
         elif _issubclass(objtype, colorbytes):
             yield elt
-        elif _issubclass(objtype, Buffer):
+        elif _issubclass(objtype, abc.Buffer):
             if objtype is not bytes:
                 elt = bytes(elt)
             if elt.isdigit():
                 yield int(elt)
             else:
                 yield from _get_sgr_nums(elt)
-        elif _issubclass(objtype, SupportsInt):
+        elif _issubclass(objtype, tp.SupportsInt):
             yield int(elt)
         else:
             raise TypeError(
@@ -706,8 +686,8 @@ def _iter_normalized_sgr[_T: (Buffer, SupportsInt)](
 
 
 def _co_yield_colorbytes(
-    iterable: Iterator[int], /
-) -> Generator[bytes | AnsiColorFormat, int, None]:
+    iterable: abc.Iterator[int], /
+) -> abc.Generator[bytes | AnsiColorFormat, int, None]:
     d: dict[int, ColorDictKeys] = {38: 'fg', 48: 'bg'}
     obj = b''
     while True:
@@ -728,7 +708,9 @@ def _co_yield_colorbytes(
                 obj = ansicolor24Bit.from_rgb((key, (r, g, b)))
 
 
-def _gen_colorbytes(iterable: Iterable[int], /) -> Iterator[bytes | AnsiColorFormat]:
+def _gen_colorbytes(
+    iterable: abc.Iterable[int], /
+) -> abc.Iterator[bytes | AnsiColorFormat]:
     gen = iter(iterable)
     color_coro = _co_yield_colorbytes(gen)
     next(color_coro)
@@ -739,7 +721,9 @@ def _gen_colorbytes(iterable: Iterable[int], /) -> Iterator[bytes | AnsiColorFor
             yield color_coro.send(value)
 
 
-def _iter_sgr[_T: (Buffer, SupportsInt)](x: bytes | bytearray | Iterable[_T], /):
+def _iter_sgr[_T: (abc.Buffer, tp.SupportsInt)](
+    x: bytes | bytearray | abc.Iterable[_T], /
+):
     return _gen_colorbytes(_iter_normalized_sgr(x))
 
 
@@ -752,7 +736,7 @@ def _is_sgr_param(value: int, /):
     return value in _SGR_PARAM_VALUES
 
 
-class SgrSequence(MutableSequence[SgrParamBuffer]):
+class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
     _idx_attrs = ("_bg_idx", "_fg_idx")
     __slots__ = ("_sgr_params", *_idx_attrs)
 
@@ -1033,7 +1017,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
         self._sgr_params[:] = [p for p in self._sgr_params if not p.is_color()]
         self._bg_idx = self._fg_idx = None
 
-    def set_colors(self, iterable, /, ansi_type=DEFAULT_ANSI):
+    def set_colors(self, iterable, /, ansi_type=None):
         new_colors = dict(iterable)
         if not new_colors:
             return
@@ -1041,6 +1025,8 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
             raise ValueError
         if new_colors.items() == {("bg", None), ("fg", None)}:
             return self.clear_colors()
+        if ansi_type is None:
+            ansi_type = DEFAULT_ANSI
         self._sgr_params[:] = [
             p
             for p in self._sgr_params
@@ -1073,7 +1059,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
 
 
 _END_RESET_PATTERN = re.compile(r"\x1b\[0?m$")
-_unset: Any = object()
+_unset: tp.Any = object()
 
 
 def _colorstr[_T](
@@ -1088,11 +1074,13 @@ def _colorstr[_T](
     ansi_type=_unset,
     reset=True,
 ) -> _T:
-    localns = locals().items()
-    if buf_kwargs := {
-        k: v for k, v in localns if k in {"encoding", "errors"} and v is not _unset
-    }:
-        if not _issubclass(obj.__class__, Buffer):
+    buf_kwargs = {}
+    if encoding is not _unset:
+        buf_kwargs["encoding"] = encoding
+    if errors is not _unset:
+        buf_kwargs["errors"] = errors
+    if buf_kwargs:
+        if not _issubclass(obj.__class__, abc.Buffer):
             raise ValueError(f"unexpected keyword arguments: {set(buf_kwargs)}")
         elif not _issubclass(obj.__class__, (bytes, bytearray)):
             obj = bytes(obj)
@@ -1111,29 +1099,31 @@ def _colorstr[_T](
             base_str = str(obj)
     else:
         base_str = ''
-    if reset.__class__ is not bool:
-        reset = bool(reset)
+    reset = bool(reset)
     if ansi_type is not _unset:
         ansi_type = get_ansi_type(ansi_type)
     elif not sgr.is_color():
         ansi_type = DEFAULT_ANSI
     else:
-        ansi_type = max(
+        ansi_type, _ = max(
             Counter(
                 x._value.__class__ for x in sgr._sgr_params if x.is_color()
             ).items(),
             key=lambda x: x[1],
-        )[0]
+        )
+    colors = {}
+    if fg is not None:
+        colors["fg"] = fg
+    if bg is not None:
+        colors["bg"] = bg
     try:
-        for k, v in localns:
-            if k not in {"fg", "bg"} or v is None:
-                continue
+        for k, v in colors.items():
             match v:
                 case Color(rgb=(_ as r, _ as g, _ as b)):
                     pass
-                case SupportsInt():
+                case tp.SupportsInt():
                     r, g, b = int2rgb(v)
-                case [SupportsInt(), SupportsInt(), SupportsInt()]:
+                case [tp.SupportsInt(), tp.SupportsInt(), tp.SupportsInt()]:
                     r, g, b = (int(x) & 0xFF for x in v)
                 case np.ndarray(shape=(3,)):
                     r, g, b = map(int, np.astype(v, np.uint8))
@@ -1149,7 +1139,7 @@ def _colorstr[_T](
         err.__cause__ = e.__cause__
         raise err
     suffix = SGR_RESET_S if reset else ''
-    inst: Any = supercls.__new__(
+    inst: tp.Any = supercls.__new__(
         supercls.__thisclass__, f"{sgr}{base_str}{suffix}"  # type: ignore
     )
     inst.__dict__ |= {
@@ -1185,10 +1175,10 @@ class _IntFloatMixin:
 
 class ColorStr(str, _IntFloatMixin):
     def _weak_var_update(self, **kwargs):
-        if not kwargs.keys() <= {'base_str', 'sgr', 'reset'}:
-            raise ValueError(
-                f'unexpected keys: {(kwargs.keys() - {'base_str', 'sgr', 'reset'})}'
-            )
+        expected = {"base_str", "sgr", "reset"}
+        if not kwargs.keys() <= expected:
+            unexpected = kwargs.keys() - expected
+            raise ValueError(f'unexpected keys: {unexpected}')
         sgr = kwargs.get('sgr', self._sgr)
         base_str = kwargs.get('base_str', self.base_str)
         suffix = SGR_RESET_S if kwargs.get('reset', self.reset) else ''
@@ -1274,10 +1264,10 @@ class ColorStr(str, _IntFloatMixin):
             >>> recolored.base_str, f"0x{recolored.fg:06X}"
             ('Red text', '0x00FF00')
         """
-        if not kwargs.keys() <= {'absolute', 'fg', 'bg'}:
-            raise ValueError(
-                f"unexpected keywords: {(kwargs.keys() - {'absolute', 'fg', 'bg'})}"
-            )
+        expected = {"absolute", "fg", "bg"}
+        if not kwargs.keys() <= expected:
+            unexpected = kwargs.keys() - expected
+            raise ValueError(f"unexpected keywords: {unexpected}")
         if kwargs.pop('absolute', False):
             if not (args or kwargs):
                 return (
@@ -1688,8 +1678,8 @@ def _color_str_to_mask(cs: ColorStr) -> _ChainMask:
 
 def _collect_masks(
     *elts: _ConvertibleToMask,
-    masks: _ChainMaskList = None,
-    ansi_type: AnsiColorParam = None,
+    masks: tp.Optional[_ChainMaskList] = None,
+    ansi_type: tp.Optional[AnsiColorParam] = None,
 ) -> _ChainMaskList:
     if masks is None:
         masks = []
@@ -1718,10 +1708,10 @@ def _collect_masks(
     return masks
 
 
-class color_chain(Sequence[tuple[SgrSequence, str]]):
+class color_chain(abc.Sequence[tuple[SgrSequence, str]]):
     @staticmethod
     def _is_mask_seq(obj, /):
-        if isinstance(obj, Sequence):
+        if isinstance(obj, abc.Sequence):
             for x in obj:
                 match x:
                     case (SgrSequence(), str()):

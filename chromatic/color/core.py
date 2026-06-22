@@ -164,8 +164,6 @@ def _issubclass(typ: type, class_or_tuple: type | UnionType | tuple[tp.Any, ...]
 
 
 class colorbytes(bytes):
-    alias: tp.ClassVar[AnsiColorAlias]
-
     @classmethod
     def from_rgb(cls, rgb, /):
         """Construct a `colorbytes` object from an RGB key-value pair.
@@ -182,6 +180,8 @@ class colorbytes(bytes):
 
         Examples
         --------
+        >>> from chromatic.color.core import ansicolor4Bit, ansicolor8Bit
+
         >>> rgb_dict = {'fg': (255, 85, 85)}
         >>> old_ansi = ansicolor4Bit.from_rgb(rgb_dict)
         >>> repr(old_ansi)
@@ -190,6 +190,7 @@ class colorbytes(bytes):
         >>> new_ansi = ansicolor24Bit.from_rgb(rgb_dict)
         >>> repr(new_ansi)
         "ansicolor24Bit(b'38;2;255;85;85')"
+
         """
 
         k: ColorDictKeys
@@ -260,35 +261,39 @@ class colorbytes(bytes):
 class ansicolor4Bit(colorbytes):
     """ANSI 4-bit color format.
 
-    Supports 16 colors:
+    Notes
+    -----
+    Supports 16 colors.
 
-    * 8 standard colors:
-        {0: black, 1: red, 2: green, 3: yellow, 4: blue, 5: magenta, 6: cyan, 7: white}
+    +-------+---------+
+    | index |  color  |
+    +-------+---------+
+    |     0 | black   |
+    |     1 | red     |
+    |     2 | green   |
+    |     3 | yellow  |
+    |     4 | blue    |
+    |     5 | magenta |
+    |     6 | cyan    |
+    |     7 | white   |
+    +-------+---------+
 
-    * 8 bright colors, each mapping to a standard color (bright = standard + 8).
+    Each color has a bright variant at ``index + 60``.
 
     Color codes use escape sequences of the form:
-
-    * `CSI 30–37 m` for standard foreground colors.
-
-    * `CSI 40–47 m` for standard background colors.
-
-    * `CSI 90–97 m` for bright foreground colors.
-
-    * `CSI 100–107 m` for bright background colors.
+        - `CSI 30–37 m` for foreground colors.
+        - `CSI 40–47 m` for background colors.
+        - `CSI 90–97 m` for foreground colors (bright).
+        - `CSI 100–107 m` for background colors (bright).
 
     Where `CSI` (Control Sequence Introducer) is `ESC[`.
 
     Examples
     --------
-    bright red fg:
-        `ESC[91m`
+    bright red fg: `ESC[91m`
+    standard green bg: `ESC[42m`
+    bright white bg, black fg: `ESC[107;30m`
 
-    standard green bg:
-        `ESC[42m`
-
-    bright white bg, black fg:
-        `ESC[107;30m`
     """
 
     alias = '4b'
@@ -297,60 +302,48 @@ class ansicolor4Bit(colorbytes):
 class ansicolor8Bit(colorbytes):
     """ANSI 8-Bit color format.
 
+    Notes
+    -----
     Supports 256 colors, mapped to the following value ranges:
-
-    * (0, 15): Corresponds to ANSI 4-bit colors.
-
-    * (16, 231): Represents a 6x6x6 RGB color cube.
-
-    * (232, 255): Greyscale colors, from black to white.
+        - ``(0, 15)``: Corresponds to ANSI 4-bit colors.
+        - ``(16, 231)``: Represents a 6x6x6 RGB color cube.
+        - ``(232, 255)``: Greyscale colors, from black to white.
 
     Color codes use escape sequences of the form:
-
-    * `CSI 38;5;(n) m` for foreground colors.
-
-    * `CSI 48;5;(n) m` for background colors.
+        - `CSI 38;5;(n) m` for foreground colors.
+        - `CSI 48;5;(n) m` for background colors.
 
     Where `CSI` (Control Sequence Introducer) is `ESC[` and `n` is an unsigned 8-bit integer.
 
     Examples
     --------
-    white bg:
-        `ESC[48;5;255m`
+    white bg: `ESC[48;5;255m`
+    bright red fg (ANSI 4-bit): `ESC[38;5;9m`
+    bright red fg (color cube): `ESC[38;5;196m`
 
-    bright red fg (ANSI 4-bit):
-        `ESC[38;5;9m`
-
-    bright red fg (color cube):
-        `ESC[38;5;196m`
     """
 
     alias = '8b'
 
-
 class ansicolor24Bit(colorbytes):
     """ANSI 24-Bit color format.
 
+    Notes
+    -----
     Supports all colors in the RGB color space (16,777,216 total).
 
     Color codes use escape sequences of the form:
-
-    * `CSI 38;2;(r);(g);(b) m` for foreground colors.
-
-    * `CSI 48;2;(r);(g);(b) m` for background colors.
+        - `CSI 38;2;(r);(g);(b) m` for foreground colors.
+        - `CSI 48;2;(r);(g);(b) m` for background colors.
 
     Where `CSI` (Control Sequence Introducer) is `ESC[` and `r,g,b` are unsigned 8-bit integers.
 
     Examples
     --------
-    red fg:
-        `ESC[38;2;255;85;85m`
+    red fg: `ESC[38;2;255;85;85m`
+    black bg: `ESC[48;2;0;0;0m`
+    white fg, green bg: `ESC[38;2;255;255;255;48;2;0;170;0m`
 
-    black bg:
-        `ESC[48;2;0;0;0m`
-
-    white fg, green bg:
-        `ESC[38;2;255;255;255;48;2;0;170;0m`
     """
 
     alias = '24b'
@@ -373,7 +366,7 @@ if os.name == 'nt':
         mode.value |= ENABLE_VT_PROCESSING
         return bool(k32.SetConsoleMode(h, mode))
 
-    def is_vt_enabled():
+    def is_vt_enabled() -> bool:
         if os.environ.keys() & {
             'ANSICON',
             'COLORTERM',
@@ -393,7 +386,7 @@ if os.name == 'nt':
 
 else:
 
-    def is_vt_enabled():
+    def is_vt_enabled() -> bool:
         return True
 
 
@@ -402,17 +395,16 @@ DEFAULT_ANSI = ansicolor8Bit if is_vt_enabled() else ansicolor4Bit
 AnsiColorFormat: tp.TypeAlias = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
 AnsiColorType: tp.TypeAlias = type[AnsiColorFormat]
 AnsiColorParam: tp.TypeAlias = AnsiColorAlias | AnsiColorType
-_ANSI_COLOR_TYPES = frozenset(colorbytes.__subclasses__())
+_ANSI_COLOR_TYPES = frozenset({ansicolor4Bit, ansicolor8Bit, ansicolor24Bit})
 _ANSI_FORMAT_MAP = {k: x for x in _ANSI_COLOR_TYPES for k in [x, x.alias]}
 
 
 @lru_cache(maxsize=len(_ANSI_COLOR_TYPES))
-def _is_ansi_type(typ: type, /):
+def _is_ansi_type(typ: type, /) -> bool:
     try:
         return typ in _ANSI_COLOR_TYPES
     except TypeError:
         return False
-
 
 @lru_cache(maxsize=len(_ANSI_FORMAT_MAP))
 def get_ansi_type(typ, /):
@@ -491,7 +483,7 @@ def _concat_ansi_escape(iterable: abc.Iterable[bytes | bytearray], /):
     return b'\x1b[%sm' % b';'.join(iterable)
 
 
-def rgb2ansi_escape(fmt, /, mode, rgb):
+def rgb2ansi_escape(fmt: AnsiColorAlias | AnsiColorType, /, mode: ColorDictKeys, rgb: Int3Tuple):
     fmt = get_ansi_type(fmt)
     if len(rgb) != 3:
         raise ValueError('length of RGB value is not 3')
@@ -520,7 +512,7 @@ class Color(int):
 
     Color(x, base=10) -> color
 
-    Convert a number or string into a color, or return Color(0) if no arguments are given.
+    Convert a number or string into a color, or return ``Color(0)`` if no arguments are given.
     Accepts the same arguments as int, but the value must be in range 0,0xFFFFFF (incl).
     """
 
@@ -616,9 +608,10 @@ class SgrParamBuffer[_T]:
 def _get_sgr_nums(x: bytes, /) -> list[int]:
     """Return a list of integers from a bytestring of ANSI SGR parameters.
 
-    Roughly, bitwise equivalent to:
-
-        list(map(int, bytes().split(b';')))
+    Notes
+    -----
+    Roughly, bitwise equivalent to ``list(map(int, bytes().split(b';')))``
+    
     """
     if x.isdigit():
         return [int(x)]
@@ -679,8 +672,11 @@ def _iter_normalized_sgr[_T: (abc.Buffer, tp.SupportsInt)](
             yield int(elt)
         else:
             raise TypeError(
-                "Expected {.__name__!r} or bytes-like object, got {.__name__!r} instead".format(
-                    int, type(elt)
+                str.format(
+                    "Expected {.__name__!r} or bytes-like object, "
+                    "got {.__class__.__name__!r} instead",
+                    int,
+                    elt,
                 )
             )
 
@@ -1152,12 +1148,13 @@ def _colorstr[_T](
 
 
 class _IntFloatMixin:
-    """Mixin for `ColorStr` -> `int`/`float` conversion
+    """Mixin for ``int(ColorStr(...))`` / ``float(ColorStr(...))`` compatibility
 
     Notes
     -----
-        If supplying 'base' to `int`, CPython ignores `nb_int` due to `PyUnicode_Check`.
-        Use `ColorStr.base_str` directly in that case.
+    If supplying 'base' to `int`, CPython ignores `nb_int` due to `PyUnicode_Check`.
+    Use `ColorStr.base_str` directly in that case.
+
     """
 
     def __int__(self):
@@ -1189,6 +1186,7 @@ class ColorStr(str, _IntFloatMixin):
     def ansi_partition(self):
         r"""Returns a 3-tuple of parts of the string
         (sgr, base string, '\x1B[0m' or '')
+
         """
         return str(self._sgr), self.base_str, self._reset
 
@@ -1217,15 +1215,14 @@ class ColorStr(str, _IntFloatMixin):
         return self
 
     def recolor(self, *args, **kwargs):
-        """ColorStr.recolor(self, value, /, *, absolute=False) -> ColorStr
+        """Return a copy of self with a new color spec.
 
-        ColorStr.recolor(self, *, fg=None, bg=None, absolute=False) -> ColorStr
-
-        Return a copy of self with a new color spec.
+        ``ColorStr.recolor(self, value, /, *, absolute=False) -> ColorStr``
+        ``ColorStr.recolor(self, *, fg=None, bg=None, absolute=False) -> ColorStr``
 
         If no arguments are given, returns self unchanged.
         If 'value' is given and a `ColorStr`, return self with the colors of 'value'.
-        Else, use keyword arguments { 'fg', 'bg' } for colors.
+        Else, use keyword arguments ``{'fg', 'bg'}`` for colors.
         Any other mix of arguments will fail outright,
         since 'value' along with { fg=... | bg=... } is ambiguous which to use for colors.
         The 'absolute' keyword can be used with either signature.
@@ -1253,16 +1250,18 @@ class ColorStr(str, _IntFloatMixin):
 
         Examples
         --------
-            >>> cs1 = ColorStr('foo', randcolor())
-            >>> cs2 = ColorStr('bar', fg=Color(0xFF5555), bg=Color(0xFF00FF))
-            >>> new_cs = cs2.recolor(bg=cs1.fg)
-            >>> int(new_cs.fg) == 0xFF5555, new_cs.bg == cs1.fg
-            (True, True)
+        >>> from chromatic import ColorStr, Color, randcolor
+        >>> cs1 = ColorStr('foo', randcolor())
+        >>> cs2 = ColorStr('bar', fg=Color(0xFF5555), bg=Color(0xFF00FF))
+        >>> new_cs = cs2.recolor(bg=cs1.fg)
+        >>> int(new_cs.fg) == 0xFF5555, new_cs.bg == cs1.fg
+        (True, True)
 
-            >>> cs = ColorStr("Red text", fg=0xFF0000)
-            >>> recolored = cs.recolor(fg=Color(0x00FF00))
-            >>> recolored.base_str, f"0x{recolored.fg:06X}"
-            ('Red text', '0x00FF00')
+        >>> cs = ColorStr("Red text", fg=0xFF0000)
+        >>> recolored = cs.recolor(fg=Color(0x00FF00))
+        >>> recolored.base_str, f"0x{recolored.fg:06X}"
+        ('Red text', '0x00FF00')
+
         """
         expected = {"absolute", "fg", "bg"}
         if not kwargs.keys() <= expected:

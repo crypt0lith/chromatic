@@ -27,7 +27,6 @@ from chromatic.color.colorconv import (
     rgb_to_ansi_8bit,
 )
 from chromatic.color.core import randcolor
-from chromatic.color.iterators import rgb_luma_transform
 from chromatic.color.palette import ColorNamespace
 
 
@@ -118,42 +117,6 @@ ANSI_4BIT_RGB: list[tuple[int, int, int]] = [
 ]
 
 
-def test_luma_transformer(
-    test_color1: Color,
-    test_color2: Color = None,
-    *,
-    base_str='亮度和颜色梯度算法测试！！！',
-):
-    test_color2_rgb: Optional[tuple[int, int, int]] = getattr(test_color2, 'rgb', None)
-    color_gen = rgb_luma_transform(
-        test_color1.rgb,
-        step=8,
-        num=128,
-        cycle='wave',
-        ncycles=4,
-        gradient=test_color2_rgb,
-        dtype=Color,
-    )
-    return '\n'.join(ColorStr(base_str, col) for col in color_gen)
-
-
-def test_pattern_generator():
-    test_color = ColorNamespace.FUCHSIA
-    color_strings = test_luma_transformer(test_color, base_str='∑').splitlines()
-    pattern_str = []
-    for i, p in enumerate(color_strings):
-        try:
-            s_map = map(lambda x: color_strings[i : 64 : max(x, 1)], range(64))
-            s_range = [elem for arr in s_map for elem in arr][:64]
-            if not s_range:
-                break
-            s_range = [p] + s_range
-            pattern_str.append(''.join(s_range))
-        except IndexError:
-            continue
-    return '\n'.join(pattern_str)
-
-
 def _rand_color_str_array(n_rows=10, n_cols=10):
     size = n_rows * n_cols
     bit_str = ''
@@ -190,10 +153,6 @@ def _rand_color_str_array(n_rows=10, n_cols=10):
             )
         )
     return '\n'.join(output)
-
-
-def _random_rgb():
-    return tuple(random.randint(0, 255) for _ in range(3))
 
 
 def test_performance_benchmark():
@@ -354,7 +313,9 @@ def main():
     else:
         inp_ = None
         print(
-            *(f"{i}\t{x}" for i, x in mode_groups), sep="\n", end="\nselect testing mode"
+            *(f"{i}\t{x}" for i, x in mode_groups),
+            sep="\n",
+            end="\nselect testing mode",
         )
         while inp_ not in modes:
             try:

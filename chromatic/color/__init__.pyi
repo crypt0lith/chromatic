@@ -44,7 +44,7 @@ __all__ = [
     'xyz2lab',
     'xyz2rgb',
 ]
-from . import colorconv, core, iterators, palette
+from . import colorconv, core, palette
 from .colorconv import (
     ANSI_4BIT_RGB,
     ansi_4bit_to_rgb,

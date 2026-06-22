@@ -3,7 +3,10 @@ __all__ = [
     "UserFont",
     "VGA437",
     "delete_userfont",
+    "edit_userfont",
     "register_userfont",
+    "rename_userfont",
+    "set_default_userfont",
     "unregister_userfont",
     "userfonts",
 ]
@@ -43,6 +46,17 @@ def register_userfont(
 ) -> None: ...
 def unregister_userfont(name: str, /, delete: bool = False) -> None: ...
 def delete_userfont(name: str, /) -> None: ...
+def rename_userfont(name: str, newname: str, /) -> None: ...
+
+class _EditUserfontKwargs(tp.TypedDict, total=False):
+    font: str
+    size: int
+    index: int
+    encoding: str
+    is_default: bool
+
+def edit_userfont(name: str, /, **kwargs: tp.Unpack[_EditUserfontKwargs]) -> None: ...
+def set_default_userfont(name: str, /) -> None: ...
 
 VGA437: tp.Final[UserFont]
 DEFAULT_FONT: tp.Final[UserFont]

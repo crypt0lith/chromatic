@@ -3,7 +3,10 @@ __all__ = [
     "UserFont",
     "VGA437",
     "delete_userfont",
+    "edit_userfont",
     "register_userfont",
+    "rename_userfont",
+    "set_default_userfont",
     "unregister_userfont",
     "userfonts",
 ]
@@ -11,7 +14,7 @@ import json
 import os
 import sys
 import typing as tp
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType as mappingproxy
@@ -281,6 +284,97 @@ def unregister_userfont(name: str, /, delete=False):
 def delete_userfont(name: str, /):
     return unregister_userfont(name, delete=True)
 
+
+def rename_userfont(name: str, newname: str, /):
+    if name == _ROOT_FONT_KEY:
+        raise ValueError(f"cannot rename root default font: {name!r}")
+    if name not in _userfonts:
+        raise ValueError(f"invalid font: {name!r}")
+    if name == newname:
+        return
+    userfont_json = _userfonts[name]._base_dir / "userfont.json"
+    with userfont_json.open("r") as f:
+        d = json.load(f)
+    d[newname] = d.pop(name)
+    with userfont_json.open("w") as f:
+        json.dump(d, f, indent="\t", sort_keys=True)
+    _userfonts[newname] = _userfonts.pop(name)
+
+
+def _userfont_asdict(obj: UserFont, /):
+    d = asdict(obj)
+    d.update(font=str(d.pop("_base_dir").joinpath(d.pop("font"))))
+    return d
+
+
+class _EditUserfontKwargs(tp.TypedDict, total=False):
+    font: str
+    size: int
+    index: int
+    encoding: str
+    is_default: bool
+
+
+def edit_userfont(name: str, /, **kwargs: tp.Unpack[_EditUserfontKwargs]):
+    if name not in _userfonts:
+        raise ValueError(f"invalid font: {name!r}")
+    if not kwargs:
+        return
+    all_keys, *_, anno = _userfont_dict_struct()
+    if not kwargs.keys() <= all_keys:
+        raise ValueError("unexpected keys: {!r}".format(kwargs.keys() - all_keys))
+    for k, typ in anno.items():
+        if k not in kwargs:
+            continue
+        v = kwargs[k]
+        if not isinstance(v, typ):
+            err = str.format(
+                "expected {!r} to be {.__name__!r}, got {.__class__.__name__!r} instead",
+                k,
+                typ,
+                v,
+            )
+            raise TypeError(err)
+        if k != "font":
+            continue
+        if name == _ROOT_FONT_KEY:
+            raise ValueError(f"cannot change filepath of root default font: {name!r}")
+        p = Path(v).absolute()
+        if not p.is_file():
+            raise FileNotFoundError(v)
+        new_pardir = p.parent
+        current_pardir = _userfonts[name]._base_dir
+        if not new_pardir.samefile(current_pardir):
+            err = str.format(
+                "invalid filepath {!r}: "
+                "parent directory does not match registered parent directory ({} != {})",
+                v,
+                new_pardir,
+                current_pardir,
+            )
+            raise ValueError(err)
+        kwargs[k] = str(p)
+    obj = _userfonts[name]
+    d = _userfont_asdict(obj)
+    d.update(kwargs)
+    new_obj = _userfonts[name] = UserFont(**d)
+    d.update(font=new_obj.font)
+    _dump_userfonts({name: d}, obj._base_dir)
+    if name == _ROOT_FONT_KEY:
+        global VGA437
+        VGA437 = new_obj
+
+def set_default_userfont(name: str, /):
+    if _DEFAULT_FONT is None:
+        edit_userfont(name, is_default=True)
+        return
+    current = next(k for k, v in _userfonts.items() if v is _DEFAULT_FONT)
+    edit_userfont(current, is_default=False)
+    try:
+        edit_userfont(name, is_default=True)
+    except Exception:
+        edit_userfont(current, is_default=True)
+        raise
 
 def _fetch_default_font():
     from ._fetchers import _fetch_remote

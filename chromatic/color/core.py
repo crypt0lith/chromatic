@@ -1573,8 +1573,8 @@ class ColorStr(str, _IntFloatMixin):
         return self._weak_var_update(sgr=sgr)
 
     def __iter__(self):
-        for c in self.base_str:
-            yield self._weak_var_update(base_str=c)
+        for i in range(len(self)):
+            yield self[i]
 
     def __le__(self, other, /):
         return self.base_str.__le__(other)

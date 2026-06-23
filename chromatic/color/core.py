@@ -325,6 +325,7 @@ class ansicolor8Bit(colorbytes):
 
     alias = '8b'
 
+
 class ansicolor24Bit(colorbytes):
     """ANSI 24-Bit color format.
 
@@ -406,6 +407,7 @@ def _is_ansi_type(typ: type, /) -> bool:
     except TypeError:
         return False
 
+
 @lru_cache(maxsize=len(_ANSI_FORMAT_MAP))
 def get_ansi_type(typ, /):
     try:
@@ -483,7 +485,9 @@ def _concat_ansi_escape(iterable: abc.Iterable[bytes | bytearray], /):
     return b'\x1b[%sm' % b';'.join(iterable)
 
 
-def rgb2ansi_escape(fmt: AnsiColorAlias | AnsiColorType, /, mode: ColorDictKeys, rgb: Int3Tuple):
+def rgb2ansi_escape(
+    fmt: AnsiColorAlias | AnsiColorType, /, mode: ColorDictKeys, rgb: Int3Tuple
+):
     fmt = get_ansi_type(fmt)
     if len(rgb) != 3:
         raise ValueError('length of RGB value is not 3')
@@ -611,7 +615,7 @@ def _get_sgr_nums(x: bytes, /) -> list[int]:
     Notes
     -----
     Roughly, bitwise equivalent to ``list(map(int, bytes().split(b';')))``
-    
+
     """
     if x.isdigit():
         return [int(x)]
@@ -1315,10 +1319,8 @@ class ColorStr(str, _IntFloatMixin):
         sgr[:] = only_colors
         return self._weak_var_update(sgr=sgr)
 
-    def add_sgr_param(self, x: SgrParameter, /):
-        if x.__class__ is not SgrParameter:
-            x = SgrParameter(x)
-        bx = SgrParamBuffer(b'%d' % x)
+    def add_sgr_param(self, x: int, /):
+        bx = SgrParamBuffer(b'%d' % SgrParameter(x))
         if bx in self._sgr:
             return self
         sgr = self._sgr.copy()
@@ -1330,10 +1332,8 @@ class ColorStr(str, _IntFloatMixin):
         }
         return inst
 
-    def remove_sgr_param(self, x: SgrParameter, /):
-        if x.__class__ is not SgrParameter:
-            x = SgrParameter(x)
-        bx = SgrParamBuffer(b'%d' % x)
+    def remove_sgr_param(self, x: int, /):
+        bx = SgrParamBuffer(b'%d' % SgrParameter(x))
         if bx not in self._sgr:
             return self
         sgr = self._sgr.copy()
@@ -1595,9 +1595,7 @@ class ColorStr(str, _IntFloatMixin):
             inst = self.as_ansi_type(alias)
         else:
             inst = self
-        return inst._weak_var_update(
-            base_str=inst.base_str.__format__(format_spec)
-        )
+        return inst._weak_var_update(base_str=inst.base_str.__format__(format_spec))
 
     def __ge__(self, other, /):
         return self.base_str.__ge__(other)

@@ -1319,6 +1319,19 @@ class ColorStr(str, _IntFloatMixin):
         sgr[:] = only_colors
         return self._weak_var_update(sgr=sgr)
 
+    def add_reset(self):
+        if not self.reset:
+            return self._weak_var_update(reset=True)
+        return self
+
+    def remove_reset(self):
+        if self.reset:
+            return self._weak_var_update(reset=False)
+        return self
+
+    def swap_reset(self):
+        return self.remove_reset() if self.reset else self.add_reset()
+
     def add_sgr_param(self, x: int, /):
         bx = SgrParamBuffer(b'%d' % SgrParameter(x))
         if bx in self._sgr:
@@ -1354,11 +1367,11 @@ class ColorStr(str, _IntFloatMixin):
     def bold(self):
         return self.add_sgr_param(SgrParameter.BOLD)
 
+    def faint(self):
+        return self.add_sgr_param(SgrParameter.FAINT)
+
     def crossed_out(self):
         return self.add_sgr_param(SgrParameter.CROSSED_OUT)
-
-    def double_underline(self):
-        return self.add_sgr_param(SgrParameter.DOUBLE_UNDERLINE)
 
     def encircle(self):
         return self.add_sgr_param(SgrParameter.ENCIRCLED)
@@ -1371,6 +1384,9 @@ class ColorStr(str, _IntFloatMixin):
 
     def underline(self):
         return self.add_sgr_param(SgrParameter.SINGLE_UNDERLINE)
+
+    def double_underline(self):
+        return self.add_sgr_param(SgrParameter.DOUBLE_UNDERLINE)
 
     def capitalize(self):
         return self._weak_var_update(base_str=self.base_str.capitalize())

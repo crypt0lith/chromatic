@@ -1206,7 +1206,7 @@ class ColorStr(str, _IntFloatMixin):
 
         """
         ansi_type = get_ansi_type(ansi_type)
-        if self.rgb_dict and ansi_type is not self.ansi_format:
+        if self.rgb_dict and ansi_type is not self.ansi_type:
             sgr = self._sgr.copy()
             sgr.set_colors(sgr.rgb_dict, ansi_type)
             inst = super().__new__(self.__class__, f"{sgr}{self.base_str}{self._reset}")
@@ -1298,7 +1298,7 @@ class ColorStr(str, _IntFloatMixin):
                     else f"unexpected keywords: {set(kwargs)}"
                 )
         sgr = self._sgr.copy()
-        sgr.set_colors({"fg": fg, "bg": bg}, self.ansi_format)
+        sgr.set_colors({"fg": fg, "bg": bg}, self.ansi_type)
         return self._weak_var_update(sgr=sgr)
 
     def strip_style(self):
@@ -1326,7 +1326,7 @@ class ColorStr(str, _IntFloatMixin):
         inst = super().__new__(self.__class__, f"{sgr}{self.base_str}{self._reset}")
         inst.__dict__ |= vars(self) | {
             '_sgr': sgr,
-            '_ansi_type': sgr.ansi_type() or self.ansi_format,
+            '_ansi_type': sgr.ansi_type() or self.ansi_type,
         }
         return inst
 
@@ -1341,7 +1341,7 @@ class ColorStr(str, _IntFloatMixin):
         inst = super().__new__(self.__class__, f"{sgr}{self.base_str}{self._reset}")
         inst.__dict__ |= vars(self) | {
             '_sgr': sgr,
-            '_ansi_type': sgr.ansi_type() or self.ansi_format,
+            '_ansi_type': sgr.ansi_type() or self.ansi_type,
         }
         return inst
 
@@ -1616,7 +1616,7 @@ class ColorStr(str, _IntFloatMixin):
         sgr = self._sgr.copy()
         sgr.set_colors(
             {k: ~Color.from_rgb(v) for k, v in self._sgr.rgb_dict.items()},
-            self.ansi_format,
+            self.ansi_type,
         )
         return self._weak_var_update(sgr=sgr)
 
@@ -1661,7 +1661,6 @@ class ColorStr(str, _IntFloatMixin):
     def __xor__(self, other, /):
         """Return copy of self with colors ^ other colors"""
 
-        k: L['fg', 'bg']
         if isinstance(other, self.__class__):
             xor_dict = {
                 k: int2rgb(
@@ -1678,7 +1677,7 @@ class ColorStr(str, _IntFloatMixin):
         if not xor_dict:
             return self
         sgr = self._sgr.copy()
-        sgr.set_colors(xor_dict, self.ansi_format)
+        sgr.set_colors(xor_dict, self.ansi_type)
         return self._weak_var_update(sgr=sgr)
 
     @property
@@ -1686,7 +1685,7 @@ class ColorStr(str, _IntFloatMixin):
         return bytes(self._sgr)
 
     @property
-    def ansi_format(self):
+    def ansi_type(self):
         return getattr(self, '_ansi_type')
 
     @property
@@ -1870,7 +1869,7 @@ class color_chain(abc.Sequence[tuple[SgrSequence, str]]):
             return self._from_masks_unchecked(
                 [_color_str_to_mask(other), *self.masks],
                 ansi_type=(
-                    self._ansi_type if self._ansi_type is None else other.ansi_format
+                    self._ansi_type if self._ansi_type is None else other.ansi_type
                 ),
             )
         elif isinstance(other, str):

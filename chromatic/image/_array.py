@@ -1195,7 +1195,7 @@ class AnsiImage:
         AnsiImage
         """
         inst = super().__new__(cls)
-        inst._ansi_format = get_ansi_type(ansi_type)
+        inst._ansi_type = get_ansi_type(ansi_type)
         inst.file = open(fp, mode='r', encoding=encoding or None)
         if shape is None:
             shape = get_terminal_size()
@@ -1210,14 +1210,14 @@ class AnsiImage:
         if attr_name == 'file':
             file: TextIOWrapper[str] = self.__dict__.pop(attr_name)
             s = reshape_ansi(read_ans(file), *self.shape)
-            arr = to_sgr_array(s, ansi_type=self.ansi_format)
+            arr = to_sgr_array(s, ansi_type=self.ansi_type)
             setattr(self, 'data', arr)
             file.close()
         return self.data
 
     @property
-    def ansi_format(self) -> AnsiColorType:
-        return self._ansi_format
+    def ansi_type(self) -> AnsiColorType:
+        return self._ansi_type
 
     @property
     def height(self):
@@ -1255,7 +1255,7 @@ class AnsiImage:
                 raise ValueError("inhomogenous shape")
         self._shape = w, h
         self.data = arr
-        self._ansi_format = get_ansi_type(ansi_type)
+        self._ansi_type = get_ansi_type(ansi_type)
 
     def __str__(self) -> str:
         attr_name = f"_{self.__class__.__name__}__str"

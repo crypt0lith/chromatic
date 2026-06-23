@@ -1544,11 +1544,16 @@ class ColorStr(str, _IntFloatMixin):
         return NotImplemented
 
     def __format__(self, format_spec='', /):
-        if format_spec.endswith('b'):
-            for alias in ('24b', '8b', '4b'):
-                format_spec = format_spec.rpartition(alias)[0]
-                return str(self.as_ansi_type(alias)).__format__(format_spec)
-        return super().__format__(format_spec)
+        if format_spec.startswith(("24b", "8b", "4b")):
+            idx = format_spec.index("b") + 1
+            alias = format_spec[:idx]
+            format_spec = format_spec[idx:]
+            inst = self.as_ansi_type(alias)
+        else:
+            inst = self
+        return inst._weak_var_update(
+            base_str=inst.base_str.__format__(format_spec)
+        )
 
     def __ge__(self, other, /):
         return self.base_str.__ge__(other)

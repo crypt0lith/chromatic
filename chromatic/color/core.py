@@ -1354,10 +1354,10 @@ class ColorStr(str, _IntFloatMixin):
     def bold(self):
         return self.add_sgr_param(SgrParameter.BOLD)
 
-    def crossout(self):
+    def crossed_out(self):
         return self.add_sgr_param(SgrParameter.CROSSED_OUT)
 
-    def dunder(self):
+    def double_underline(self):
         return self.add_sgr_param(SgrParameter.DOUBLE_UNDERLINE)
 
     def encircle(self):
@@ -1369,7 +1369,7 @@ class ColorStr(str, _IntFloatMixin):
     def negative(self):
         return self.add_sgr_param(SgrParameter.NEGATIVE)
 
-    def sunder(self):
+    def underline(self):
         return self.add_sgr_param(SgrParameter.SINGLE_UNDERLINE)
 
     def capitalize(self):

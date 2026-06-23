@@ -1544,6 +1544,50 @@ class ColorStr(str, _IntFloatMixin):
         return NotImplemented
 
     def __format__(self, format_spec='', /):
+        """Return a formatted version of the ColorStr as described by format_spec.
+
+        A `colorbytes` subclass alias (ie., '24b', '8b', '4b') can be prepended to
+        a `str` format_spec to convert ansi types before applying the format_spec
+        to the base string.
+
+        Notes
+        -----
+        This method returns type `Self` instead of `str`, which can lead to
+        surprising behavior when dealing with f-strings.
+
+        Consider the following example:
+        >>> from chromatic import ColorStr
+        >>> cs = ColorStr("hello", fg=0xFF0000, ansi_type="24b")
+        >>> cs._ansi_type
+        <class 'chromatic.color.core.ansicolor24Bit'>
+        >>> fstring = f"{cs:4b#<20}"
+        >>> fstring.__class__
+        <class 'chromatic.color.core.ColorStr'>
+        >>> fstring._ansi_type
+        <class 'chromatic.color.core.ansicolor4Bit'>
+        >>> fstring.base_str
+        'hello###############'
+
+        In that case, the f-string eval returned a `ColorStr` object,
+        because the whole f-string only consists of a single `{...}` span.
+
+        In such cases, the underlying ``format(...) -> ColorStr`` has nothing
+        to be concatenated with, so it is returned directly.
+
+        In any case other than the single span f-string, the internals delegate
+        to normal `str` concatentation, and we get a `str` result:
+        >>> from chromatic import ColorStr
+        >>> cs = ColorStr("hello", fg=0xFF0000, ansi_type="24b")
+        >>> f"foo {cs} bar".__class__
+        <class 'str'>
+        >>> cs2 = ColorStr("world", bg=0x00FFFF, ansi_type="8b")
+        >>> fstring_concat = f"{cs: >10}{cs2: <10}"
+        >>> fstring_concat
+        '\\x1b[38;2;255;0;0m     hello\\x1b[0m\\x1b[48;5;51mworld     \\x1b[0m'
+        >>> fstring_concat.__class__
+        <class 'str'>
+
+        """
         if format_spec.startswith(("24b", "8b", "4b")):
             idx = format_spec.index("b") + 1
             alias = format_spec[:idx]

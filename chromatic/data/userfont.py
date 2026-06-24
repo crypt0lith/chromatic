@@ -71,29 +71,39 @@ class _UserfontDict(tp.TypedDict, total=False):
     is_default: bool
 
 
+class _TypedDictStruct(tp.NamedTuple):
+    required: frozenset[str]
+    optional: frozenset[str]
+    all_keys: frozenset[str]
+    annotations: mappingproxy[str, type[tp.Any]]
+
+    @classmethod
+    def from_typeddict(cls, typ: type[tp.TypedDict], /) -> tp.Self:
+        required = typ.__required_keys__
+        optional = typ.__optional_keys__
+        all_keys = frozenset(required | optional)
+        annotations = mappingproxy(tp.get_type_hints(typ))
+        return cls(required, optional, all_keys, annotations)
+
+    def match(self, obj: dict, /) -> bool:
+        if not obj.keys() <= self.all_keys:
+            return False
+        for k in self.required:
+            if not (k in obj and isinstance(obj[k], self.annotations[k])):
+                return False
+        for k in self.optional:
+            if k in obj and not isinstance(obj[k], self.annotations[k]):
+                return False
+        return True
+
+
 @lru_cache(maxsize=1)
 def _userfont_dict_struct():
-    required = _UserfontDict.__required_keys__
-    optional = _UserfontDict.__optional_keys__
-    all_keys = required | optional
-    anno = {
-        k: tp.get_args(v)[0] if tp.get_origin(v) is tp.Required else v
-        for k, v in tp.get_type_hints(_UserfontDict).items()
-    }
-    return all_keys, required, optional, anno
+    return _TypedDictStruct.from_typeddict(_UserfontDict)
 
 
-def _is_userfont_dict(obj: dict) -> tp.TypeGuard[_UserfontDict]:
-    all_keys, required, optional, anno = _userfont_dict_struct()
-    if not obj.keys() <= all_keys:
-        return False
-    for k in required:
-        if not (k in obj and isinstance(obj[k], anno[k])):
-            return False
-    for k in optional:
-        if k in obj and not isinstance(obj[k], anno[k]):
-            return False
-    return True
+def _is_userfont_dict(obj: dict, /) -> tp.TypeGuard[_UserfontDict]:
+    return _userfont_dict_struct().match(obj)
 
 
 def _load_userfonts(userfont_json: Path) -> dict[str, _UserfontDict]:
@@ -364,6 +374,7 @@ def edit_userfont(name: str, /, **kwargs: tp.Unpack[_EditUserfontKwargs]):
         global VGA437
         VGA437 = new_obj
 
+
 def set_default_userfont(name: str, /):
     if _DEFAULT_FONT is None:
         edit_userfont(name, is_default=True)
@@ -375,6 +386,7 @@ def set_default_userfont(name: str, /):
     except Exception:
         edit_userfont(current, is_default=True)
         raise
+
 
 def _fetch_default_font():
     from ._fetchers import _fetch_remote

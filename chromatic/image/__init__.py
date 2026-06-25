@@ -1,5 +1,3 @@
-from ._array import *
-from ._curses import *
-from ._glyph import *
+import lazy_loader as _lazy
 
-__all__ = list(set(_array.__all__) | set(_curses.__all__) | set(_glyph.__all__))
+__getattr__, __dir__, __all__ = _lazy.attach_stub(__name__, __file__)

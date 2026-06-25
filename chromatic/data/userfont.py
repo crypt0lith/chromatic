@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import typing as tp
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -78,14 +79,16 @@ class _TypedDictStruct(tp.NamedTuple):
     annotations: mappingproxy[str, type[tp.Any]]
 
     @classmethod
-    def from_typeddict(cls, typ: type[tp.TypedDict], /) -> tp.Self:
+    def from_typeddict(
+        cls, typ: type[tp.TypedDict], /  # type: ignore[valid-type]
+    ) -> tp.Self:
         required = typ.__required_keys__
         optional = typ.__optional_keys__
         all_keys = frozenset(required | optional)
         annotations = mappingproxy(tp.get_type_hints(typ))
         return cls(required, optional, all_keys, annotations)
 
-    def match(self, obj: dict, /) -> bool:
+    def match(self, obj: Mapping[str, tp.Any], /) -> bool:
         if not obj.keys() <= self.all_keys:
             return False
         for k in self.required:
@@ -317,12 +320,8 @@ def _userfont_asdict(obj: UserFont, /):
     return d
 
 
-class _EditUserfontKwargs(tp.TypedDict, total=False):
-    font: str
-    size: int
-    index: int
-    encoding: str
-    is_default: bool
+class _EditUserfontKwargs(_UserfontDict):
+    font: tp.NotRequired[str]  # type: ignore[misc]
 
 
 def edit_userfont(name: str, /, **kwargs: tp.Unpack[_EditUserfontKwargs]):

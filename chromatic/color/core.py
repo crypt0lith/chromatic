@@ -397,7 +397,7 @@ AnsiColorFormat: tp.TypeAlias = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
 AnsiColorType: tp.TypeAlias = type[AnsiColorFormat]
 AnsiColorParam: tp.TypeAlias = AnsiColorAlias | AnsiColorType
 _ANSI_COLOR_TYPES = frozenset({ansicolor4Bit, ansicolor8Bit, ansicolor24Bit})
-_ANSI_FORMAT_MAP = {k: x for x in _ANSI_COLOR_TYPES for k in [x, x.alias]}
+_ANSI_FORMAT_MAP = {k: x for x in _ANSI_COLOR_TYPES for k in (x, x.alias)}
 
 
 @lru_cache(maxsize=len(_ANSI_COLOR_TYPES))
@@ -409,24 +409,27 @@ def _is_ansi_type(typ: type, /) -> bool:
 
 
 @lru_cache(maxsize=len(_ANSI_FORMAT_MAP))
-def get_ansi_type(typ, /):
+def _get_ansi_type(typ, /):
     try:
         return _ANSI_FORMAT_MAP[typ]
     except (TypeError, KeyError) as e:
         if isinstance(typ, str):
             err = ValueError(f"invalid ANSI color format alias: {typ!r}")
         else:
-            from .._typing import unionize
-
-            subscript = unionize(set(_ANSI_FORMAT_MAP.values()))
             err = TypeError(
-                "Expected {.__name__!r} or {}, got {.__name__!r} object instead".format(
-                    str,
-                    type[subscript],
-                    typ if isinstance(typ, type) else typ.__class__,
+                str.format(
+                    "Expected {}, got {.__class__.__name__!r} object instead",
+                    type[AnsiColorFormat] | L[*(t.alias for t in _ANSI_COLOR_TYPES)],
+                    typ,
                 )
             )
         raise err from e
+
+
+def get_ansi_type(typ=None, /):
+    if typ is None:
+        return DEFAULT_ANSI
+    return _get_ansi_type(typ)
 
 
 def set_default_ansi(typ, /):

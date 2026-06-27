@@ -81,22 +81,6 @@ AnsiColorAlias = Ansi4BitAlias | Ansi8BitAlias | Ansi24BitAlias
 FontArgType: TypeAlias = 'FreeTypeFont | UserFont | str'
 
 
-def eval_annotation(annotation: str, **kwargs) -> Any:
-    globals_ = kwargs.get('globals', {}) | globals()
-    locals_ = kwargs.get('locals', {})
-    try:
-        return subtype(eval(annotation, globals_.copy(), locals_.copy()))
-    except NameError as e:
-        try:
-            import typing
-
-            globals_[e.name] = getattr(typing, e.name)
-            return eval_annotation(annotation, globals=globals_, locals=locals_)
-        except AttributeError:
-            pass
-        raise
-
-
 def type_error_msg(err_obj, *expected, context: str = '', obj_repr=False):
     n_expected = len(expected)
     name_slots = ["{%d.__name__!r}" % n for n in range(n_expected)]

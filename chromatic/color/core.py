@@ -28,7 +28,7 @@ from copy import deepcopy
 from ctypes import byref
 from enum import IntEnum
 from functools import lru_cache
-from types import UnionType
+from types import MappingProxyType as mappingproxy, UnionType
 from typing import Literal as L
 
 import numpy as np
@@ -741,6 +741,7 @@ def _is_sgr_param(value: int, /):
 
 class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
     _idx_attrs = ("_bg_idx", "_fg_idx")
+    _key2idx = mappingproxy({"bg": "_bg_idx", "fg": "_fg_idx"})
     __slots__ = ("_sgr_params", *_idx_attrs)
 
     class _color_descriptor:
@@ -827,25 +828,34 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
     bg = _color_descriptor()
     fg = _color_descriptor()
 
+    def _invalidate_indices(self):
+        for idx_attr in self._idx_attrs:
+            try:
+                delattr(self, idx_attr)
+            except AttributeError:
+                pass
+
     def insert(self, index, value, /):
         if value.__class__ is not SgrParamBuffer:
             value = SgrParamBuffer(value)
-        if value.is_color():
-            n = len(self._sgr_params)
-            if index >= n:
-                index = n
-            elif index < 0:
-                index = max(0, n + index)
-            for k in value._value._rgb_dict:
-                attr = f"_{k}_idx"
-                cur_idx = getattr(self, attr, None)
-                if cur_idx is None:
-                    cur_idx = -1
-                if cur_idx < index:
-                    self._sgr_params.insert(index, value)
-                    setattr(self, attr, index)
-                    return
-        self._sgr_params.insert(index, value)
+        params = self._sgr_params
+        n = len(params)
+        if index < 0:
+            index = max(0, n + index)
+        elif index > n:
+            index = n
+        params.insert(index, value)
+        keys = value._value._rgb_dict if value.is_color() else ()
+        for k, idx_attr in self._key2idx.items():
+            try:
+                cur = getattr(self, idx_attr)
+            except AttributeError:
+                continue
+            if cur is not None and cur >= index:
+                cur += 1
+            if k in keys and (cur is None or cur < index):
+                cur = index
+            setattr(self, idx_attr, cur)
 
     def extend(self, iterable, /):
         n = len(self)
@@ -907,30 +917,8 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         return inst
 
     def __delitem__(self, index, /):
-        n = len(self._sgr_params)
-        if isinstance(index, slice):
-            del self._sgr_params[index]
-            indices = range(*index.indices(n))
-            for attr in self._idx_attrs:
-                try:
-                    cur_idx = getattr(self, attr)
-                except AttributeError:
-                    continue
-                if cur_idx is None or cur_idx not in indices:
-                    continue
-                delattr(self, attr)
-        else:
-            del self._sgr_params[index]
-            index = op.index(index)
-            if index < 0:
-                index += n
-            for attr in self._idx_attrs:
-                try:
-                    cur_idx = getattr(self, attr)
-                except AttributeError:
-                    continue
-                if cur_idx == index:
-                    delattr(self, attr)
+        del self._sgr_params[index]
+        self._invalidate_indices()
 
     def __getitem__(self, index, /):
         return self._sgr_params[index]
@@ -984,32 +972,13 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         return f"{self.__class__.__name__}({list(self.values())})"
 
     def __setitem__(self, index, value, /):
-        n = len(self._sgr_params)
         iterable = map(SgrParamBuffer, _iter_sgr(value))
         if isinstance(index, slice):
             self._sgr_params[index] = iterable
-            indices = range(*index.indices(n))
-            for attr in self._idx_attrs:
-                try:
-                    cur_idx = getattr(self, attr)
-                except AttributeError:
-                    continue
-                if cur_idx is None or cur_idx not in indices:
-                    continue
-                delattr(self, attr)
         else:
             [item] = iterable
             self._sgr_params[index] = item
-            index = op.index(index)
-            if index < 0:
-                index += n
-            for attr in self._idx_attrs:
-                try:
-                    cur_idx = getattr(self, attr)
-                except AttributeError:
-                    continue
-                if cur_idx == index:
-                    delattr(self, attr)
+        self._invalidate_indices()
 
     def __str__(self):
         return bytes(self).decode()
@@ -1024,41 +993,43 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         new_colors = dict(iterable)
         if not new_colors:
             return
-        if not new_colors.keys() <= {"bg", "fg"}:
+        new_keys = new_colors.keys()
+        keys = self._key2idx.keys()
+        if not new_keys <= keys:
             raise ValueError
-        if new_colors.items() == {("bg", None), ("fg", None)}:
+        if len(new_keys) == 2 and all(v is None for v in new_colors.values()):
             return self.clear_colors()
         if ansi_type is None:
             ansi_type = DEFAULT_ANSI
         self._sgr_params[:] = [
             p
             for p in self._sgr_params
-            if not (p.is_color() and p._value._rgb_dict.keys() & new_colors)
+            if not p.is_color() or p._value._rgb_dict.keys().isdisjoint(new_colors)
         ]
-        for k in {"bg", "fg"} - new_colors.keys():
+        for k in keys - new_keys:
             try:
-                delattr(self, f"_{k}_idx")
+                delattr(self, self._key2idx[k])
             except AttributeError:
                 pass
         for k, v in new_colors.items():
-            idx_key = f"_{k}_idx"
+            idx_attr = self._key2idx[k]
             if v is None:
-                setattr(self, idx_key, None)
+                setattr(self, idx_attr, None)
             else:
                 new_idx = len(self._sgr_params)
                 x = ansi_type.from_rgb((k, v)).to_param_buffer()
                 self._sgr_params.append(x)
-                setattr(self, idx_key, new_idx)
+                setattr(self, idx_attr, new_idx)
 
-    rgb_dict = property(
-        lambda self: {
-            k: v
-            for k, v in ((attr, getattr(self, attr)) for attr in ("bg", "fg"))
-            if v is not None
-        },
-        set_colors,
-        clear_colors,
-    )
+    def _rgb_dict_get(self):
+        d = {}
+        if (bg := self.bg) is not None:
+            d["bg"] = bg
+        if (fg := self.fg) is not None:
+            d["fg"] = fg
+        return d
+
+    rgb_dict = property(_rgb_dict_get, set_colors, clear_colors)
 
 
 _END_RESET_PATTERN = re.compile(r"\x1b\[0?m$")

@@ -507,7 +507,7 @@ def font_list(ns):
         table = defaultdict(list)
         widths = defaultdict(int)
         justs = {}
-        anno = uf._userfont_dict_struct().annotations
+        anno = uf._userfont_dict_struct()[-1]
         for name, obj in uf.userfonts.items():
             is_default = obj is uf.DEFAULT_FONT
             for k, v in dict(name=name, **asdict(obj)).items():

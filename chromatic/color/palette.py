@@ -443,10 +443,10 @@ def _named_color():
                 and key[1] in ("4b", "24b")
             ):
                 name, subkey = key
-                name = name.translate(_ASCII_UPCASE).upper()
+                name = name.translate(_ASCII_UPCASE)
                 key_norm = name, subkey
             elif isinstance(key, str):
-                key_norm = key.translate(_ASCII_UPCASE).upper()
+                key_norm = key.translate(_ASCII_UPCASE)
             else:
                 raise KeyError(key)
             if key_norm in self:

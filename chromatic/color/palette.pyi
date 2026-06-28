@@ -1,12 +1,12 @@
 __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']
 
 from types import MappingProxyType
-from typing import Any, Callable, ClassVar, Literal, Mapping, TypeAlias, overload
+from typing import Any, Callable, ClassVar, Literal, MutableMapping, TypeAlias, overload
 
 from .._typing import Int3Tuple
 from .core import Color, ColorStr, color_chain
 
-_ColorLike: TypeAlias = int | Color | Int3Tuple
+_ColorLike: TypeAlias = int | Int3Tuple
 
 def named_color_idents() -> list[ColorStr]: ...
 
@@ -94,16 +94,16 @@ class AnsiStyle(DynamicNamespace):
     CYAN_BRIGHT_BG: ClassVar[color_chain]
     WHITE_BRIGHT_BG: ClassVar[color_chain]
 
-class DynamicNamespace(metaclass=DynamicNSMeta): ...
+class DynamicNamespace(metaclass=_DynamicNSMeta): ...
 
-class DynamicNSMeta(type):
-    __members__: tuple[str, ...]
+class _DynamicNSMeta(type):
+    __members__: dict[str, Any]
 
     @classmethod
     def __prepare__(
         mcls, clsname: str, bases: tuple[type, ...], /, **kwds
-    ) -> Mapping[str, object]: ...
-    def asdict(cls) -> dict[str, Any]: ...
+    ) -> MutableMapping[str, object]: ...
+    def asdict(cls) -> MappingProxyType[str, Any]: ...
 
 class ColorNamespace[NamedColor = Color](DynamicNamespace):
     BLACK: NamedColor
@@ -246,7 +246,7 @@ class ColorNamespace[NamedColor = Color](DynamicNamespace):
     LIGHT_PINK: NamedColor
     PINK: NamedColor
 
-named_color: MappingProxyType[tuple[Literal['4b', '24b'], str], Color]
+named_color: MappingProxyType[str | tuple[str, Literal['4b', '24b']], Color]
 
 @overload
 def rgb_dispatch[_F: Callable[..., Any]](f: _F, /, *names: str) -> _F: ...

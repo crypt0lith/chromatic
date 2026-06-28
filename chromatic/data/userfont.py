@@ -1,26 +1,30 @@
+__all__ = [
+    "DEFAULT_FONT",
+    "UserFont",
+    "VGA437",
+    "delete_userfont",
+    "edit_userfont",
+    "register_userfont",
+    "rename_userfont",
+    "set_default_userfont",
+    "unregister_userfont",
+    "userfonts",
+]
 import json
 import os
-import os.path as osp
-from dataclasses import dataclass, field
-from types import MappingProxyType
-from typing import TYPE_CHECKING, AnyStr
+import sys
+import typing as tp
+from dataclasses import asdict, dataclass, field
+from functools import lru_cache
+from pathlib import Path
+from types import MappingProxyType as mappingproxy
 
-if TYPE_CHECKING:
-    from typing import Required, TypedDict
-
-    class _UserFontDict(TypedDict, total=False):
-        font: Required[str]
-        size: int
-        index: int
-        encoding: str
-
-
-os.environ.setdefault("CHROMATIC_DATADIR", osp.dirname(__file__))
-os.environ["CHROMATIC_FONTDIR"] = osp.join(os.environ["CHROMATIC_DATADIR"], "fonts")
-if not osp.exists(os.environ["CHROMATIC_FONTDIR"]):
-    os.mkdir(os.environ["CHROMATIC_FONTDIR"])
+from .._typing import TypedDictMatcher
 
 _TRUETYPE_EXT = frozenset({'.ttf', '.ttc'})
+_ROOT_FONT_DIR = Path(__file__).parent / "fonts"
+_ROOT_FONT_KEY = "vga437"
+_DEFAULT_FONT = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -29,14 +33,26 @@ class UserFont:
     size: int = field(default=24, kw_only=True)
     index: int = field(default=0, kw_only=True)
     encoding: str = field(default='', kw_only=True)
+    is_default: bool = field(default=False, kw_only=True, compare=False)
+    _base_dir: Path = field(init=False, compare=False)
+
+    def __post_init__(self):
+        font_path = Path(self.font)
+        if not font_path.is_absolute():
+            raise ValueError
+        if not font_path.is_file():
+            raise FileNotFoundError(f"{font_path}")
+        object.__setattr__(self, "font", font_path.name)
+        object.__setattr__(self, "_base_dir", font_path.parent)
+        if self.is_default:
+            global _DEFAULT_FONT
+            _DEFAULT_FONT = self
 
     def __hash__(self):
         return hash((type(self), self.font, self.size, self.index, self.encoding))
 
     def __fspath__(self):
-        return osp.realpath(
-            osp.join(os.environ["CHROMATIC_DATADIR"], self.font), strict=True
-        )
+        return os.fspath(self._base_dir.joinpath(self.font).resolve(strict=True))
 
     def to_truetype(self):
         from PIL.ImageFont import truetype
@@ -44,96 +60,369 @@ class UserFont:
         return truetype(self, self.size, self.index, self.encoding)
 
 
-userfont: MappingProxyType[str, UserFont] = {}.items().mapping
+_userfonts = dict[str, UserFont]()
+userfonts = mappingproxy(_userfonts)
+DEFAULT_FONT: UserFont
 
 
-def _load_userfonts():
-    global userfont
-
-    userfont_json = osp.join(os.environ["CHROMATIC_DATADIR"], "userfont.json")
-    if osp.exists(userfont_json):
-        with open(userfont_json, mode='rb') as f:
-            data = json.load(f)
-        userfont = {k: UserFont(**v) for k, v in data.items()}.items().mapping
-    return userfont
+class _UserfontDict(tp.TypedDict, total=False):
+    font: tp.Required[str]
+    size: int
+    index: int
+    encoding: str
+    is_default: bool
 
 
-def _update_userfonts(*items: 'tuple[str, _UserFontDict]'):
-    if items:
-        userfont_json = osp.join(os.environ["CHROMATIC_DATADIR"], "userfont.json")
-        if osp.exists(userfont_json):
-            with open(userfont_json, mode='rb') as rf:
-                current = json.load(rf)
-        else:
-            current = {}
-        current.update(items)
-        with open(userfont_json, mode='w') as wf:
-            json.dump(current, wf, indent='\t', sort_keys=True)  # type: ignore[arg-type]
-        return _load_userfonts()
-    return userfont
+_userfont_dict_matcher = TypedDictMatcher(_UserfontDict)
+
+
+@lru_cache(maxsize=1)
+def _userfont_dict_struct():
+    required = _userfont_dict_matcher.required
+    optional = _userfont_dict_matcher.optional
+    all_keys = _userfont_dict_matcher.keys()
+    annotations = _userfont_dict_matcher.annotations
+    return required, optional, all_keys, annotations
+
+
+_is_userfont_dict = _userfont_dict_matcher.match
+
+
+def _load_userfonts(userfont_json: Path) -> dict[str, _UserfontDict]:
+    fname = "userfont.json"
+    if userfont_json.name != fname:
+        raise ValueError
+    if not userfont_json.exists():
+        raise FileNotFoundError(f"{userfont_json}")
+    with userfont_json.open("rb") as f:
+        d = json.load(f)
+    if not isinstance(d, dict):
+        raise TypeError
+    for v in d.values():
+        if not isinstance(v, dict):
+            raise TypeError
+        if not _is_userfont_dict(v):
+            raise ValueError
+    return d
+
+
+def _load_userfonts_from_dir(font_dir: Path, sync=False) -> dict[str, UserFont] | None:
+    if not font_dir.is_dir():
+        raise NotADirectoryError(f"{font_dir}")
+    userfont_json = font_dir / "userfont.json"
+    try:
+        d = _load_userfonts(userfont_json)
+    except FileNotFoundError:
+        return
+    nonexistent = set()
+    for k, v in d.items():
+        font_abspath = os.path.normpath(font_dir.joinpath(v["font"]).absolute())
+        if not os.path.isfile(font_abspath):
+            if sync and not os.path.exists(font_abspath):
+                nonexistent.add(k)
+                continue
+            raise FileNotFoundError(font_abspath)
+        v.update(font=font_abspath)
+    if sync and nonexistent:
+        for k in nonexistent:
+            del d[k]
+        if not d:
+            _try_delete_file(userfont_json)
+            return
+    return {k: UserFont(**v) for k, v in d.items()}
+
+
+def _dump_userfonts(
+    mapping: dict[str, dict[str, tp.Any]], /, font_dir: str | os.PathLike[str]
+):
+    font_dir = Path(font_dir)
+    userfont_json = font_dir / "userfont.json"
+    d = {}
+    if userfont_json.exists():
+        d.update(_load_userfonts(userfont_json))
+    for k, v in mapping.items():
+        if not isinstance(v, dict):
+            raise TypeError
+        if not _is_userfont_dict(v):
+            raise ValueError
+        d[k] = v
+    with userfont_json.open("w") as f:
+        json.dump(d, f, indent="\t", sort_keys=True)
+
+
+def _try_delete_file(path: str | os.PathLike[str]) -> bool:
+    path = Path(path)
+    if os.name != "nt" and not os.access(path.parent.absolute(), os.W_OK | os.X_OK):
+        return False
+    try:
+        os.remove(path)
+        return True
+    except OSError:
+        return False
+
+
+def _get_font_dir():
+    try:
+        if d := os.environ["CHROMATIC_FONTS"]:
+            return Path(d)
+    except KeyError:
+        pass
+    home = Path.home()
+    if os.name == "nt":
+        d = os.environ.get("LOCALAPPDATA") or home.joinpath("AppData", "Local")
+    else:
+        d = os.environ.get("XDG_DATA_HOME") or home.joinpath(".local", "share")
+    return Path(d).joinpath(__name__.partition(".")[0], "fonts")
+
+
+class _RegisterUserfontKwargs(tp.TypedDict, total=False):
+    name: str
+    size: int
+    index: int
+    encoding: str
+    is_default: bool
+    symlink: bool
 
 
 def register_userfont(
-    fp: AnyStr | os.PathLike[AnyStr],
-    *,
-    name: str = None,
-    size: int = None,
-    index: int = None,
-    encoding: str = None,
-    symlink=False,
-    copy=False,
+    fp: str | os.PathLike[str],
+    font_dir: str | os.PathLike[str] | None = None,
+    **kwargs: tp.Unpack[_RegisterUserfontKwargs],
 ):
-    metadata = {
-        k: v
-        for k, v in locals().items()
-        if (k in {'size', 'index', 'encoding'} and v is not None)
-    }
-    name = name or osp.splitext(osp.basename(fp))[0]
-    if not isinstance(name, str):
-        raise TypeError(
-            f"expected 'name' to be 'str', got {type(name).__name__!r} instead"
-        )
-    fp = osp.realpath(fp, strict=True)
-    if not osp.isfile(fp):
-        raise ValueError(f"not a file: {fp!r}")
-    if osp.splitext(fp)[1] not in _TRUETYPE_EXT:
-        raise ValueError(f"file is not valid truetype font {tuple(_TRUETYPE_EXT)}")
-    if osp.dirname(fp) != os.environ["CHROMATIC_FONTDIR"] and (symlink or copy):
-        loc = osp.join(os.environ["CHROMATIC_FONTDIR"], osp.basename(fp))
-        if symlink:
-            os.symlink(fp, loc)
+    fp = Path(fp)
+    if not fp.is_file():
+        raise FileNotFoundError(f"{fp}")
+    if fp.suffix.lower() not in _TRUETYPE_EXT:
+        raise ValueError("not a truetype font file: %r" % str(fp))
+    if font_dir is None:
+        font_dir = _get_font_dir()
+    else:
+        font_dir = Path(font_dir)
+    font_dir.mkdir(parents=True, exist_ok=True)
+    if not font_dir.is_absolute():
+        font_dir = Path(os.path.normpath(font_dir.absolute()))
+    if font_dir.samefile(_ROOT_FONT_DIR):
+        caller_file = Path(sys._getframe(1).f_code.co_filename)
+        if not (caller_file.is_file() and caller_file.samefile(__file__)):
+            import warnings
+
+            warnings.warn(
+                "you are writing to the root font directory. "
+                "files added here will likely be deleted "
+                "the next time you update this package.",
+                UserWarning,
+            )
+    name = fp.stem
+    metadata_fields = {"size": int, "index": int, "encoding": str, "is_default": bool}
+    metadata = {}
+    symlink = False
+    typ_err_msg = (
+        "expected {!r} to be {.__name__}, got type {.__class__.__name__!r} instead"
+    ).format
+    for k, v in kwargs.items():
+        if k == "name":
+            if not isinstance(v, str):
+                err = typ_err_msg(k, str, v)
+                raise TypeError(err)
+            name = v
+        elif k in metadata_fields:
+            expected_t = metadata_fields[k]
+            if not isinstance(v, expected_t):
+                err = typ_err_msg(k, expected_t, v)
+                raise TypeError(err)
+            metadata[k] = v
+        elif k == "symlink":
+            symlink = bool(v)
         else:
-            chunksize = 0xFFFF + 1
-            with open(fp, mode='rb') as rf, open(loc, mode='wb') as wf:
+            raise ValueError(f"unexpected keyword argument: {k!r}")
+    if not fp.parent.samefile(font_dir):
+        loc = font_dir / fp.name
+        if symlink:
+            loc.symlink_to(os.path.normpath(fp.absolute()))
+        else:
+            with fp.open("rb") as rf, loc.open("wb") as wf:
+                chunksize = 0xFFFF + 1
                 while chunk := rf.read(chunksize):
                     wf.write(chunk)
         fp = loc
-    fp = osp.relpath(fp, os.environ["CHROMATIC_DATADIR"])
-    return _update_userfonts((name, {'font': fp} | metadata))
+    metadata["font"] = os.path.abspath(fp)
+    _userfonts[name] = UserFont(**metadata)
+    _dump_userfonts({name: metadata | {"font": fp.name}}, font_dir)
 
 
-def _validate_default_font(name='vga437'):
-    from ._fetchers import _fetch_remote, filehash
+def unregister_userfont(name: str, /, delete=False):
+    if name == _ROOT_FONT_KEY:
+        raise ValueError(f"cannot unregister root default font: {name!r}")
+    try:
+        obj = _userfonts.pop(name)
+    except KeyError as err:
+        raise ValueError(f"invalid font: {name!r}") from err
+    base_dir = obj._base_dir
+    userfont_json = base_dir.joinpath("userfont.json")
+    with userfont_json.open("r") as f:
+        d = json.load(f)
+    del d[name]
+    if d:
+        with userfont_json.open("w") as f:
+            json.dump(d, f, indent="\t", sort_keys=True)
+    else:
+        # safe try-delete userfont.json because it is empty
+        _try_delete_file(userfont_json)
+    if delete is True:
+        # unsafe unlink font file when explicitly passed
+        base_dir.joinpath(obj.font).unlink()
 
-    if name in userfont and (
-        filehash(userfont[name])
+
+def delete_userfont(name: str, /):
+    return unregister_userfont(name, delete=True)
+
+
+def rename_userfont(name: str, newname: str, /):
+    if name == _ROOT_FONT_KEY:
+        raise ValueError(f"cannot rename root default font: {name!r}")
+    if name not in _userfonts:
+        raise ValueError(f"invalid font: {name!r}")
+    if name == newname:
+        return
+    userfont_json = _userfonts[name]._base_dir / "userfont.json"
+    with userfont_json.open("r") as f:
+        d = json.load(f)
+    d[newname] = d.pop(name)
+    with userfont_json.open("w") as f:
+        json.dump(d, f, indent="\t", sort_keys=True)
+    _userfonts[newname] = _userfonts.pop(name)
+
+
+def _userfont_asdict(obj: UserFont, /):
+    d = asdict(obj)
+    d.update(font=str(d.pop("_base_dir").joinpath(d.pop("font"))))
+    return d
+
+
+class _EditUserfontKwargs(_UserfontDict):
+    font: tp.NotRequired[str]  # type: ignore[misc]
+
+
+def edit_userfont(name: str, /, **kwargs: tp.Unpack[_EditUserfontKwargs]):
+    if name not in _userfonts:
+        raise ValueError(f"invalid font: {name!r}")
+    if not kwargs:
+        return
+    *_, all_keys, anno = _userfont_dict_struct()
+    if not kwargs.keys() <= all_keys:
+        raise ValueError("unexpected keys: {!r}".format(kwargs.keys() - all_keys))
+    for k, typ in anno.items():
+        if k not in kwargs:
+            continue
+        v = kwargs[k]
+        if not isinstance(v, typ):
+            err = str.format(
+                "expected {!r} to be {.__name__!r}, got {.__class__.__name__!r} instead",
+                k,
+                typ,
+                v,
+            )
+            raise TypeError(err)
+        if k != "font":
+            continue
+        if name == _ROOT_FONT_KEY:
+            raise ValueError(f"cannot change filepath of root default font: {name!r}")
+        p = Path(v).absolute()
+        if not p.is_file():
+            raise FileNotFoundError(v)
+        new_pardir = p.parent
+        current_pardir = _userfonts[name]._base_dir
+        if not new_pardir.samefile(current_pardir):
+            err = str.format(
+                "invalid filepath {!r}: "
+                "parent directory does not match registered parent directory ({} != {})",
+                v,
+                new_pardir,
+                current_pardir,
+            )
+            raise ValueError(err)
+        kwargs[k] = str(p)
+    obj = _userfonts[name]
+    d = _userfont_asdict(obj)
+    d.update(kwargs)
+    new_obj = _userfonts[name] = UserFont(**d)
+    d.update(font=new_obj.font)
+    _dump_userfonts({name: d}, obj._base_dir)
+    if name == _ROOT_FONT_KEY:
+        global VGA437
+        VGA437 = new_obj
+
+
+def set_default_userfont(name: str, /):
+    if _DEFAULT_FONT is None:
+        edit_userfont(name, is_default=True)
+        return
+    current = next(k for k, v in _userfonts.items() if v is _DEFAULT_FONT)
+    edit_userfont(current, is_default=False)
+    try:
+        edit_userfont(name, is_default=True)
+    except Exception:
+        edit_userfont(current, is_default=True)
+        raise
+
+
+def _fetch_default_font():
+    from ._fetchers import _fetch_remote
+
+    name = _ROOT_FONT_KEY
+    fname = f"{name}.ttf"
+    out_path = str(_ROOT_FONT_DIR / fname)
+    _ROOT_FONT_DIR.mkdir(exist_ok=True)
+    out_file = _fetch_remote(f"{_ROOT_FONT_DIR.name}/{fname}", out_path)
+    register_userfont(out_file, _ROOT_FONT_DIR, name=name, is_default=True)
+
+
+def _validate_default_font():
+    from ._fetchers import filehash
+
+    name = _ROOT_FONT_KEY
+    if name in userfonts and (
+        filehash(userfonts[name])
         == "a8c767fa925624d28d9879c3a03a86204f78bce4decda0a206fd152bdd906c94"
     ):
         return
-    filename = f"{name}.ttf"
-    relpath = f"fonts/{filename}"
-    out_path = osp.join(os.environ["CHROMATIC_FONTDIR"], filename)
-    register_userfont(_fetch_remote(relpath, out_path), name=name)
+    return _fetch_default_font()
 
 
-def _init_userfonts():
-    _load_userfonts()
-    if not userfont:
-        for fname in os.listdir(os.environ["CHROMATIC_FONTDIR"]):
-            if osp.splitext(fname)[1] in _TRUETYPE_EXT:
-                register_userfont(osp.join(os.environ["CHROMATIC_FONTDIR"], fname))
-    _validate_default_font()
+def _init_default_font():
+    if _ROOT_FONT_DIR.exists():
+        d = _load_userfonts_from_dir(_ROOT_FONT_DIR, sync=True)
+        if d is not None:
+            _userfonts.update(d)
+            return _validate_default_font()
+        default_font_fname = f"{_ROOT_FONT_KEY}.ttf"
+        default_font_path = _ROOT_FONT_DIR.joinpath(default_font_fname)
+        if default_font_path.exists():
+            register_userfont(
+                default_font_path, _ROOT_FONT_DIR, name=_ROOT_FONT_KEY, is_default=True
+            )
+            return _validate_default_font()
+    _fetch_default_font()
 
 
-_init_userfonts()
-DEFAULT_FONT = VGA437 = userfont['vga437']
+def _init_user_fonts():
+    user_font_dir = _get_font_dir()
+    if not user_font_dir.exists():
+        return
+    d = _load_userfonts_from_dir(user_font_dir, sync=True)
+    if d is None:
+        return
+    if _ROOT_FONT_KEY in d:
+        del d[_ROOT_FONT_KEY]
+    _userfonts.update(d)
+
+
+_init_default_font()
+VGA437 = userfonts[_ROOT_FONT_KEY]
+_init_user_fonts()
+
+
+def __getattr__(name, /):
+    if name == "DEFAULT_FONT":
+        return _DEFAULT_FONT or VGA437
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

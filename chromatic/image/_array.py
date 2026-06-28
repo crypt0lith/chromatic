@@ -352,12 +352,8 @@ def ansi_quantize(
     try:
         quantizer = _ANSI_QUANTIZERS[ansi_type]
     except KeyError:
-        err = TypeError(
-            _tp.type_error_msg(
-                ansi_type,
-                context=f"ansi_type={type[_tp.unionize(_ANSI_QUANTIZERS.keys())]}",
-            )
-        )
+        union = _tp.unionize(_ANSI_QUANTIZERS.keys())
+        err = TypeError(_tp.type_error_msg(ansi_type, context=f"ansi_type=({union})"))
         raise err from None
     if equalize is True:
         img = contrast_stretch(img)

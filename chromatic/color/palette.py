@@ -6,11 +6,7 @@ import typing as tp
 from types import FunctionType, MappingProxyType as mappingproxy
 
 from .._typing import Int3Tuple
-from .colorconv import ANSI_4BIT_RGB
-from .core import Color, ColorStr, SgrParameter, SgrSequence, color_chain
-
-if tp.TYPE_CHECKING:
-    from _typeshed import SupportsKeysAndGetItem
+from .core import Color, ColorStr, SgrSequence, color_chain
 
 
 class _ns_member_descriptor:
@@ -311,6 +307,9 @@ class AnsiFore(
         return color_chain([ColorStr(fg=fg)._sgr])
 
 
+_ASCII_UPCASE = mappingproxy({x: x ^ 0x20 for x in range(0x61, 0x7B)} | {0x20: 0x5F})
+
+
 def rgb_dispatch(*names):
     def decorator(f: FunctionType, /):
         def _prepare():
@@ -383,11 +382,10 @@ def rgb_dispatch(*names):
 
         POSITIONS, KEYWORDS = _prepare()
         HAS_VARKW = None in KEYWORDS
-        ASCII_UPCASE = {x: x ^ 0x20 for x in range(0x61, 0x7B)} | {0x20: 0x5F}
 
         @ft.cache
         def _lookup(s: str, /) -> Int3Tuple:
-            return ColorNamespace.__members__[s.translate(ASCII_UPCASE)].rgb
+            return ColorNamespace.__members__[s.translate(_ASCII_UPCASE)].rgb
 
         @ft.wraps(f)
         def wrapper(*args, **kwargs):
@@ -435,59 +433,54 @@ def rgb_dispatch(*names):
     return decorator if f is None else decorator(f)
 
 
-def _make_named_color_map() -> ...:
-    class NamedColorMapping(dict):
-
-        def __setitem__(self, *_) -> tp.Never:
-            raise NotImplementedError
-
-        def __getitem__(self, key: tuple[str, str], /):
-            try:
-                k1, k2 = key
-                if type(k2) is not str:
-                    raise TypeError
-                return super().__getitem__((k1, k2.upper()))
-            except (TypeError, KeyError, ValueError):
-                pass
+def _named_color():
+    class NamedColorDict(dict):
+        def __missing__(self, key, /):
+            if (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and isinstance(key[0], str)
+                and key[1] in ("4b", "24b")
+            ):
+                name, subkey = key
+                name = name.translate(_ASCII_UPCASE).upper()
+                key_norm = name, subkey
+            elif isinstance(key, str):
+                key_norm = key.translate(_ASCII_UPCASE).upper()
+            else:
+                raise KeyError(key)
+            if key_norm in self:
+                return self[key_norm]
             raise KeyError(key)
 
-    return NamedColorMapping(
-        ((k1, k2), rgb)
-        for k1, items in dict.items(
-            {
-                '4b': dict.items(
-                    dict(
-                        zip(
-                            [
-                                'BLACK',
-                                'RED',
-                                'GREEN',
-                                'YELLOW',
-                                'BLUE',
-                                'MAGENTA',
-                                'CYAN',
-                                'GREY',
-                                'DARK_GREY',
-                                'BRIGHT_RED',
-                                'BRIGHT_GREEN',
-                                'BRIGHT_YELLOW',
-                                'BRIGHT_BLUE',
-                                'BRIGHT_MAGENTA',
-                                'BRIGHT_CYAN',
-                                'WHITE',
-                            ],
-                            map(Color.from_rgb, ANSI_4BIT_RGB),
-                        )
-                    )
-                ),
-                '24b': ColorNamespace.asdict().items(),
-            }
-        )
-        for k2, rgb in items
+    from .colorconv import ANSI_4BIT_RGB
+
+    ansi_4bit_names = (
+        'BLACK',
+        'RED',
+        'GREEN',
+        'YELLOW',
+        'BLUE',
+        'MAGENTA',
+        'CYAN',
+        'GREY',
+        'DARK_GREY',
+        'BRIGHT_RED',
+        'BRIGHT_GREEN',
+        'BRIGHT_YELLOW',
+        'BRIGHT_BLUE',
+        'BRIGHT_MAGENTA',
+        'BRIGHT_CYAN',
+        'WHITE',
     )
+    ansi_4bit_dict = dict(zip(ansi_4bit_names, map(Color.from_rgb, ANSI_4BIT_RGB)))
 
+    out = NamedColorDict()
+    for k, mp in [("4b", ansi_4bit_dict), ("24b", ColorNamespace.asdict())]:
+        for name, v in mp.items():
+            out[name] = out[name, k] = v
 
-named_color = _make_named_color_map()
+    return mappingproxy(out)
 
 
 def named_color_idents():
@@ -497,13 +490,12 @@ def named_color_idents():
     ]
 
 
-def __getattr__(name: str, /) -> ...:
-    try:
-        return globals().setdefault(
-            name, {'Back': AnsiBack, 'Fore': AnsiFore, 'Style': AnsiStyle}[name]()
-        )
-    except KeyError:
-        pass
+def __getattr__(name: str, /):
+    if name in {"Back", "Fore", "Style"}:
+        inst = globals()[f"Ansi{name}"]()
+        return globals().setdefault(name, inst)
+    elif name == "named_color":
+        return globals().setdefault(name, _named_color())
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -511,3 +503,4 @@ if tp.TYPE_CHECKING:
     Back: AnsiBack
     Fore: AnsiFore
     Style: AnsiStyle
+    named_color: mappingproxy[str | tuple[str, tp.Literal["4b", "24b"]], Color]

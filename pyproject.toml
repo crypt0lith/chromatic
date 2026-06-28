@@ -31,6 +31,9 @@ dependencies = [
 [project.urls]
 repository = "https://github.com/crypt0lith/chromatic.git"
 
+[project.scripts]
+chromatic = "chromatic.__main__:main"
+
 [tool.setuptools_scm]
 write_to = "chromatic/_version.py"
 

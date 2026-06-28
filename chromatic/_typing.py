@@ -77,6 +77,27 @@ def unionize[_T: type](iterable: abc.Iterable[_T], /) -> types.UnionType | _T:
     return reduce(type.__or__, iterable)
 
 
+class TypedDictMatcher[_T: tp.TypedDict]:
+    def __init__(self, typeddict: type[_T], /):
+        if not tp.is_typeddict(typeddict):
+            raise ValueError(f"not a TypedDict: {typeddict}")
+        self.required = typeddict.__required_keys__
+        self.optional = typeddict.__optional_keys__
+        self.annotations = types.MappingProxyType(tp.get_type_hints(typeddict))
 
+    def keys(self):
+        return frozenset(self.required | self.optional)
 
+    def match(self, mapping: abc.Mapping[str, tp.Any], /) -> tp.TypeGuard[_T]:
+        return (
+            mapping.keys() <= self.keys()
+            and all(
+                k in mapping and isinstance(mapping[k], self.annotations[k])
+                for k in self.required
             )
+            and all(
+                isinstance(mapping[k], self.annotations[k])
+                for k in self.optional
+                if k in mapping
+            )
+        )

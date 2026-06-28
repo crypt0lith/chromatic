@@ -14,11 +14,12 @@ import json
 import os
 import sys
 import typing as tp
-from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType as mappingproxy
+
+from .._typing import TypedDictMatcher
 
 _TRUETYPE_EXT = frozenset({'.ttf', '.ttc'})
 _ROOT_FONT_DIR = Path(__file__).parent / "fonts"
@@ -72,41 +73,19 @@ class _UserfontDict(tp.TypedDict, total=False):
     is_default: bool
 
 
-class _TypedDictStruct(tp.NamedTuple):
-    required: frozenset[str]
-    optional: frozenset[str]
-    all_keys: frozenset[str]
-    annotations: mappingproxy[str, type[tp.Any]]
-
-    @classmethod
-    def from_typeddict(
-        cls, typ: type[tp.TypedDict], /  # type: ignore[valid-type]
-    ) -> tp.Self:
-        required = typ.__required_keys__
-        optional = typ.__optional_keys__
-        all_keys = frozenset(required | optional)
-        annotations = mappingproxy(tp.get_type_hints(typ))
-        return cls(required, optional, all_keys, annotations)
-
-    def match(self, obj: Mapping[str, tp.Any], /) -> bool:
-        if not obj.keys() <= self.all_keys:
-            return False
-        for k in self.required:
-            if not (k in obj and isinstance(obj[k], self.annotations[k])):
-                return False
-        for k in self.optional:
-            if k in obj and not isinstance(obj[k], self.annotations[k]):
-                return False
-        return True
+_userfont_dict_matcher = TypedDictMatcher(_UserfontDict)
 
 
 @lru_cache(maxsize=1)
 def _userfont_dict_struct():
-    return _TypedDictStruct.from_typeddict(_UserfontDict)
+    required = _userfont_dict_matcher.required
+    optional = _userfont_dict_matcher.optional
+    all_keys = _userfont_dict_matcher.keys()
+    annotations = _userfont_dict_matcher.annotations
+    return required, optional, all_keys, annotations
 
 
-def _is_userfont_dict(obj: dict, /) -> tp.TypeGuard[_UserfontDict]:
-    return _userfont_dict_struct().match(obj)
+_is_userfont_dict = _userfont_dict_matcher.match
 
 
 def _load_userfonts(userfont_json: Path) -> dict[str, _UserfontDict]:
@@ -329,7 +308,7 @@ def edit_userfont(name: str, /, **kwargs: tp.Unpack[_EditUserfontKwargs]):
         raise ValueError(f"invalid font: {name!r}")
     if not kwargs:
         return
-    all_keys, *_, anno = _userfont_dict_struct()
+    *_, all_keys, anno = _userfont_dict_struct()
     if not kwargs.keys() <= all_keys:
         raise ValueError("unexpected keys: {!r}".format(kwargs.keys() - all_keys))
     for k, typ in anno.items():

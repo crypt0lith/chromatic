@@ -743,6 +743,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
     _idx_attrs = ("_bg_idx", "_fg_idx")
     _key2idx = mappingproxy({"bg": "_bg_idx", "fg": "_fg_idx"})
     __slots__ = ("_sgr_params", *_idx_attrs)
+    __match_args__ = ("_sgr_params",)
 
     class _color_descriptor:
         def __set_name__(self, objtype, name, /):
@@ -1744,6 +1745,8 @@ def _collect_masks(
 
 
 class color_chain(abc.Sequence[tuple[SgrSequence, str]]):
+    __match_args__ = ("_masks",)
+
     @staticmethod
     def _is_mask_seq(obj, /):
         if isinstance(obj, abc.Sequence):

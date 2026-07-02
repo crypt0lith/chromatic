@@ -334,6 +334,7 @@ class color_chain(Sequence[tuple[SgrSequence, str]]):
         self, other: _T, /
     ) -> color_chain: ...
 
+    __match_args__ = ("_masks",)
     _ansi_type: type[AnsiColorFormat] | None
     _masks: list[tuple[SgrSequence, str]]
 
@@ -510,6 +511,7 @@ class SgrSequence(MutableSequence[SgrParamBuffer]):
     def __iter__(self) -> Iterator[SgrParamBuffer]: ...
 
     __slots__ = ("_sgr_params", "_bg_idx", "_fg_idx")
+    __match_args__ = ("_sgr_params",)
     _sgr_params: list[SgrParamBuffer]
     _bg_idx: int | None
     _fg_idx: int | None

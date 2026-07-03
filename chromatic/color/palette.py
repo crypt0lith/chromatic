@@ -2,8 +2,9 @@ __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_col
 
 import collections.abc as abc
 import functools as ft
+import types
 import typing as tp
-from types import FunctionType, MappingProxyType as mappingproxy
+from types import MappingProxyType as mappingproxy
 
 from .._typing import Int3Tuple
 from .core import Color, ColorStr, SgrSequence, color_chain
@@ -210,7 +211,101 @@ class ColorNamespace(DynamicNamespace, wrapper=Color):
     PINK = 0xFFC0CB
 
 
-class AnsiStyle(DynamicNamespace, wrapper=lambda x: color_chain([SgrSequence([x])])):
+class _wrap_frozen:
+    def __set_name__(self, owner, name, /):
+        for base in owner.mro()[1:]:
+            try:
+                f = getattr(base, name)
+            except AttributeError:
+                continue
+            if not callable(f):
+                raise ValueError
+            break
+        else:
+            raise ValueError(f"name not in mro: {name!r}")
+        if name == "__setitem__":
+            err = f"{owner.__name__!r} does not support item assignment"
+        elif name == "__delitem__":
+            err = f"{owner.__name__!r} does not support item deletion"
+        else:
+            err = f"{owner.__name__!r} does not support {name!r}"
+
+        def _throw_immutable(*args, **kwargs):
+            raise TypeError(err)
+
+        qualname = f"{owner.__qualname__}.{name}"
+        setattr(
+            _throw_immutable,
+            "__code__",
+            _throw_immutable.__code__.replace(co_name=name, co_qualname=qualname),
+        )
+        names = {"__qualname__": qualname, "__name__": name}
+        ft.update_wrapper(_throw_immutable, f, names.keys() ^ ft.WRAPPER_ASSIGNMENTS)
+        for attr, value in names.items():
+            setattr(_throw_immutable, attr, value)
+        setattr(owner, name, _throw_immutable)
+
+
+class _method_descriptor:
+    def __init__(self, function, /):
+        if not isinstance(function, types.FunctionType):
+            raise TypeError(
+                "expected function object, "
+                "got {.__class__.__name__!r} object instead".format(function)
+            )
+        self.__func__ = function
+
+    def __set_name__(self, owner, name, /):
+        self.__objclass__ = owner
+        f = self.__func__
+        qualname = f"{owner.__qualname__}.{name}"
+        self.__func__ = types.FunctionType(
+            f.__code__.replace(co_name=name, co_qualname=qualname),
+            f.__globals__,
+            name=name,
+            argdefs=f.__defaults__,
+            closure=f.__closure__,
+        )
+        ft.update_wrapper(
+            self.__func__,
+            f,
+            ("__doc__", "__annotations__", "__type_params__", "__kwdefaults__"),
+        )
+        for attr, value in [
+            ("__module__", owner.__module__),
+            ("__qualname__", qualname),
+        ]:
+            setattr(self.__func__, attr, value)
+
+    def __get__(self, inst, owner=None):
+        if inst is None:
+            return self.__func__
+        return types.MethodType(self.__func__, inst)
+
+    def __call__(self, /, *args, **kwargs):
+        return self.__func__(*args, **kwargs)
+
+
+_frozen_color_chain = type(
+    "_frozen_color_chain",
+    (color_chain,),
+    {
+        "__module__": __name__,
+        "__hash__": _method_descriptor(lambda self: hash((self.__class__, str(self)))),
+        **{
+            k: _wrap_frozen()
+            for k in dir(abc.MutableSequence)
+            if not hasattr(abc.Sequence, k) and k in color_chain.__dict__
+        },
+    },
+)
+
+del _wrap_frozen, _method_descriptor
+
+
+class AnsiStyle(
+    DynamicNamespace, wrapper=lambda x: _frozen_color_chain([SgrSequence([x])])
+):
     RESET = 0
     BOLD = 1
     FAINT = 2
@@ -287,7 +382,7 @@ class AnsiStyle(DynamicNamespace, wrapper=lambda x: color_chain([SgrSequence([x]
 
 class AnsiBack(
     ColorNamespace,
-    wrapper=lambda x: color_chain([ColorStr(bg=x)._sgr], ansi_type='24b'),
+    wrapper=lambda x: _frozen_color_chain(ColorStr(bg=x), ansi_type='24b'),
 ):
     __ignore__ = ("RESET",)
     RESET = AnsiStyle.DEFAULT_BG_COLOR
@@ -298,7 +393,7 @@ class AnsiBack(
 
 class AnsiFore(
     ColorNamespace,
-    wrapper=lambda x: color_chain([ColorStr(fg=x)._sgr], ansi_type='24b'),
+    wrapper=lambda x: _frozen_color_chain(ColorStr(fg=x), ansi_type='24b'),
 ):
     __ignore__ = ("RESET",)
     RESET = AnsiStyle.DEFAULT_FG_COLOR
@@ -311,7 +406,7 @@ _ASCII_UPCASE = mappingproxy({x: x ^ 0x20 for x in range(0x61, 0x7B)} | {0x20: 0
 
 
 def rgb_dispatch(*names):
-    def decorator(f: FunctionType, /):
+    def decorator(f: types.FunctionType, /):
         def _prepare():
             assert isinstance(names, set)
             code = f.__code__

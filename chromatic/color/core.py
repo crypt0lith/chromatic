@@ -1061,7 +1061,6 @@ def _colorstr[_T](
             obj = bytes(obj)
         obj = obj.decode(**buf_kwargs)
     sgr = SgrSequence()
-
     if obj is not _unset:
         if _issubclass(obj.__class__, str):
             base_str = getattr(obj, 'base_str', obj)
@@ -1069,7 +1068,10 @@ def _colorstr[_T](
             while m := sgr_match(base_str):
                 sgr.extend(m[0].removeprefix("\x1b[").removesuffix('m').encode())
                 base_str = base_str[m.end() :]
-            base_str = _END_RESET_PATTERN.sub('', base_str)
+            if base_str:
+                base_str = _END_RESET_PATTERN.sub('', base_str)
+            elif sgr and sgr[-1] == b"0":
+                del sgr[-1]
         else:
             base_str = str(obj)
     else:
@@ -1703,133 +1705,98 @@ class ColorStr(str, _IntFloatMixin):
         return self._sgr.rgb_dict
 
 
-type _ChainMask = tuple[SgrSequence, str]
-type _ChainMaskList = list[_ChainMask]
-type _ConvertibleToMask = color_chain | ColorStr | str | SgrSequence
-
-
-def _color_str_to_mask(cs: ColorStr) -> _ChainMask:
-    return cs._sgr.copy(), cs.base_str
-
-
-def _collect_masks(
-    *elts: _ConvertibleToMask,
-    masks: tp.Optional[_ChainMaskList] = None,
-    ansi_type: tp.Optional[AnsiColorParam] = None,
-) -> _ChainMaskList:
-    if masks is None:
-        masks = []
-    if ansi_type is not None:
-        ansi_type = get_ansi_type(ansi_type)
-    for elt in elts:
-        if isinstance(elt, (color_chain, ColorStr)):
-            other_masks: _ChainMaskList
-            try:
-                other_masks = [(sgr.copy(), s) for sgr, s in getattr(elt, '_masks')]
-            except AttributeError:
-                other_masks = [_color_str_to_mask(elt)]
-            masks.extend(other_masks)
-        elif isinstance(elt, str):
-            if other_masks := _split_ansi_escape(elt):
-                masks.extend(other_masks)
-            else:
-                masks.append((SgrSequence(), elt))
-        elif isinstance(elt, SgrSequence):
-            masks.append((elt.copy(), ''))
-        else:
-            raise TypeError(elt.__class__.__name__)
-    if ansi_type is not None:
-        for i in range(len(masks)):
-            masks[i][0].set_colors(masks[i][0].rgb_dict, ansi_type)
-    return masks
-
-
-class color_chain(abc.Sequence[tuple[SgrSequence, str]]):
+class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
+    __slots__ = ("_ansi_type", "_masks")
     __match_args__ = ("_masks",)
 
     @staticmethod
-    def _is_mask_seq(obj, /):
-        if isinstance(obj, abc.Sequence):
-            for x in obj:
-                match x:
-                    case (SgrSequence(), str()):
-                        continue
-                    case _:
-                        break
-            else:
-                return True
-        return False
+    def _coerce_one(obj, /) -> tuple[tp.Optional[SgrSequence], str]:
+        sgr, s = None, ""
+        match obj:
+            case "" | ColorStr(_sgr=[], base_str=""):
+                return sgr, s
+            case _ if obj.__class__ is str:
+                if sgr_pattern().match(obj):
+                    cs = ColorStr(obj)
+                    sgr = cs._sgr or None
+                    s = cs.base_str
+                else:
+                    s = obj
+            case ColorStr(_sgr=sgr, base_str=s):
+                sgr = sgr or None
+            case SgrSequence([]):
+                pass
+            case SgrSequence() as sgr:
+                pass
+            case str() as s:
+                pass
+            case _:
+                raise TypeError
+        return sgr, s
 
-    @classmethod
-    def _from_masks_unchecked(cls, masks, /, ansi_type):
-        inst = object.__new__(cls)
-        inst._ansi_type = ansi_type
-        inst._masks = []
-        prev_fg = prev_bg = None
-        for sgr, s in masks:
-            for k, prev in zip(('fg', 'bg'), (prev_fg, prev_bg)):
-                if prev is not None and prev == getattr(sgr, k):
-                    if ansi_type is None:
-                        sgr.rgb_dict = dict.fromkeys([k])
-                    else:
-                        sgr.set_colors(dict.fromkeys([k]), ansi_type)
-            inst._masks.append((sgr, s))
-            prev_fg, prev_bg = sgr.fg, sgr.bg
-        return inst
+    def _coerce_item(self, item, /):
+        match item:
+            case (SgrSequence() as sgr, _ as s):
+                sgr = sgr.copy()
+                if s.__class__ is not str:
+                    other_sgr, s = self._coerce_one(s)
+                    if other_sgr is not None:
+                        sgr += other_sgr
+            case _ as s:
+                sgr, s = self._coerce_one(s)
+                sgr = SgrSequence() if sgr is None else sgr.copy()
+        if self._ansi_type is not None and sgr.bg or sgr.fg:
+            sgr.set_colors(sgr.rgb_dict, self._ansi_type)
+        return sgr, s
 
-    @classmethod
-    def from_masks(cls, masks, /, ansi_type=None):
-        if cls._is_mask_seq(masks):
-            return cls._from_masks_unchecked(
-                masks, ansi_type if ansi_type is None else get_ansi_type(ansi_type)
-            )
-        raise TypeError
+    def insert(self, index, value, /):
+        self._masks.insert(index, self._coerce_item(value))
 
     def shrink(self):
-        """Return a copy where SGR sequences are joined for spans of empty string parts"""
-        if self:
-            maxlen = len(self._masks)
-            it = enumerate(self._masks)
-            out = []
-            while True:
-                try:
-                    idx, (sgr, s) = next(it)
-                    sgr = sgr.copy()
-                    while idx + 1 < maxlen and not s:
-                        idx, xs = next(it)
-                        sgr += xs[0]; s = xs[1]  # fmt: skip
-                    else:
-                        out.append((sgr, s))
-                except StopIteration:
-                    break
-        else:
-            out = self.masks
-        return self._from_masks_unchecked(out, ansi_type=self._ansi_type)
+        """Mutate self in-place by joining SGR sequences for spans of empty string parts
+        and vice-versa.
 
-    def merge(self, *other):
-        if not other:
-            return self
-        masks = self.masks
-        for x in other:
-            for sgr, s in x:
-                if not masks[-1][-1]:
-                    masks[-1] = masks[-1][0] + sgr, s
+        This operation removes items from the sequence, so prior length assumptions
+        should be considered invalidated by calling this method.
+        """
+        maxlen = len(self)
+        if maxlen <= 1:
+            return
+        it = iter(self)
+        buf = []
+        idx = 0
+        while True:
+            try:
+                sgr, s = next(it)
+                while idx + 1 < maxlen and not s:
+                    _sgr, s = next(it)
+                    sgr += _sgr
+                    idx += 1
                 else:
-                    masks.append((sgr, s))
-        return self._from_masks_unchecked(masks, ansi_type=self._ansi_type)
+                    buf.append((sgr, s))
+                idx += 1
+            except StopIteration:
+                break
+        idx = len(buf) - 1
+        while idx > 0:
+            sgr, s = buf[idx]
+            while idx - 1 >= 0 and not sgr:
+                buf[idx] = None
+                idx -= 1
+                sgr, _s = buf[idx]
+                s = _s + s
+            else:
+                buf[idx] = sgr, s
+            idx -= 1
+        self[:] = filter(None, buf)
 
     def __add__(self, other, /):
-        try:
-            masks = _collect_masks(
-                other, masks=deepcopy(self._masks), ansi_type=self._ansi_type
+        if isinstance(other, abc.Iterable):
+            return color_chain(
+                (x for xs in (self, other) for x in xs),
+                ansi_type=self._ansi_type or getattr(other, "_ansi_type", None),
             )
-        except TypeError as e:
-            tb = e.__traceback__
-            if tb and tb.tb_frame.f_code is _collect_masks.__code__:
-                return NotImplemented
-            raise
-        else:
-            return self._from_masks_unchecked(masks, ansi_type=self._ansi_type)
+        return NotImplemented
 
     def __bool__(self):
         return bool(self._masks)
@@ -1837,64 +1804,79 @@ class color_chain(abc.Sequence[tuple[SgrSequence, str]]):
     def __call__(self, obj='', /):
         return f"{self}{obj}\x1b[0m"
 
+    def __delitem__(self, index, /):
+        del self._masks[index]
+
+    def __eq__(self, other, /):
+        if isinstance(other, color_chain):
+            return self._masks == other._masks
+        return NotImplemented
+
     def __getitem__(self, index, /):
-        return self.masks[index]
+        return self._masks[index]
+
+    _split_fromstr = re.compile(
+        rf"({sgr_pattern().pattern})([^\x1b]*)(?:\x1b\[0?m)?"
+    ).split
 
     def __init__(self, iterable=None, /, *, ansi_type=None):
-        self._ansi_type = None
-        if ansi_type is not None:
-            self._ansi_type = get_ansi_type(ansi_type)
-        iterable = iterable or []
-        self._masks = _collect_masks(*iterable, ansi_type=self._ansi_type)
+        self._ansi_type = get_ansi_type(ansi_type) if ansi_type else None
+        if iterable is None:
+            self._masks = []
+            return
+        elif isinstance(iterable, str):
+            it = iter(self._split_fromstr(iterable))
+            buf = []
+            while True:
+                try:
+                    if start := next(it):
+                        buf.append((SgrSequence(), start))
+                    sgr, s = next(it), next(it)
+                    # regex invariant
+                    # sgr[2:-1] => '\x1b[' (...) 'm'
+                    sgr = SgrSequence(sgr[2:-1].encode())
+                    buf.append((sgr, s))
+                except StopIteration:
+                    break
+            self._masks = buf
+        else:
+            self._masks = list(map(self._coerce_item, iterable))
 
     def __len__(self):
         return len(self._masks)
 
-    def __or__(self, other, /):
-        if _issubclass(other.__class__, self.__class__):
-            return self.merge(other)
-        return NotImplemented
-
     def __radd__(self, other, /):
-        if isinstance(other, ColorStr):
-            return self._from_masks_unchecked(
-                [_color_str_to_mask(other), *self.masks],
-                ansi_type=(
-                    self._ansi_type if self._ansi_type is None else other.ansi_type
-                ),
+        if isinstance(other, abc.Iterable):
+            return color_chain(
+                (x for xs in (other, self) for x in xs),
+                ansi_type=getattr(other, "_ansi_type", self._ansi_type),
             )
-        elif isinstance(other, str):
-            if (parsed := _split_ansi_escape(other)) is not None:
-                return self._from_masks_unchecked(
-                    parsed + self.masks, ansi_type=self._ansi_type
-                )
-            else:
-                return self._from_masks_unchecked(
-                    [(SgrSequence(), other), *self.masks], ansi_type=self._ansi_type
-                )
         return NotImplemented
 
     def __repr__(self):
-        return "{.__class__.__name__}({})".format(
-            self,
-            ', '.join(
-                [
-                    repr([f"{sgr}{s}" for sgr, s in self._masks]),
-                    *(
-                        [f"ansi_type={self._ansi_type.alias!r}"]
-                        if self._ansi_type
-                        else ()
-                    ),
-                ]
-            ),
-        )
+        constructor_args = repr([f"{sgr}{s}" for sgr, s in self])
+        if self._ansi_type is not None:
+            constructor_args += f", ansi_type={self._ansi_type.alias!r}"
+        return "{.__class__.__name__}({})".format(self, constructor_args)
+
+    def __setitem__(self, index, value, /):
+        def _validate(obj, /):
+            if (
+                isinstance(obj, tuple)
+                and len(obj) == 2
+                and isinstance(obj[0], SgrSequence)
+                and obj[1].__class__ is str
+            ):
+                return obj
+            raise TypeError
+
+        if isinstance(index, slice):
+            self._masks[index] = list(map(_validate, value))
+        else:
+            self._masks[index] = _validate(value)
 
     def __str__(self):
-        kwargs = {"reset": False}
-        if self._ansi_type is not None:
-            kwargs["ansi_type"] = self._ansi_type
-        return ''.join(ColorStr(f"{sgr}{s}", **kwargs) for sgr, s in self._masks)
-
-    @property
-    def masks(self):
-        return self._masks[:]
+        return ''.join(
+            ColorStr(f"{sgr}{s}", ansi_type=self._ansi_type, reset=False) if sgr else s
+            for sgr, s in self
+        )

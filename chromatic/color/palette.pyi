@@ -2,7 +2,7 @@ __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_col
 
 import collections.abc as abc
 import typing as tp
-from types import MappingProxyType
+from types import GenericAlias, MappingProxyType
 
 from .._typing import Int3Tuple
 from .core import Color, ColorStr, color_chain
@@ -105,6 +105,11 @@ class DynamicNamespace(metaclass=_DynamicNSMeta): ...
 
 class _DynamicNSMeta(type):
     __members__: dict[str, tp.Any]
+
+    @tp.overload
+    def __getitem__(cls, key: str, /) -> tp.Any: ...
+    @tp.overload
+    def __getitem__[_T: type | tp.TypeVar | tp._Final](cls, key: _T | tuple[_T, ...], /) -> GenericAlias: ...
 
     @classmethod
     def __prepare__(

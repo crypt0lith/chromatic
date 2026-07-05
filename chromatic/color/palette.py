@@ -6,7 +6,6 @@ import types
 import typing as tp
 from types import MappingProxyType as mappingproxy
 
-from .._typing import Int3Tuple
 from .core import Color, ColorStr, SgrSequence, color_chain
 
 
@@ -24,8 +23,15 @@ class _ns_member_descriptor:
         return typ.__members__[self.name]
 
 
+_ASCII_UPCASE = mappingproxy({x: x ^ 0x20 for x in range(0x61, 0x7B)} | {0x20: 0x5F})
+
+
 class _DynamicNSMeta(type):
     __members__: abc.Mapping[str, tp.Any]
+
+    if tp.TYPE_CHECKING:
+
+        def _getmember(cls, key: str, /) -> tp.Any: ...
 
     @classmethod
     def __prepare__(mcls, name, bases, /, **_) -> abc.MutableMapping[str, object]:
@@ -59,7 +65,35 @@ class _DynamicNSMeta(type):
             res.__members__.update(
                 {k: wrapper_f(v) for k, v in res.__members__.items()}
             )
+
+        def _getmember(cls, key: str, /):
+            try:
+                _key_ = getattr(key, "translate", lambda _: key)(_ASCII_UPCASE)
+                return cls.__members__[_key_]
+            except KeyError as e:
+                e.args = (key,)
+                raise
+
+        getmember_qualname = f"{res.__qualname__}.{_getmember.__name__}"
+        setattr(_getmember, "__qualname__", getmember_qualname)
+        setattr(
+            _getmember,
+            "__code__",
+            _getmember.__code__.replace(co_qualname=getmember_qualname),
+        )
+        maxsize = len(res.__members__)
+        maxsize += maxsize % 8
+        _getmember = ft.lru_cache(maxsize=maxsize)(_getmember)
+        setattr(res, "_getmember", types.MethodType(_getmember, res))
         return res
+
+    def __getitem__(cls, key, /):
+        try:
+            return cls._getmember(key)
+        except Exception:
+            if isinstance(key, (type, tp.TypeVar, tp._Final, tuple)):
+                return types.GenericAlias(cls, key)
+            raise
 
     def asdict(cls):
         return mappingproxy(cls.__members__)
@@ -388,7 +422,7 @@ class AnsiBack(
     RESET = AnsiStyle.DEFAULT_BG_COLOR
 
     def __call__(self, bg: Color | int | tuple[int, int, int]):
-        return color_chain([ColorStr(bg=bg)._sgr])
+        return color_chain(ColorStr(bg=bg))
 
 
 class AnsiFore(
@@ -399,10 +433,7 @@ class AnsiFore(
     RESET = AnsiStyle.DEFAULT_FG_COLOR
 
     def __call__(self, fg: Color | int | tuple[int, int, int]):
-        return color_chain([ColorStr(fg=fg)._sgr])
-
-
-_ASCII_UPCASE = mappingproxy({x: x ^ 0x20 for x in range(0x61, 0x7B)} | {0x20: 0x5F})
+        return color_chain(ColorStr(fg=fg))
 
 
 def rgb_dispatch(*names):
@@ -478,10 +509,6 @@ def rgb_dispatch(*names):
         POSITIONS, KEYWORDS = _prepare()
         HAS_VARKW = None in KEYWORDS
 
-        @ft.cache
-        def _lookup(s: str, /) -> Int3Tuple:
-            return ColorNamespace.__members__[s.translate(_ASCII_UPCASE)].rgb
-
         @ft.wraps(f)
         def wrapper(*args, **kwargs):
             _kwargs = kwargs.copy()
@@ -499,7 +526,7 @@ def rgb_dispatch(*names):
                 if not (k in KEYWORDS or HAS_VARKW):
                     continue
                 try:
-                    v = _lookup(v)
+                    v = ColorNamespace[v].rgb
                 except KeyError:
                     continue
                 _kwargs[k] = v
@@ -512,7 +539,7 @@ def rgb_dispatch(*names):
                     _args.append(v)
                     continue
                 try:
-                    res = _lookup(v)
+                    res = ColorNamespace[v].rgb
                 except KeyError:
                     _args.append(v)
                     continue

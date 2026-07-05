@@ -68,11 +68,19 @@ class _DynamicNSMeta(type):
 
         def _getmember(cls, key: str, /):
             try:
-                _key_ = getattr(key, "translate", lambda _: key)(_ASCII_UPCASE)
+                _key_ = key.translate(_ASCII_UPCASE)
                 return cls.__members__[_key_]
             except KeyError as e:
                 e.args = (key,)
                 raise
+            except (AttributeError, TypeError) as e:
+                err = TypeError(
+                    "expected {.__name__} object, got {.__class__.__name__!r} instead".format(
+                        str, key
+                    )
+                )
+                err.__cause__ = e
+                raise err
 
         getmember_qualname = f"{res.__qualname__}.{_getmember.__name__}"
         setattr(_getmember, "__qualname__", getmember_qualname)
@@ -81,9 +89,7 @@ class _DynamicNSMeta(type):
             "__code__",
             _getmember.__code__.replace(co_qualname=getmember_qualname),
         )
-        maxsize = len(res.__members__)
-        maxsize += maxsize % 8
-        _getmember = ft.lru_cache(maxsize=maxsize)(_getmember)
+        _getmember = ft.cache(_getmember)
         setattr(res, "_getmember", types.MethodType(_getmember, res))
         return res
 
@@ -436,6 +442,11 @@ class AnsiFore(
         return color_chain(ColorStr(fg=fg))
 
 
+_rgb_lookup = type(
+    "_RGB_LOOKUP", (ColorNamespace,), {}, wrapper=lambda x: x.rgb
+)._getmember
+
+
 def rgb_dispatch(*names):
     def decorator(f: types.FunctionType, /):
         def _prepare():
@@ -526,7 +537,7 @@ def rgb_dispatch(*names):
                 if not (k in KEYWORDS or HAS_VARKW):
                     continue
                 try:
-                    v = ColorNamespace[v].rgb
+                    v = _rgb_lookup(v)
                 except KeyError:
                     continue
                 _kwargs[k] = v
@@ -539,7 +550,7 @@ def rgb_dispatch(*names):
                     _args.append(v)
                     continue
                 try:
-                    res = ColorNamespace[v].rgb
+                    res = _rgb_lookup(v)
                 except KeyError:
                     _args.append(v)
                     continue

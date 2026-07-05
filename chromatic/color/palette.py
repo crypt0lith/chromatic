@@ -91,8 +91,8 @@ class _DynamicNSMeta(type):
         try:
             return cls._getmember(key)
         except Exception:
-            if isinstance(key, (type, tp.TypeVar, tp._Final, tuple)):
-                return types.GenericAlias(cls, key)
+            if callable(subscript := getattr(cls, "__class_getitem__", None)):
+                return subscript(key)
             raise
 
     def asdict(cls):

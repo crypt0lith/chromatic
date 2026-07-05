@@ -2,106 +2,15 @@ __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_col
 
 import collections.abc as abc
 import typing as tp
-from types import GenericAlias, MappingProxyType
+from types import MappingProxyType
 
 from .._typing import Int3Tuple
 from .core import Color, ColorStr, color_chain
 
-_ColorLike: tp.TypeAlias = int | Int3Tuple
-
-def named_color_idents() -> list[ColorStr]: ...
-
-class _frozen_color_chain(color_chain):
-    def __hash__(self) -> int: ...
-    def __delitem__(self, index, /) -> tp.Never: ...
-    def __setitem__(self, index, value, /) -> tp.Never: ...
-    def insert(self, index, value, /) -> tp.Never: ...
-
-class AnsiBack(ColorNamespace[_frozen_color_chain]):
-    RESET: tp.ClassVar[_frozen_color_chain]
-
-    def __call__(self, bg: _ColorLike) -> color_chain: ...
-
-class AnsiFore(ColorNamespace[_frozen_color_chain]):
-    RESET: tp.ClassVar[_frozen_color_chain]
-
-    def __call__(self, fg: _ColorLike) -> color_chain: ...
-
-class AnsiStyle(DynamicNamespace):
-    RESET: tp.ClassVar[_frozen_color_chain]
-    BOLD: tp.ClassVar[_frozen_color_chain]
-    FAINT: tp.ClassVar[_frozen_color_chain]
-    ITALICS: tp.ClassVar[_frozen_color_chain]
-    SINGLE_UNDERLINE: tp.ClassVar[_frozen_color_chain]
-    SLOW_BLINK: tp.ClassVar[_frozen_color_chain]
-    RAPID_BLINK: tp.ClassVar[_frozen_color_chain]
-    NEGATIVE: tp.ClassVar[_frozen_color_chain]
-    CONCEALED_CHARS: tp.ClassVar[_frozen_color_chain]
-    CROSSED_OUT: tp.ClassVar[_frozen_color_chain]
-    PRIMARY: tp.ClassVar[_frozen_color_chain]
-    FIRST_ALT: tp.ClassVar[_frozen_color_chain]
-    SECOND_ALT: tp.ClassVar[_frozen_color_chain]
-    THIRD_ALT: tp.ClassVar[_frozen_color_chain]
-    FOURTH_ALT: tp.ClassVar[_frozen_color_chain]
-    FIFTH_ALT: tp.ClassVar[_frozen_color_chain]
-    SIXTH_ALT: tp.ClassVar[_frozen_color_chain]
-    SEVENTH_ALT: tp.ClassVar[_frozen_color_chain]
-    EIGHTH_ALT: tp.ClassVar[_frozen_color_chain]
-    NINTH_ALT: tp.ClassVar[_frozen_color_chain]
-    GOTHIC: tp.ClassVar[_frozen_color_chain]
-    DOUBLE_UNDERLINE: tp.ClassVar[_frozen_color_chain]
-    RESET_BOLD_AND_FAINT: tp.ClassVar[_frozen_color_chain]
-    RESET_ITALIC_AND_GOTHIC: tp.ClassVar[_frozen_color_chain]
-    RESET_UNDERLINES: tp.ClassVar[_frozen_color_chain]
-    RESET_BLINKING: tp.ClassVar[_frozen_color_chain]
-    POSITIVE: tp.ClassVar[_frozen_color_chain]
-    REVEALED_CHARS: tp.ClassVar[_frozen_color_chain]
-    RESET_CROSSED_OUT: tp.ClassVar[_frozen_color_chain]
-    BLACK_FG: tp.ClassVar[_frozen_color_chain]
-    RED_FG: tp.ClassVar[_frozen_color_chain]
-    GREEN_FG: tp.ClassVar[_frozen_color_chain]
-    YELLOW_FG: tp.ClassVar[_frozen_color_chain]
-    BLUE_FG: tp.ClassVar[_frozen_color_chain]
-    MAGENTA_FG: tp.ClassVar[_frozen_color_chain]
-    CYAN_FG: tp.ClassVar[_frozen_color_chain]
-    WHITE_FG: tp.ClassVar[_frozen_color_chain]
-    DEFAULT_FG_COLOR: tp.ClassVar[_frozen_color_chain]
-    BLACK_BG: tp.ClassVar[_frozen_color_chain]
-    RED_BG: tp.ClassVar[_frozen_color_chain]
-    GREEN_BG: tp.ClassVar[_frozen_color_chain]
-    YELLOW_BG: tp.ClassVar[_frozen_color_chain]
-    BLUE_BG: tp.ClassVar[_frozen_color_chain]
-    MAGENTA_BG: tp.ClassVar[_frozen_color_chain]
-    CYAN_BG: tp.ClassVar[_frozen_color_chain]
-    WHITE_BG: tp.ClassVar[_frozen_color_chain]
-    DEFAULT_BG_COLOR: tp.ClassVar[_frozen_color_chain]
-    FRAMED: tp.ClassVar[_frozen_color_chain]
-    ENCIRCLED: tp.ClassVar[_frozen_color_chain]
-    OVERLINED: tp.ClassVar[_frozen_color_chain]
-    NOT_FRAMED_OR_CIRCLED: tp.ClassVar[_frozen_color_chain]
-    IDEOGRAM_UNDER_OR_RIGHT: tp.ClassVar[_frozen_color_chain]
-    IDEOGRAM_2UNDER_OR_2RIGHT: tp.ClassVar[_frozen_color_chain]
-    IDEOGRAM_OVER_OR_LEFT: tp.ClassVar[_frozen_color_chain]
-    IDEOGRAM_2OVER_OR_2LEFT: tp.ClassVar[_frozen_color_chain]
-    CANCEL: tp.ClassVar[_frozen_color_chain]
-    BLACK_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
-    RED_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
-    GREEN_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
-    YELLOW_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
-    BLUE_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
-    MAGENTA_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
-    CYAN_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
-    WHITE_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
-    BLACK_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
-    RED_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
-    GREEN_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
-    YELLOW_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
-    BLUE_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
-    MAGENTA_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
-    CYAN_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
-    WHITE_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
-
-class DynamicNamespace(metaclass=_DynamicNSMeta): ...
+if tp.TYPE_CHECKING:
+    class _SupportsClassGetItem(tp.Protocol):
+        @classmethod
+        def __class_getitem__(cls: type[tp.Self], args: tp.Any, /) -> type[tp.Self]: ...
 
 class _DynamicNSMeta(type):
     __members__: dict[str, tp.Any]
@@ -109,13 +18,17 @@ class _DynamicNSMeta(type):
     @tp.overload
     def __getitem__(cls, key: str, /) -> tp.Any: ...
     @tp.overload
-    def __getitem__[_T: type | tp.TypeVar | tp._Final](cls, key: _T | tuple[_T, ...], /) -> GenericAlias: ...
+    def __getitem__[_T: _SupportsClassGetItem](
+        cls: type[_T], key: tp.Any, /
+    ) -> type[_T]: ...
 
     @classmethod
     def __prepare__(
         mcls, clsname: str, bases: tuple[type, ...], /, **kwds
     ) -> abc.MutableMapping[str, object]: ...
     def asdict(cls) -> MappingProxyType[str, tp.Any]: ...
+
+class DynamicNamespace(metaclass=_DynamicNSMeta): ...
 
 class ColorNamespace[NamedColor = Color](DynamicNamespace):
     BLACK: NamedColor
@@ -258,7 +171,97 @@ class ColorNamespace[NamedColor = Color](DynamicNamespace):
     LIGHT_PINK: NamedColor
     PINK: NamedColor
 
-named_color: MappingProxyType[str | tuple[str, tp.Literal['4b', '24b']], Color]
+class _frozen_color_chain(color_chain):
+    def __hash__(self) -> int: ...
+    def __delitem__(self, index, /) -> tp.Never: ...
+    def __setitem__(self, index, value, /) -> tp.Never: ...
+    def insert(self, index, value, /) -> tp.Never: ...
+
+class AnsiStyle(DynamicNamespace):
+    RESET: tp.ClassVar[_frozen_color_chain]
+    BOLD: tp.ClassVar[_frozen_color_chain]
+    FAINT: tp.ClassVar[_frozen_color_chain]
+    ITALICS: tp.ClassVar[_frozen_color_chain]
+    SINGLE_UNDERLINE: tp.ClassVar[_frozen_color_chain]
+    SLOW_BLINK: tp.ClassVar[_frozen_color_chain]
+    RAPID_BLINK: tp.ClassVar[_frozen_color_chain]
+    NEGATIVE: tp.ClassVar[_frozen_color_chain]
+    CONCEALED_CHARS: tp.ClassVar[_frozen_color_chain]
+    CROSSED_OUT: tp.ClassVar[_frozen_color_chain]
+    PRIMARY: tp.ClassVar[_frozen_color_chain]
+    FIRST_ALT: tp.ClassVar[_frozen_color_chain]
+    SECOND_ALT: tp.ClassVar[_frozen_color_chain]
+    THIRD_ALT: tp.ClassVar[_frozen_color_chain]
+    FOURTH_ALT: tp.ClassVar[_frozen_color_chain]
+    FIFTH_ALT: tp.ClassVar[_frozen_color_chain]
+    SIXTH_ALT: tp.ClassVar[_frozen_color_chain]
+    SEVENTH_ALT: tp.ClassVar[_frozen_color_chain]
+    EIGHTH_ALT: tp.ClassVar[_frozen_color_chain]
+    NINTH_ALT: tp.ClassVar[_frozen_color_chain]
+    GOTHIC: tp.ClassVar[_frozen_color_chain]
+    DOUBLE_UNDERLINE: tp.ClassVar[_frozen_color_chain]
+    RESET_BOLD_AND_FAINT: tp.ClassVar[_frozen_color_chain]
+    RESET_ITALIC_AND_GOTHIC: tp.ClassVar[_frozen_color_chain]
+    RESET_UNDERLINES: tp.ClassVar[_frozen_color_chain]
+    RESET_BLINKING: tp.ClassVar[_frozen_color_chain]
+    POSITIVE: tp.ClassVar[_frozen_color_chain]
+    REVEALED_CHARS: tp.ClassVar[_frozen_color_chain]
+    RESET_CROSSED_OUT: tp.ClassVar[_frozen_color_chain]
+    BLACK_FG: tp.ClassVar[_frozen_color_chain]
+    RED_FG: tp.ClassVar[_frozen_color_chain]
+    GREEN_FG: tp.ClassVar[_frozen_color_chain]
+    YELLOW_FG: tp.ClassVar[_frozen_color_chain]
+    BLUE_FG: tp.ClassVar[_frozen_color_chain]
+    MAGENTA_FG: tp.ClassVar[_frozen_color_chain]
+    CYAN_FG: tp.ClassVar[_frozen_color_chain]
+    WHITE_FG: tp.ClassVar[_frozen_color_chain]
+    DEFAULT_FG_COLOR: tp.ClassVar[_frozen_color_chain]
+    BLACK_BG: tp.ClassVar[_frozen_color_chain]
+    RED_BG: tp.ClassVar[_frozen_color_chain]
+    GREEN_BG: tp.ClassVar[_frozen_color_chain]
+    YELLOW_BG: tp.ClassVar[_frozen_color_chain]
+    BLUE_BG: tp.ClassVar[_frozen_color_chain]
+    MAGENTA_BG: tp.ClassVar[_frozen_color_chain]
+    CYAN_BG: tp.ClassVar[_frozen_color_chain]
+    WHITE_BG: tp.ClassVar[_frozen_color_chain]
+    DEFAULT_BG_COLOR: tp.ClassVar[_frozen_color_chain]
+    FRAMED: tp.ClassVar[_frozen_color_chain]
+    ENCIRCLED: tp.ClassVar[_frozen_color_chain]
+    OVERLINED: tp.ClassVar[_frozen_color_chain]
+    NOT_FRAMED_OR_CIRCLED: tp.ClassVar[_frozen_color_chain]
+    IDEOGRAM_UNDER_OR_RIGHT: tp.ClassVar[_frozen_color_chain]
+    IDEOGRAM_2UNDER_OR_2RIGHT: tp.ClassVar[_frozen_color_chain]
+    IDEOGRAM_OVER_OR_LEFT: tp.ClassVar[_frozen_color_chain]
+    IDEOGRAM_2OVER_OR_2LEFT: tp.ClassVar[_frozen_color_chain]
+    CANCEL: tp.ClassVar[_frozen_color_chain]
+    BLACK_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
+    RED_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
+    GREEN_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
+    YELLOW_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
+    BLUE_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
+    MAGENTA_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
+    CYAN_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
+    WHITE_BRIGHT_FG: tp.ClassVar[_frozen_color_chain]
+    BLACK_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
+    RED_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
+    GREEN_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
+    YELLOW_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
+    BLUE_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
+    MAGENTA_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
+    CYAN_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
+    WHITE_BRIGHT_BG: tp.ClassVar[_frozen_color_chain]
+
+_ColorLike: tp.TypeAlias = int | Int3Tuple
+
+class AnsiBack(ColorNamespace[_frozen_color_chain]):
+    RESET: tp.ClassVar[_frozen_color_chain]
+
+    def __call__(self, bg: _ColorLike) -> color_chain: ...
+
+class AnsiFore(ColorNamespace[_frozen_color_chain]):
+    RESET: tp.ClassVar[_frozen_color_chain]
+
+    def __call__(self, fg: _ColorLike) -> color_chain: ...
 
 @tp.overload
 def rgb_dispatch[_F: abc.Callable[..., tp.Any]](f: _F, /, *names: str) -> _F: ...
@@ -266,6 +269,10 @@ def rgb_dispatch[_F: abc.Callable[..., tp.Any]](f: _F, /, *names: str) -> _F: ..
 def rgb_dispatch[_F: abc.Callable[..., tp.Any]](
     *names: str,
 ) -> abc.Callable[[_F], _F]: ...
+
+named_color: MappingProxyType[str | tuple[str, tp.Literal['4b', '24b']], Color]
+
+def named_color_idents() -> list[ColorStr]: ...
 
 Back: AnsiBack
 Fore: AnsiFore

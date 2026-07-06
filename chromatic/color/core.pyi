@@ -116,11 +116,8 @@ class SgrParameter(IntEnum):
     CYAN_BRIGHT_BG = 106
     WHITE_BRIGHT_BG = 107
 
-_SGR_PARAM_VALUES: tp.Final[frozenset[int]]
 _ANSI16C_I2KV: tp.Final[dict[int, tuple[ColorDictKeys, Int3Tuple]]]
 _ANSI16C_KV2I: tp.Final[dict[tuple[ColorDictKeys, Int3Tuple], int]]
-_ANSI16C_STD: tp.Final[frozenset[int]]
-_ANSI16C_BRIGHT: tp.Final[frozenset[int]]
 _ANSI256_B2KEY: tp.Final[dict[L[b'38', b'48'], ColorDictKeys]]
 _ANSI256_KEY2I: tp.Final[dict[ColorDictKeys, int]]
 
@@ -151,12 +148,15 @@ class colorbytes(bytes):
 
 class ansicolor4Bit(colorbytes):
     alias: tp.ClassVar[L['4b']]
+    typecode: tp.ClassVar[L[1]]
 
 class ansicolor8Bit(colorbytes):
     alias: tp.ClassVar[L['8b']]
+    typecode: tp.ClassVar[L[2]]
 
 class ansicolor24Bit(colorbytes):
     alias: tp.ClassVar[L['24b']]
+    typecode: tp.ClassVar[L[3]]
 
 def is_vt_enabled() -> bool: ...
 

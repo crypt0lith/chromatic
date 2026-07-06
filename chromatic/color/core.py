@@ -17,7 +17,8 @@ __all__ = [
 ]
 
 import collections.abc as abc
-import operator as op
+import enum
+import functools as ft
 import os
 import random
 import re
@@ -25,9 +26,6 @@ import sys
 import typing as tp
 from collections import Counter
 from copy import deepcopy
-from ctypes import byref
-from enum import IntEnum
-from functools import lru_cache
 from types import MappingProxyType as mappingproxy, UnionType
 from typing import Literal as L
 
@@ -51,7 +49,7 @@ SGR_RESET_S: tp.Final[str] = '\x1b[0m'
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code#SGR
 # int enum {sgr parameter name ==> sgr code (int)}
-class SgrParameter(IntEnum):
+class SgrParameter(enum.IntEnum):
     RESET = 0
     BOLD = 1
     FAINT = 2
@@ -131,8 +129,6 @@ class SgrParameter(IntEnum):
 # ----------------
 # CONSTANT LOOKUPS
 
-_SGR_PARAM_VALUES = frozenset(x.value for x in SgrParameter)
-
 # ansi 4bit {color code (int) ==> (key, RGB)}
 _ANSI16C_I2KV: dict[int, tuple[ColorDictKeys, Int3Tuple]] = {
     v: (k, ansi_4bit_to_rgb(v))
@@ -144,12 +140,6 @@ _ANSI16C_I2KV: dict[int, tuple[ColorDictKeys, Int3Tuple]] = {
 # ansi 4bit {(key, RGB) ==> color code (int)}
 _ANSI16C_KV2I = {v: k for k, v in _ANSI16C_I2KV.items()}
 
-# ansi 4bit standard color range
-_ANSI16C_STD = frozenset(x for i in (30, 40) for x in range(i, i + 8))
-
-# ansi 4bit bright color range
-_ANSI16C_BRIGHT = frozenset(_ANSI16C_I2KV.keys() - _ANSI16C_STD)
-
 # ansi 8bit {color code (ascii bytes) ==> color dict key (str)}
 _ANSI256_B2KEY: dict[L[b'38', b'48'], ColorDictKeys] = {b'38': 'fg', b'48': 'bg'}
 
@@ -158,7 +148,7 @@ _ANSI256_KEY2I = {v: int(k) for k, v in _ANSI256_B2KEY.items()}
 # ----------------
 
 
-@lru_cache
+@ft.lru_cache
 def _issubclass(typ: type, class_or_tuple: type | UnionType | tuple[tp.Any, ...], /):
     return issubclass(typ, class_or_tuple)
 
@@ -218,7 +208,7 @@ class colorbytes(bytes):
             return ansi
         elif not _issubclass(objtype, (bytes, bytearray)):
             raise TypeError(
-                f"Expected bytes-like object, got {objtype.__name__!r} object instead"
+                f"expected bytes-like object, got {objtype.__name__!r} object instead"
             )
         k: ColorDictKeys
         match _unwrap_ansi_escape(ansi):
@@ -297,6 +287,7 @@ class ansicolor4Bit(colorbytes):
     """
 
     alias = '4b'
+    typecode = 1
 
 
 class ansicolor8Bit(colorbytes):
@@ -324,6 +315,7 @@ class ansicolor8Bit(colorbytes):
     """
 
     alias = '8b'
+    typecode = 2
 
 
 class ansicolor24Bit(colorbytes):
@@ -348,10 +340,11 @@ class ansicolor24Bit(colorbytes):
     """
 
     alias = '24b'
+    typecode = 3
 
 
 if os.name == 'nt':
-    from ctypes import windll, wintypes
+    from ctypes import byref, windll, wintypes
 
     def _enable_vt_processing(handle: int):
         ENABLE_VT_PROCESSING = 0x0004
@@ -397,10 +390,10 @@ AnsiColorFormat: tp.TypeAlias = ansicolor4Bit | ansicolor8Bit | ansicolor24Bit
 AnsiColorType: tp.TypeAlias = type[AnsiColorFormat]
 AnsiColorParam: tp.TypeAlias = AnsiColorAlias | AnsiColorType
 _ANSI_COLOR_TYPES = frozenset({ansicolor4Bit, ansicolor8Bit, ansicolor24Bit})
-_ANSI_FORMAT_MAP = {k: x for x in _ANSI_COLOR_TYPES for k in (x, x.alias)}
+_ANSI_FORMAT_MAP = {k: x for x in _ANSI_COLOR_TYPES for k in (x, x.alias, x.typecode)}
 
 
-@lru_cache(maxsize=len(_ANSI_COLOR_TYPES))
+@ft.lru_cache(maxsize=len(_ANSI_COLOR_TYPES))
 def _is_ansi_type(typ: type, /) -> bool:
     try:
         return typ in _ANSI_COLOR_TYPES
@@ -408,7 +401,7 @@ def _is_ansi_type(typ: type, /) -> bool:
         return False
 
 
-@lru_cache(maxsize=len(_ANSI_FORMAT_MAP))
+@ft.lru_cache(maxsize=len(_ANSI_FORMAT_MAP))
 def _get_ansi_type(typ, /):
     try:
         return _ANSI_FORMAT_MAP[typ]
@@ -416,10 +409,20 @@ def _get_ansi_type(typ, /):
         if isinstance(typ, str):
             err = ValueError(f"invalid ANSI color format alias: {typ!r}")
         else:
+            import operator as op
+
+            expected = ft.reduce(
+                op.or_,
+                (
+                    L[t.alias, t.typecode]
+                    for t in sorted(_ANSI_COLOR_TYPES, key=op.attrgetter("typecode"))
+                ),
+                AnsiColorType,
+            )
             err = TypeError(
                 str.format(
-                    "Expected {}, got {.__class__.__name__!r} object instead",
-                    type[AnsiColorFormat] | L[*(t.alias for t in _ANSI_COLOR_TYPES)],
+                    "expected {}, got {.__class__.__name__!r} object instead",
+                    expected,
                     typ,
                 )
             )
@@ -439,7 +442,7 @@ def set_default_ansi(typ, /):
         DEFAULT_ANSI = valid_typ
 
 
-@lru_cache(maxsize=1)
+@ft.lru_cache(maxsize=1)
 def sgr_pattern():
     uint8_re = r"(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)"
     ansicolor_re = f"[3-4]8;(?:2(?:;{uint8_re}){{3}}|5;{uint8_re})"
@@ -448,36 +451,6 @@ def sgr_pattern():
     )
 
     return re.compile(rf"\x1b\[(?:{sgr_param_re}(?:;{sgr_param_re})*)?m")
-
-
-def _split_ansi_escape(s: str, /) -> list[tuple['SgrSequence', str]] | None:
-    out = []
-    i = 0
-    for m in sgr_pattern().finditer(s):
-        text = s[i : (j := m.start())]
-        if i != j:
-            out.append(text)
-        ansi = _unwrap_ansi_escape(m[0].encode())
-        if any(ansi):
-            out.append(SgrSequence(map(int, ansi)))
-    if i + 1 < len(s):
-        out.append(s[i:])
-    if not any(isinstance(x, SgrSequence) for x in out):
-        return
-    n = len(out)
-    tmp = []
-    for idx, x in enumerate(out):
-        if idx + 1 < n and type(x) is type(out[idx + 1]):
-            out[idx + 1] = x + out[idx + 1]
-        else:
-            tmp.append(x)
-    out = tmp
-    if out and len(out) % 2 != 0:
-        out.append({SgrSequence: str, str: SgrSequence}[type(out[-1])]())
-    return [
-        (a, b) if isinstance(a, SgrSequence) else (b, a)
-        for a, b in zip(out[::2], out[1::2])
-    ]
 
 
 def _unwrap_ansi_escape(b: bytes | bytearray, /):
@@ -554,7 +527,6 @@ def randcolor():
 
 class SgrParamBuffer[_T]:
     __slots__ = ('_value', '_bytes', '_is_color', '_is_reset')
-
     __match_args__ = ('value',)
 
     def __buffer__(self, flags, /):
@@ -611,7 +583,7 @@ class SgrParamBuffer[_T]:
             return self._is_reset
 
 
-@lru_cache
+@ft.lru_cache
 def _get_sgr_nums(x: bytes, /) -> list[int]:
     """Return a list of integers from a bytestring of ANSI SGR parameters.
 
@@ -620,72 +592,56 @@ def _get_sgr_nums(x: bytes, /) -> list[int]:
     Roughly, bitwise equivalent to ``list(map(int, bytes().split(b';')))``
 
     """
-    if x.isdigit():
-        return [int(x)]
-    x = x.removeprefix(CSI)[: idx if ~(idx := x.find(0x6D)) else None].removesuffix(
-        b'm'
-    )
+    x = x.removeprefix(CSI)[: i if ~(i := x.find(*b"m")) else None].removesuffix(b'm')
     length = len(x)
     mask_indices = enumerate(
         map(
             bool,
             int.to_bytes(
-                ~int.from_bytes(b';' * length) & int.from_bytes(x), length=length
+                int.from_bytes(x) ^ int.from_bytes(b';' * length), length=length
             ),
         )
     )
     res = []
-    buf = bytearray()
-    while True:
+    digits = bytearray()
+    for i, is_digit in mask_indices:
         try:
-            idx, not_delim = next(mask_indices)
-            while not_delim:
-                buf.append(x[idx] | 0x30)
-                idx, not_delim = next(mask_indices)
-            else:
-                if buf:
-                    res.append(int(buf))
-                    buf.clear()
+            while is_digit:
+                digits.append(x[i] | 0x30)
+                i, is_digit = next(mask_indices)
         except StopIteration:
-            if buf:
-                res.append(int(buf))
-            return res
+            break
+        finally:
+            if digits:
+                res.append(int(digits))
+        digits.clear()
+    return res
 
 
 def _iter_normalized_sgr[_T: (abc.Buffer, tp.SupportsInt)](
     iterable: bytes | bytearray | abc.Iterable[_T], /
 ) -> abc.Iterator[int | AnsiColorFormat]:
     if isinstance(iterable, (bytes, bytearray)):
-        iterable = iterable.split(b';')
-    elt: object | tp.Any
+        iterable = iterable.split(b";")
     for elt in iterable:
-        objtype = elt.__class__
-        if objtype is SgrParamBuffer:
-            elt = elt._value
-            if _issubclass(elt.__class__, colorbytes):
-                yield elt
-            else:
-                yield int(elt)
-        elif _issubclass(objtype, colorbytes):
-            yield elt
-        elif _issubclass(objtype, abc.Buffer):
-            if objtype is not bytes:
-                elt = bytes(elt)
-            if elt.isdigit():
-                yield int(elt)
-            else:
-                yield from _get_sgr_nums(elt)
-        elif _issubclass(objtype, tp.SupportsInt):
-            yield int(elt)
-        else:
-            raise TypeError(
-                str.format(
-                    "Expected {.__name__!r} or bytes-like object, "
-                    "got {.__class__.__name__!r} instead",
-                    int,
-                    elt,
+        match elt:
+            case (colorbytes() as x) | SgrParamBuffer(colorbytes() as x):
+                yield x
+            case (
+                (abc.Buffer() as x) | SgrParamBuffer(x) | (tp.SupportsInt() as x)
+            ) if getattr(x, "isdigit", lambda: hasattr(x, "__int__"))():
+                yield int(x)
+            case abc.Buffer() as x:
+                yield from _get_sgr_nums(bytes(x))
+            case _:
+                raise TypeError(
+                    str.format(
+                        "expected {.__name__!r} or bytes-like object, "
+                        "got {.__class__.__name__!r} instead",
+                        int,
+                        elt,
+                    )
                 )
-            )
 
 
 def _co_yield_colorbytes(
@@ -728,15 +684,6 @@ def _iter_sgr[_T: (abc.Buffer, tp.SupportsInt)](
     x: bytes | bytearray | abc.Iterable[_T], /
 ):
     return _gen_colorbytes(_iter_normalized_sgr(x))
-
-
-def _is_ansi_std_16c(value: bytes, /):
-    return value.isdigit() and int(value) in _ANSI16C_STD
-
-
-@lru_cache(maxsize=len(_SGR_PARAM_VALUES))
-def _is_sgr_param(value: int, /):
-    return value in _SGR_PARAM_VALUES
 
 
 class SgrSequence(abc.MutableSequence[SgrParamBuffer]):

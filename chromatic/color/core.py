@@ -1745,7 +1745,7 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
             case _ as s:
                 sgr, s = self._coerce_one(s)
                 sgr = SgrSequence() if sgr is None else sgr.copy()
-        if self._ansi_type is not None and sgr.bg or sgr.fg:
+        if self._ansi_type is not None and (sgr.bg or sgr.fg):
             sgr.set_colors(sgr.rgb_dict, self._ansi_type)
         return sgr, s
 
@@ -1835,6 +1835,8 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
                     # regex invariant
                     # sgr[2:-1] => '\x1b[' (...) 'm'
                     sgr = SgrSequence(sgr[2:-1].encode())
+                    if self._ansi_type is not None and (sgr.bg or sgr.fg):
+                        sgr.set_colors(sgr.rgb_dict, self._ansi_type)
                     buf.append((sgr, s))
                 except StopIteration:
                     break

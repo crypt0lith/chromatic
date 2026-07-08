@@ -13,7 +13,8 @@ if tp.TYPE_CHECKING:
         def __class_getitem__(cls: type[tp.Self], args: tp.Any, /) -> type[tp.Self]: ...
 
 class _DynamicNSMeta(type):
-    __members__: dict[str, tp.Any]
+    __ignore__: tuple[str, ...]
+    __members__: MappingProxyType[str, tp.Any]
 
     @tp.overload
     def __getitem__(cls, key: str, /) -> tp.Any: ...

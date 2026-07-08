@@ -45,7 +45,7 @@ class _DynamicNSMeta(type):
         }
 
     def __new__(mcls, name, bases, ns, /, **kwargs):
-        ignored = ns.get("__ignore__", ())
+        ignored = ns.setdefault("__ignore__", ())
         ns.update(
             {
                 k: _ns_member_descriptor(v)
@@ -58,13 +58,17 @@ class _DynamicNSMeta(type):
             }
         )
         res = type.__new__(mcls, name, bases, ns)
+        assert isinstance(res.__members__, abc.Mapping)
         if (wrapper_f := kwargs.get("wrapper")) is not None:
             if not callable(wrapper_f):
                 raise ValueError(f"expected callable object: {wrapper_f!r}")
-            assert isinstance(res.__members__, abc.MutableMapping)
-            res.__members__.update(
-                {k: wrapper_f(v) for k, v in res.__members__.items()}
+            setattr(
+                res,
+                "__members__",
+                mappingproxy({k: wrapper_f(v) for k, v in res.__members__.items()}),
             )
+        elif not isinstance(res.__members__, mappingproxy):
+            setattr(res, "__members__", mappingproxy(res.__members__))
 
         def _getmember(cls, key: str, /):
             try:
@@ -75,22 +79,19 @@ class _DynamicNSMeta(type):
                 raise
             except (AttributeError, TypeError) as e:
                 err = TypeError(
-                    "expected {.__name__} object, got {.__class__.__name__!r} instead".format(
-                        str, key
-                    )
+                    "expected {.__name__} object, "
+                    "got {.__class__.__name__!r} instead"
+                    .format(str, key)   # fmt: skip
                 )
                 err.__cause__ = e
                 raise err
 
-        getmember_qualname = f"{res.__qualname__}.{_getmember.__name__}"
-        setattr(_getmember, "__qualname__", getmember_qualname)
-        setattr(
-            _getmember,
-            "__code__",
-            _getmember.__code__.replace(co_qualname=getmember_qualname),
-        )
-        _getmember = ft.cache(_getmember)
-        setattr(res, "_getmember", types.MethodType(_getmember, res))
+        for attr, v in [
+            ("__qualname__", qualname := f"{res.__qualname__}.{_getmember.__name__}"),
+            ("__code__", _getmember.__code__.replace(co_qualname=qualname)),
+        ]:
+            setattr(_getmember, attr, v)
+        setattr(res, "_getmember", types.MethodType(ft.cache(_getmember), res))
         return res
 
     def __getitem__(cls, key, /):
@@ -102,7 +103,7 @@ class _DynamicNSMeta(type):
             raise
 
     def asdict(cls):
-        return mappingproxy(cls.__members__)
+        return cls.__members__
 
 
 class DynamicNamespace(metaclass=_DynamicNSMeta):
@@ -442,7 +443,7 @@ class AnsiFore(
         return color_chain(ColorStr(fg=fg))
 
 
-_rgb_lookup = type(
+_rgb_lookup = _DynamicNSMeta(
     "_RGB_LOOKUP", (ColorNamespace,), {}, wrapper=lambda x: x.rgb
 )._getmember
 
@@ -471,13 +472,11 @@ def rgb_dispatch(*names):
                         or name.endswith(("_bg", "_fg"))
                     )
                 )
-            paramd = {param: param in names for param in params}
+            mask_params = {name: name in names for name in params}
             positions, keywords = [], {}
             if names:
-                if total == 0 or not (has_varkwds or names <= paramd.keys()):
-                    unexpected = ", ".join(
-                        f"{name!r}" for name in names.difference(paramd)
-                    )
+                if total == 0 or not (has_varkwds or names <= mask_params.keys()):
+                    unexpected = ", ".join(map(repr, names.difference(mask_params)))
                     raise ValueError(f"unexpected parameter names: {unexpected}")
             elif total == 0 or not (n_pos_or_kw or n_kwonly or has_varkwds):
                 if total > 0:
@@ -489,14 +488,14 @@ def rgb_dispatch(*names):
             if n_posonly > 0:
                 posonly = params[:n_posonly]
                 for name in posonly:
-                    if paramd[name]:
+                    if mask_params[name]:
                         positions.append(i)
                     i += 1
                 del params[:n_posonly]
             if n_pos_or_kw > 0:
                 pos_or_kw = params[:n_pos_or_kw]
                 for name in pos_or_kw:
-                    if paramd[name]:
+                    if mask_params[name]:
                         positions.append(i)
                         keywords[name] = positions[-1]
                     i += 1
@@ -504,16 +503,16 @@ def rgb_dispatch(*names):
             if n_kwonly > 0:
                 kwonly = params[:n_kwonly]
                 for name in kwonly:
-                    if paramd[name]:
+                    if mask_params[name]:
                         keywords[name] = None
                 del params[:n_kwonly]
             if has_varargs:
                 varargs = params.pop(0)
-                if paramd[varargs]:
+                if mask_params[varargs]:
                     positions.append(slice(i, None))
             if has_varkwds:
                 varkwds = params.pop(0)
-                if paramd[varkwds]:
+                if mask_params[varkwds]:
                     keywords[None] = None
             return tuple(positions), mappingproxy(keywords)
 

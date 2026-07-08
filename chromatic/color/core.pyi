@@ -1,8 +1,10 @@
 __all__ = [
     'CSI',
     'Color',
+    'ColorChainDType',
     'ColorStr',
     'SGR_RESET',
+    'SgrFlag',
     'SgrParameter',
     'SgrSequence',
     'ansicolor24Bit',
@@ -17,12 +19,13 @@ __all__ = [
 ]
 
 import collections.abc as abc
+import enum
 import re
 import typing as tp
-from enum import IntEnum
 from types import MappingProxyType as mappingproxy
 from typing import Literal as L
 
+import numpy as np
 from _typeshed import ConvertibleToInt, SupportsKeysAndGetItem
 
 from .._typing import (
@@ -33,6 +36,7 @@ from .._typing import (
     ColorDictKeys,
     Int3Tuple,
     RGBVectorLike,
+    ShapedNDArray,
     TupleOf3,
 )
 
@@ -40,7 +44,7 @@ CSI: tp.Final[bytes]
 SGR_RESET: tp.Final[bytes]
 SGR_RESET_S: tp.Final[str]
 
-class SgrParameter(IntEnum):
+class SgrParameter(enum.IntEnum):
     RESET = 0
     BOLD = 1
     FAINT = 2
@@ -116,6 +120,53 @@ class SgrParameter(IntEnum):
     CYAN_BRIGHT_BG = 106
     WHITE_BRIGHT_BG = 107
 
+class SgrFlag(enum.IntFlag):
+    RESET = 0x1
+    BOLD = 0x2
+    FAINT = 0x4
+    ITALICS = 0x8
+    SINGLE_UNDERLINE = 0x10
+    SLOW_BLINK = 0x20
+    RAPID_BLINK = 0x40
+    NEGATIVE = 0x80
+    CONCEALED_CHARS = 0x100
+    CROSSED_OUT = 0x200
+    PRIMARY = 0x400
+    FIRST_ALT = 0x800
+    SECOND_ALT = 0x1000
+    THIRD_ALT = 0x2000
+    FOURTH_ALT = 0x4000
+    FIFTH_ALT = 0x8000
+    SIXTH_ALT = 0x10000
+    SEVENTH_ALT = 0x20000
+    EIGHTH_ALT = 0x40000
+    NINTH_ALT = 0x80000
+    GOTHIC = 0x100000
+    DOUBLE_UNDERLINE = 0x200000
+    RESET_BOLD_AND_FAINT = 0x400000
+    RESET_ITALIC_AND_GOTHIC = 0x800000
+    RESET_UNDERLINES = 0x1000000
+    RESET_BLINKING = 0x2000000
+    POSITIVE = 0x4000000
+    REVEALED_CHARS = 0x8000000
+    RESET_CROSSED_OUT = 0x10000000
+    DEFAULT_FG_COLOR = 0x20000000
+    DEFAULT_BG_COLOR = 0x40000000
+    FRAMED = 0x80000000
+    ENCIRCLED = 0x100000000
+    OVERLINED = 0x200000000
+    NOT_FRAMED_OR_CIRCLED = 0x400000000
+    IDEOGRAM_UNDER_OR_RIGHT = 0x800000000
+    IDEOGRAM_2UNDER_OR_2RIGHT = 0x1000000000
+    IDEOGRAM_OVER_OR_LEFT = 0x2000000000
+    IDEOGRAM_2OVER_OR_2LEFT = 0x4000000000
+    CANCEL = 0x8000000000
+
+    @property
+    def parameters(self) -> list[SgrParameter]: ...
+
+_P2F: tp.Final[dict[int, int]]
+_F2P: tp.Final[dict[int, int]]
 _ANSI16C_I2KV: tp.Final[dict[int, tuple[ColorDictKeys, Int3Tuple]]]
 _ANSI16C_KV2I: tp.Final[dict[tuple[ColorDictKeys, Int3Tuple], int]]
 _ANSI256_B2KEY: tp.Final[dict[L[b'38', b'48'], ColorDictKeys]]
@@ -256,6 +307,8 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
     def __delitem__(self, index: tp.SupportsIndex, /) -> None: ...
     @tp.overload
     def __delitem__(self, index: slice, /) -> None: ...
+
+    def __eq__(self, other: tp.Any, /) -> bool: ...
 
     @tp.overload
     def __getitem__(self, index: tp.SupportsIndex, /) -> SgrParamBuffer: ...
@@ -518,10 +571,16 @@ class ColorStr(str, _IntFloatMixin):
     _ansi_type: AnsiColorType
     _reset: L["\x1b[0m", ""]
 
+ColorChainDType = np.dtype([('char', '<U1'), ('sgr', '<u8'), ('rgb', 'u1', (2, 4))])
+
 class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
     __slots__ = ('_ansi_type', '_masks')
     __match_args__ = ('_masks',)
 
+    @classmethod
+    def fromarray(
+        cls, arr: np.ndarray, /, *, ansi_type: AnsiColorParam | None = None
+    ) -> tp.Self: ...
     def insert(
         self,
         index: tp.SupportsIndex,
@@ -529,9 +588,23 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         /,
     ) -> None: ...
     def shrink(self) -> None: ...
+    def splitlines(self) -> list[tp.Self]: ...
+
+    @tp.overload
+    def term_array[_Shape: tuple[int, int]](
+        self, shape: _Shape, fillchar=""
+    ) -> ShapedNDArray[_Shape, np.void]: ...
+    @tp.overload
+    def term_array(
+        self, shape: tp.Any | None = None, fillchar=""
+    ) -> ShapedNDArray[tuple[int, int], np.void]: ...
+
     def __add__(
         self, other: abc.Iterable[tuple[SgrSequence, str] | SgrSequence | str], /
     ) -> color_chain: ...
+    def __array__(
+        self, dtype: tp.Any | None = None, copy: bool | None = None
+    ) -> ShapedNDArray[tuple[int], np.void]: ...
     def __bool__(self) -> bool: ...
     def __call__(self, obj: object = '', /) -> str: ...
 

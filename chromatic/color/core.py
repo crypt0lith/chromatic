@@ -140,10 +140,10 @@ SgrFlag = enum.IntFlag(
 setattr(
     SgrFlag,
     "parameters",
-    property(lambda self: [SgrParameter[x.name] for x in self if x.name]),
+    property(lambda self: [SgrParameter[name] for x in self if (name := x.name)]),
 )
 
-_P2F = {SgrParameter[x.name].value: x.value for x in SgrFlag if x.name}
+_P2F = {SgrParameter[name].value: x.value for x in SgrFlag if (name := x.name)}
 _F2P = {v: k for k, v in _P2F.items()}
 
 # ----------------
@@ -167,10 +167,13 @@ _ANSI256_B2KEY: dict[L[b'38', b'48'], ColorDictKeys] = {b'38': 'fg', b'48': 'bg'
 _ANSI256_KEY2I = {v: int(k) for k, v in _ANSI256_B2KEY.items()}
 # ----------------
 
+if tp.TYPE_CHECKING:
+    _issubclass = issubclass
+else:
 
-@ft.lru_cache
-def _issubclass(typ: type, class_or_tuple: type | UnionType | tuple[tp.Any, ...], /):
-    return issubclass(typ, class_or_tuple)
+    @ft.lru_cache
+    def _issubclass(typ, class_or_tuple, /):
+        return issubclass(typ, class_or_tuple)
 
 
 class colorbytes(bytes):
@@ -208,7 +211,7 @@ class colorbytes(bytes):
             case ('fg' | 'bg') as k, v:
                 pass
             case {'fg': _} | {'bg': _}:
-                k, v = dict(rgb).popitem()
+                [(k, v)] = rgb.items()
             case _:
                 raise ValueError
         r, g, b = (
@@ -218,13 +221,11 @@ class colorbytes(bytes):
         )
         typ = DEFAULT_ANSI if cls is colorbytes else cls
         inst = super().__new__(typ, rgb2ansi_escape(typ, mode=k, rgb=(r, g, b)))
-        setattr(inst, '_rgb_dict', {k: (r, g, b)})
+        inst.rgb_dict = mappingproxy({k: (r, g, b)})
         return inst
 
     def __new__(cls, ansi, /):
-        self_issubtype = bool(cls is not colorbytes)
-        objtype = ansi.__class__
-        if self_issubtype and objtype is cls:
+        if (objtype := ansi.__class__) is cls:
             return ansi
         elif not _issubclass(objtype, (bytes, bytearray)):
             raise TypeError(
@@ -233,7 +234,10 @@ class colorbytes(bytes):
         k: ColorDictKeys
         match _unwrap_ansi_escape(ansi):
             case [color]:
-                k, rgb = _ANSI16C_I2KV[int(color)]
+                try:
+                    k, rgb = _ANSI16C_I2KV[int(color)]
+                except KeyError:
+                    raise ValueError(f"invalid 4bit color code: {color}")
                 typ = ansicolor4Bit
             case [(b'38' | b'48') as sgr1, (b'2' | b'5') as sgr2, *rest]:
                 k = _ANSI256_B2KEY[sgr1]
@@ -248,24 +252,27 @@ class colorbytes(bytes):
             case _:
                 raise ValueError
         if typ is not cls:
-            if self_issubtype:
+            if cls is not colorbytes:
                 typ = cls
             ansi = rgb2ansi_escape(typ, mode=k, rgb=rgb)
         inst = super().__new__(typ, ansi)
-        setattr(inst, '_rgb_dict', {k: rgb})
+        inst.rgb_dict = mappingproxy({k: rgb})
         return inst
 
     def __repr__(self):
         return "{0.__class__.__name__}({0!s})".format(self)
 
-    def to_param_buffer(self):
+    def kind(self):
+        [k] = self.rgb_dict
+        return k
+
+    def to_param_buffer(self) -> 'SgrParamBuffer[tp.Self]':
         obj = object.__new__(SgrParamBuffer)
         obj._value = self
+        obj._is_color = True
         return obj
 
-    @property
-    def rgb_dict(self):
-        return self._rgb_dict.items().mapping
+    rgb_dict: mappingproxy[L["fg"], Int3Tuple] | mappingproxy[L["bg"], Int3Tuple]
 
 
 class ansicolor4Bit(colorbytes):
@@ -519,7 +526,6 @@ class Color(int):
     def __new__(cls, *args, **kwargs):
         inst = super().__new__(cls, *args, **kwargs)
         if is_u24(inst, strict=True):
-            inst._rgb = int2rgb(inst)
             return inst
         raise RuntimeError("unreachable")
 
@@ -527,17 +533,15 @@ class Color(int):
         return "{0.__class__.__name__}(0x{0:06X})".format(self)
 
     def __invert__(self):
-        return Color(0xFFFFFF ^ self)
+        return self.__class__(0xFFFFFF ^ self)
 
     @classmethod
     def from_rgb(cls, rgb, /):
-        inst = super().__new__(cls, rgb2int(rgb))
-        inst._rgb = int2rgb(inst)
-        return inst
+        return super().__new__(cls, rgb2int(rgb))
 
     @property
     def rgb(self):
-        return getattr(self, '_rgb')
+        return (self >> 16) & 0xFF, (self >> 8) & 0xFF, self & 0xFF
 
 
 def randcolor():
@@ -546,6 +550,8 @@ def randcolor():
 
 
 class SgrParamBuffer[_T]:
+    """Transparent wrapper type for `SgrSequence` members"""
+
     __slots__ = ('_value', '_bytes', '_is_color', '_is_reset')
     __match_args__ = ('value',)
 
@@ -556,30 +562,40 @@ class SgrParamBuffer[_T]:
         try:
             return getattr(self, '_bytes')
         except AttributeError:
-            setattr(self, '_bytes', bytes(self._value))
-            return self._bytes
+            res = self._bytes = bytes(self._value)
+            return res
 
     def __eq__(self, other, /):
-        return self._value == other
+        if isinstance(other, (self.__class__, bytes)):
+            return self._value == getattr(other, "_value", other)
+        return NotImplemented
 
     def __hash__(self):
         return hash(self._value)
 
-    def __init__(self, value: tp.Self | bytes = b'', /):
-        if value.__class__ is self.__class__:
-            self._value = value._value
-        elif _issubclass(value.__class__, bytes):
-            self._value = value
-        else:
-            err = TypeError(
-                str.format(
-                    "expected {0.__class__.__name__!r} or bytes-like object, "
-                    "got {1.__class__.__name__!r} instead",
-                    self,
-                    value,
-                )
+    def __new__(cls, value: tp.Self | bytes, /) -> tp.Self:
+        if (objtype := value.__class__) is cls:
+            return value
+        elif _issubclass(objtype, (bytes, bytearray)):
+            try:
+                return colorbytes(value).to_param_buffer()
+            except ValueError:
+                if not (value.isdigit() and 0 <= (x := int(value)) <= 107):
+                    raise
+                elif x in {38, 48}:
+                    raise
+            inst = object.__new__(cls)
+            inst._value = value if objtype is bytes else bytes(value)
+            inst._is_reset = x == 0
+            return inst
+        raise TypeError(
+            str.format(
+                "expected {0.__name__!r} or bytes-like object, "
+                "got {1.__class__.__name__!r} instead",
+                cls,
+                value,
             )
-            raise err
+        )
 
     @property
     def value(self) -> _T:
@@ -592,15 +608,15 @@ class SgrParamBuffer[_T]:
         try:
             return getattr(self, '_is_color')
         except AttributeError:
-            setattr(self, '_is_color', _issubclass(self._value.__class__, colorbytes))
-            return self._is_color
+            res = self._is_color = _issubclass(self._value.__class__, colorbytes)
+            return res
 
     def is_reset(self):
         try:
             return getattr(self, '_is_reset')
         except AttributeError:
-            setattr(self, '_is_reset', self._value == b'0')
-            return self._is_reset
+            res = self._is_reset = self._value == b'0'
+            return res
 
 
 @ft.lru_cache
@@ -730,7 +746,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
                     x = params[i]
                     if not x.is_color():
                         continue
-                    rgb = x._value._rgb_dict
+                    rgb = x._value.rgb_dict
                     if self.key not in rgb:
                         continue
                     setattr(inst, self.idx, i)
@@ -741,7 +757,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
             else:
                 if idx is None:
                     return
-                rgb = inst._sgr_params[idx]._value._rgb_dict
+                rgb = inst._sgr_params[idx]._value.rgb_dict
                 return rgb[self.key]
 
         def __set__(self, inst, value, /):
@@ -755,7 +771,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
                 x = params[i]
                 if not x.is_color():
                     continue
-                rgb = x._value._rgb_dict
+                rgb = x._value.rgb_dict
                 if self.key in rgb:
                     if rgb[self.key] != value:
                         if hi is None:
@@ -788,7 +804,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
                 x = params[i]
                 if not x.is_color():
                     continue
-                if self.key in x._value._rgb_dict:
+                if self.key in x._value.rgb_dict:
                     new_idx = i
                     break
             setattr(inst, self.idx, new_idx)
@@ -804,8 +820,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
                 pass
 
     def insert(self, index, value, /):
-        if value.__class__ is not SgrParamBuffer:
-            value = SgrParamBuffer(value)
+        value = SgrParamBuffer(value)
         params = self._sgr_params
         n = len(params)
         if index < 0:
@@ -813,7 +828,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         elif index > n:
             index = n
         params.insert(index, value)
-        keys = value._value._rgb_dict if value.is_color() else ()
+        keys = value._value.rgb_dict if value.is_color() else ()
         for k, idx_attr in self._key2idx.items():
             try:
                 cur = getattr(self, idx_attr)
@@ -977,7 +992,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         self._sgr_params[:] = [
             p
             for p in self._sgr_params
-            if not p.is_color() or p._value._rgb_dict.keys().isdisjoint(new_colors)
+            if not p.is_color() or p._value.rgb_dict.keys().isdisjoint(new_colors)
         ]
         for k in keys - new_keys:
             try:
@@ -1706,7 +1721,7 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
                 v = p._value
                 if p.is_color():
                     v: AnsiColorFormat
-                    [(k, (r, g, b))] = v._rgb_dict.items()
+                    [(k, (r, g, b))] = v.rgb_dict.items()
                     rgb[0 if k == "fg" else 1] = (v.typecode, r, g, b)
                 else:
                     iv = int(v)

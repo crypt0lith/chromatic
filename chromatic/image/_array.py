@@ -23,6 +23,7 @@ __all__ = [
 ]
 
 import collections.abc as abc
+import enum
 import os
 import random
 import re
@@ -476,7 +477,7 @@ def img2ascii(
 
     Parameters
     ----------
-    img : str | os.PathLike[str] | _tp.RGBImageLike
+    img : str | os.PathLike[str] | RGBImageLike
         Base image being converted to ASCII.
 
     font : FontArgType
@@ -490,11 +491,14 @@ def img2ascii(
 
     sort_glyphs : {True, False, ``reversed``}
         Specifies to sort `char_set` or leave it unsorted before mapping to greyscale.
+
         Glyph bitmasks obtained from 'font' are compared when sorting the string.
-        ``reversed`` specifies reverse sorting order.
+
+        The builtin ``reversed`` type object specifies reverse sorting order.
 
     ret_img : bool, default=False
         Specifies to return both the output string and original RGB array.
+
         Used by ``img2ansi`` to lazily obtain the base ASCII chars and original RGB array.
 
     Returns
@@ -558,7 +562,7 @@ def img2ansi(
 
     Parameters
     ----------
-    img : str | os.PathLike[str] | _tp.RGBImageLike
+    img : str | os.PathLike[str] | RGBImageLike
         Base image or path to image being convert into ANSI.
 
     font : FontArgType
@@ -570,23 +574,32 @@ def img2ansi(
     char_set : Iterable[str], optional
         The literal string or sequence of strings to use for greyscale interpolation and
         visualization.
+
         If None (default), the character set will be determined based on the 'font' parameter.
 
     sort_glyphs : {True, False, ``reversed``}
         Specifies to sort `char_set` or leave it unsorted before mapping to greyscale.
+
         Glyph bitmasks obtained from 'font' are compared when sorting the string.
-        ``reversed`` specifies reverse sorting order.
+
+        The builtin ``reversed`` type object specifies reverse sorting order.
 
     ansi_type : AnsiColorParam
         ANSI color format to map the RGB values to.
+
         Can be 4-bit, 8-bit, or 24-bit ANSI color space.
+
         If 4-bit or 8-bit, the RGB array will be color-quantized into ANSI color space;
+
         if 24-bit, colors are sourced from the base RGB array;
-        if None (default), uses default ANSI type (4-bit or 8-bit, depending on the system).
+
+        if `None` (default), uses default ANSI type (4-bit or 8-bit, depending on the system).
 
     equalize : {True, False, 'white_point'}
         Apply contrast equalization to the input image.
+
         If True, performs contrast stretching;
+
         if 'white_point', applies white-point equalization.
 
     bg : sequence of ints or RGBArray
@@ -671,8 +684,8 @@ def ascii2img(
 
     Returns
     -------
-    ascii_img : ImageType
-        An Image object of the rendered ASCII string.
+    ascii_img : Image
+        A `PIL.Image.Image` object of the rendered ASCII string.
 
     See Also
     --------
@@ -724,8 +737,8 @@ def ansi2img(
 
     Returns
     -------
-    ansi_img : PIL.Image.Image
-        The rendered ANSI array as an ``Image`` object.
+    ansi_img : Image
+        The rendered ANSI array as an `PIL.Image.Image` object.
 
     Raises
     ------
@@ -835,39 +848,21 @@ def _is_rgb_array(obj: tp.Any, /) -> tp.TypeGuard[_tp.RGBArray]:
     return _is_array(obj) and obj.ndim == 3 and np.issubdtype(obj.dtype, np.uint8)
 
 
-def _is_greyscale_array(obj: tp.Any, /) -> tp.TypeGuard[_tp.GreyscaleArray]:
-    return _is_array(obj) and obj.ndim == 2 and np.issubdtype(obj.dtype, np.float64)
-
-
-def _is_greyscale_glyph(obj: tp.Any, /) -> tp.TypeGuard[_tp.GreyscaleGlyphArray]:
-    return _is_greyscale_array(obj) and obj.shape == (24, 24)
-
-
 def _is_image(obj: tp.Any, /) -> tp.TypeGuard[PIL.Image.Image]:
     return isinstance(obj, PIL.Image.Image)
-
-
-def _is_rgb_image(obj: tp.Any, /) -> tp.TypeGuard[PIL.Image.Image]:
-    return _is_image(obj) and obj.mode == 'RGB'
-
-
-def _is_rgb_imagelike(
-    obj: tp.Any, /
-) -> tp.TypeGuard[tp.Union[_tp.RGBArray, PIL.Image.Image]]:
-    return _is_rgb_array(obj) or _is_rgb_image(obj)
-
-
-def _is_csi_param(c: str, /) -> tp.TypeGuard[tp.LiteralString]:
-    return c == ';' or c.isdigit()
 
 
 @lru_cache(maxsize=1)
 def cursor_or_sgr_pattern():
     sgr_re = core.sgr_pattern().pattern.removeprefix(r'\x1b\[')
     return re.compile(
-        r"(?:\x1b\[(?:(?P<cursor>\d*[A-G]|\d*(?:;\d*)?H)"
+        r"(?:"
+        r"\x1b\[(?:"
+        r"(?P<cursor>\d*[A-G]|\d*(?:;\d*)?H)"
+        f"|(?P<sgr>{sgr_re})"
+        r")"
         r"|(?P<carriage_return>\r)"
-        rf"|(?P<sgr>{sgr_re})))?(?P<text>[^\x1b]*)"
+        r")?(?P<text>[^\x1b]*)"
     )
 
 
@@ -927,7 +922,7 @@ def _sub_bold_colors(lines: abc.Iterable[str]) -> abc.Iterator[str]:
         for p in sgr:
             if p.is_color():
                 prev_colors |= dict.fromkeys(
-                    p._value._rgb_dict.keys(),
+                    p._value.rgb_dict.keys(),
                     [int(x) for x in p._value.split(b';') if x],
                 )
         return f"{sgr}"
@@ -938,119 +933,191 @@ def _sub_bold_colors(lines: abc.Iterable[str]) -> abc.Iterator[str]:
         yield core.sgr_pattern().sub(sub, line)
 
 
-def _utf8_bytes(cp: int) -> abc.Iterator[int]:
-    """yield the UTF-8 bytes of the ordinal value of a character"""
-
-    if cp <= 0x7F:
-        yield cp
-    elif cp <= 0x7FF:
-        yield 0b11000000 | (cp >> 6)
-        yield 0b10000000 | (cp & 0b00111111)
-    elif cp <= 0xFFFF:
-        yield 0b11100000 | (cp >> 12)
-        yield 0b10000000 | ((cp >> 6) & 0b00111111)
-        yield 0b10000000 | (cp & 0b00111111)
-    else:
-        yield 0b11110000 | (cp >> 18)
-        yield 0b10000000 | ((cp >> 12) & 0b00111111)
-        yield 0b10000000 | ((cp >> 6) & 0b00111111)
-        yield 0b10000000 | (cp & 0b00111111)
+class ReshapeAnsiFlag(enum.IntFlag):
+    BOLD_COLORS = enum.auto()
+    """SGR code `1` enables 'bright' foreground colors (IBM VGA convention)"""
+    BOLD_FONT = enum.auto()
+    """Keep the bold bit after promotion (does nothing without `BOLD_COLORS`)"""
+    RESET_BOLD_AND_FAINT = enum.auto()
+    """SGR code `22` clears bold bit"""
 
 
-def reshape_ansi(s: str, /, w: int, h: int) -> str:
-    def cursor() -> abc.Generator[tuple[int, int], tuple[int, int], None]:
-        idx, total = 0, h * w
-        while idx < total:
-            jmp = yield divmod(idx, w)
-            if jmp:
-                idx = jmp[0] * w + jmp[1]
+def _sgr_state_updater[_T: core.SgrSequence](flags: int, /) -> abc.Callable[[_T], _T]:
+    """Return a callable mapping each SGR escape to the accumulated SGR state."""
+    fg: bytes | None = None
+    bg: bytes | None = None
+    other: dict[bytes, None] = {}
+    bold = False
+    cache: dict[tuple[bytes, ...], _T] = {}
+
+    def update(sgr: _T, /) -> _T:
+        nonlocal fg, bg, bold
+        is_reset = False
+        for p in sgr:
+            if p.is_reset():
+                fg = bg = None
+                other.clear()
+                is_reset = True
+                bold = False
+            elif p.is_color():
+                v = p.value
+                if v.kind() == "fg":
+                    fg = v
+                else:
+                    bg = v
+            elif p == b"1":
+                bold = True
+            elif p == b"22":
+                bold = bold and not flags & ReshapeAnsiFlag.RESET_BOLD_AND_FAINT
+            elif p == b"39":
+                fg = None
+            elif p == b"49":
+                bg = None
             else:
-                idx += 1
-
-    def write_cell(ch: str):
-        nonlocal y, x
-        if ch == '\n':
-            y = min(y + 1, h - 1)
-            x = 0
-            cur.send((y, x))
-            return
-        else:
-            arr[y][x] = seq, ord(ch)
-        y, x = next(cur)
-
-    cursor_or_sgr_finditer = cursor_or_sgr_pattern().finditer
-
-    arr: list[list[tuple[core.SgrSequence | None, int]]] = [
-        [(None, 0) for _ in range(w)] for _ in range(h)
-    ]
-    cur = cursor()
-    seq = core.SgrSequence()
-    y, x = next(cur)
-    for line in _sub_bold_colors(s.split('\n')):
+                other[p.value] = None
+        out = []
+        if is_reset:
+            out.append(b"0")
+        f = fg
+        if bold:
+            if flags & ReshapeAnsiFlag.BOLD_COLORS:
+                if flags & ReshapeAnsiFlag.BOLD_FONT:
+                    out.append(b"1")
+                if f is None:
+                    f = b"97"
+                elif f.isdigit() and 30 <= (x := int(f)) <= 37:
+                    f = b"%d" % (x + 60)
+                elif ReshapeAnsiFlag.BOLD_FONT & ~flags:
+                    out.append(b"1")
+            else:
+                out.append(b"1")
+        if f is not None:
+            out.append(f)
+        if bg is not None:
+            out.append(bg)
+        out.extend(other)
+        key = tuple(out)
         try:
-            for m in cursor_or_sgr_finditer(line + '\n'):
-                if cg := m['cursor']:
-                    param, code = cg[:-1], cg[-1]
-                    if code == 'H':
-                        if ';' in param:
-                            y, x = (int(i or 1) - 1 for i in param.partition(';')[::2])
-                        else:
-                            y = int(param or 1) - 1
-                            x = 0
-                    else:
-                        n = int(param or 1)
-                        match code:
-                            case 'A':
-                                y = max(0, y - n)
-                            case 'B':
-                                y = min(h - 1, y + n)
-                            case 'C':
-                                x = min(w - 1, x + n)
-                            case 'D':
-                                x = max(0, x - n)
-                            case 'E':
-                                y += n
-                                x = 0
-                            case 'F':
-                                y -= n
-                                x = 0
-                            case 'G':
-                                x = n - 1
-                    cur.send((y, x))
-                elif m['carriage_return']:
-                    cur.send((y, 0))
-                elif m['sgr']:
-                    seq = core.SgrSequence(m['sgr'].encode().removesuffix(b'm'))
-                for c in m['text']:
-                    write_cell(c)
-        except StopIteration:
-            break
+            return cache[key]
+        except KeyError:
+            return cache.setdefault(key, sgr.__class__(out))
 
-    out = []
-    prev: tp.Optional[core.SgrSequence] = None
-    for row in arr:
-        if not row:
-            continue
-        buf = bytearray()
-        maxlen = len(row)
-        indices = enumerate(row)
-        while True:
-            try:
-                i, [sgr, b] = next(indices)
-                j = i + 1
-                if sgr and sgr != prev:
-                    buf.extend(bytes(sgr))
-                    prev = sgr
-                buf.extend(_utf8_bytes(b))
-                while j < maxlen and sgr == row[j][0]:
-                    j += 1
-                for _ in range(i + 1, j):
-                    _, [_, b] = next(indices)
-                    buf.extend(_utf8_bytes(b))
-            except StopIteration:
-                break
-        out.append(buf.decode())
-    return '\n'.join(out).translate({0: ' '})
+    return update
+
+
+def reshape_ansi(s: str, /, shape: tuple[int, int], flags=0) -> str:
+    """Return the string padded for a grid with dims `shape`.
+
+    The output string represents a terminal render after stateful transitions
+    have been applied.
+
+    Cursor codes and `'\\r'` are consumed and resolved to character emplacements,
+    and null character cells are translated to whitespace (0x20).
+
+    Parameters
+    ----------
+    s : str
+
+    shape : tuple[int, int]
+        Shape of the output as (width, height). Must be 2D.
+
+    flags : int, default=0
+        Additonal flags for state transitions. See ``ReshapeAnsiFlag`` for more
+        info.
+
+    Returns
+    -------
+    out : str
+        Reshaped string with ANSI escape state transitions applied.
+    """
+    w, h = shape
+    total = w * h
+
+    chars = np.zeros(total, dtype="<U1")
+    sgr_ids = np.full(total, -1, dtype=np.intp)
+
+    pos = y = x = 0
+
+    def move(i: int):
+        nonlocal pos, y, x
+        pos = min(max(i, 0), total - 1)
+        y, x = divmod(pos, w)
+
+    cursor_code: dict[str, abc.Callable[[int], None]] = {
+        "A": lambda n: move(max(0, y - n) * w + x),
+        "B": lambda n: move(min(h - 1, y + n) * w + x),
+        "C": lambda n: move(y * w + min(w - 1, x + n)),
+        "D": lambda n: move(y * w + max(0, x - n)),
+        "E": lambda n: move(min(h - 1, y + n) * w),
+        "F": lambda n: move(max(0, y - n) * w),
+        "G": lambda n: move(y * w + min(w - 1, max(0, n - 1))),
+        "H": move,
+    }
+    cursor_crlf: dict[str, abc.Callable[[], None]] = {
+        "\r": lambda: move(y * w),
+        "\n": lambda: move(min(h - 1, y + 1) * w),
+    }
+
+    finditer = cursor_or_sgr_pattern().finditer
+    update_sgr = _sgr_state_updater(flags)
+    sgr_buf: list[core.SgrSequence] = [update_sgr(core.SgrSequence())]
+    seen = False
+    for line in s.split("\n"):
+        for m in finditer(line):
+            if cg := m["cursor"]:
+                nums, code = cg[:-1], cg[-1]
+                if code == "H":
+                    y_, x_ = (max(0, int(n or 1) - 1) for n in nums.partition(";")[::2])
+                    n = min(y_, h - 1) * w + min(x_, w - 1)
+                else:
+                    n = int(nums or 1)
+                cursor_code[code](n)
+            elif m["carriage_return"]:
+                cursor_crlf["\r"]()
+            elif sgr_s := m["sgr"]:
+                sgr_buf.append(update_sgr(core.SgrSequence(sgr_s[:-1].encode())))
+                seen = True
+            if text := m["text"]:
+                count = min(len(text), total - pos)
+                span = slice(pos, pos + count)
+                chars[span] = [*text[:count]]
+                sgr_ids[span] = len(sgr_buf) - 1
+                move(pos + count)
+        cursor_crlf["\n"]()
+
+    chars[~chars.astype(np.bool_)] = " "
+    if not seen:
+        return "\n".join(map("".join, chars.reshape(h, w)))
+
+    # sgr state ffill
+    src = np.where(sgr_ids >= 0, np.arange(total), 0)
+    np.maximum.accumulate(src, out=src)
+    cell_ids = sgr_ids[src]
+
+    keys: dict[bytes, int] = {}
+    i2k = np.empty(len(sgr_buf) + 1, dtype=np.intp)
+    i2k[0] = -1
+    for i, sgr in enumerate(sgr_buf):
+        i2k[i + 1] = keys.setdefault(bytes(sgr), len(keys))
+    cell_keys = i2k[cell_ids + 1]
+
+    out = bytearray()
+    prev_key = None
+    for r in range(h):
+        lo = r * w
+        r_keys = cell_keys[lo : lo + w]
+        r_chars = chars[lo : lo + w]
+        starts = np.flatnonzero(np.r_[True, r_keys[1:] != r_keys[:-1]])
+        for i, start in enumerate(starts):
+            stop = starts[i + 1] if i + 1 < starts.size else w
+            key = int(r_keys[start])
+            if key != prev_key and key >= 0:
+                out += bytes(sgr_buf[int(cell_ids[lo + start])])
+            prev_key = key
+            out += "".join(r_chars[start:stop]).encode()
+        if r < h - 1:
+            out += b"\n"
+    return out.decode()
 
 
 @lru_cache
@@ -1091,7 +1158,7 @@ def render_ans(
         Literal ANSI text.
 
     shape : tuple[int, int]
-        (width, height) of the expected output, in ASCII characters.
+        `(width, height)` of the expected output, in ASCII characters.
 
     font : FontArgType
         Font to use when rendering the image.
@@ -1104,7 +1171,7 @@ def render_ans(
         'auto' will determine background color dynamically.
     """
     return ansi2img(
-        to_sgr_array(reshape_ansi(s, *shape)), font, font_size, bg_default=bg_default
+        to_sgr_array(reshape_ansi(s, shape)), font, font_size, bg_default=bg_default
     )
 
 
@@ -1170,7 +1237,7 @@ class AnsiImage:
             raise ValueError("ambiguous value attribute")
         if attr_name == 'file':
             file: TextIOWrapper = self.__dict__.pop(attr_name)
-            s = reshape_ansi(read_ans(file), *self.shape)
+            s = reshape_ansi(read_ans(file), self.shape)
             arr = to_sgr_array(s, ansi_type=self.ansi_type)
             setattr(self, 'data', arr)
             file.close()

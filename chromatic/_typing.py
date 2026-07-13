@@ -1,5 +1,4 @@
 import collections.abc as abc
-import sys
 import types
 import typing as tp
 from functools import reduce
@@ -44,7 +43,7 @@ Ansi4BitAlias = L['4b', 1]
 Ansi8BitAlias = L['8b', 2]
 Ansi24BitAlias = L['24b', 3]
 AnsiColorAlias = Ansi4BitAlias | Ansi8BitAlias | Ansi24BitAlias
-FontArgType: tp.TypeAlias = 'FreeTypeFont | UserFont | str'
+FontArgType: tp.TypeAlias = tp.Union[FreeTypeFont, "UserFont", str]
 
 
 def type_error_msg(err_obj, *expected, context: str = '', obj_repr=False):

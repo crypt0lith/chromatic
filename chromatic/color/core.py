@@ -29,7 +29,7 @@ import typing as tp
 from collections import Counter
 from copy import deepcopy
 from itertools import pairwise
-from types import MappingProxyType as mappingproxy, UnionType
+from types import MappingProxyType as mappingproxy
 from typing import Literal as L
 
 import numpy as np
@@ -741,19 +741,25 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
             try:
                 idx = getattr(inst, self.idx)
             except AttributeError:
+                k = self.key
                 params = inst._sgr_params
                 for i in reversed(range(len(params))):
                     x = params[i]
+                    if (
+                        x == b"0"
+                        or (x == b"39" and k == "fg")
+                        or (x == b"49" and k == "bg")
+                    ):
+                        break
                     if not x.is_color():
                         continue
                     rgb = x._value.rgb_dict
-                    if self.key not in rgb:
+                    if k not in rgb:
                         continue
                     setattr(inst, self.idx, i)
-                    return rgb[self.key]
-                else:
-                    setattr(inst, self.idx, None)
-                    return
+                    return rgb[k]
+                setattr(inst, self.idx, None)
+                return
             else:
                 if idx is None:
                     return
@@ -763,12 +769,19 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         def __set__(self, inst, value, /):
             if inst is None:
                 raise TypeError
+            k = self.key
             if value is None:
-                return delattr(inst, self.key)
+                return delattr(inst, k)
             params = inst._sgr_params
             idx = hi = None
             for i in reversed(range(len(params))):
                 x = params[i]
+                if (
+                    x == b"0"
+                    or (x == b"39" and k == "fg")
+                    or (x == b"49" and k == "bg")
+                ):
+                    return setattr(inst, self.idx, None)
                 if not x.is_color():
                     continue
                 rgb = x._value.rgb_dict
@@ -778,8 +791,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
                             hi = i
                         continue
                     elif hi is None:
-                        setattr(inst, self.idx, i)
-                        return
+                        return setattr(inst, self.idx, i)
                     else:
                         idx = i
                         break
@@ -828,23 +840,33 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         elif index > n:
             index = n
         params.insert(index, value)
-        keys = value._value.rgb_dict if value.is_color() else ()
-        for k, idx_attr in self._key2idx.items():
+        if value == b"0":
+            self._invalidate_indices()
+        elif value == b"39":
             try:
-                cur = getattr(self, idx_attr)
+                delattr(self, "_fg_idx")
             except AttributeError:
-                continue
-            if cur is not None and cur >= index:
-                cur += 1
-            if k in keys and (cur is None or cur < index):
-                cur = index
-            setattr(self, idx_attr, cur)
+                pass
+        elif value == b"49":
+            try:
+                delattr(self, "_bg_idx")
+            except AttributeError:
+                pass
+        else:
+            keys = value._value.rgb_dict if value.is_color() else ()
+            for k, idx_attr in self._key2idx.items():
+                try:
+                    cur = getattr(self, idx_attr)
+                except AttributeError:
+                    continue
+                if cur is not None and cur >= index:
+                    cur += 1
+                if k in keys and (cur is None or cur < index):
+                    cur = index
+                setattr(self, idx_attr, cur)
 
     def extend(self, iterable, /):
-        n = len(self)
-        for x in map(SgrParamBuffer, _iter_sgr(iterable)):
-            self.insert(n, x)
-            n += 1
+        return super().extend(map(SgrParamBuffer, _iter_sgr(iterable)))
 
     def is_color(self):
         return bool(self.bg or self.fg)
@@ -923,32 +945,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
                     continue
                 setattr(self, attr, idx)
         else:
-            colors: dict = {}
-            elts: dict = {}
-
-            def pop_color(key: str):
-                if key in colors:
-                    elts.pop(colors.pop(key))
-
-            for elt in _iter_sgr(iterable):
-                if elt in elts:
-                    continue
-                elif isinstance(elt, colorbytes):
-                    for k in elt.rgb_dict:
-                        pop_color(k)
-                        colors[k] = elt
-                    elts[elt.to_param_buffer()] = None
-                    continue
-                elif elt == b'0':
-                    elts.clear()
-                    colors.clear()
-                elif elt == b'39':
-                    pop_color('fg')
-                elif elt == b'49':
-                    pop_color('bg')
-                elts[SgrParamBuffer(elt)] = None
-
-            self._sgr_params = list(elts)
+            self._sgr_params = [SgrParamBuffer(x) for x in _iter_sgr(iterable)]
 
     def __iter__(self) -> abc.Iterator[SgrParamBuffer]:
         return iter(self._sgr_params)
@@ -1852,7 +1849,6 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         for idx, (sgr, s) in it:
             while idx + 1 < maxlen and not s:
                 idx, (_sgr, s) = next(it)
-                _sgr[:] = [x for x in _sgr if x not in sgr]
                 sgr += _sgr
             buf.append((sgr, s))
         idx = len(buf) - 1

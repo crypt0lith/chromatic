@@ -886,6 +886,50 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
             )
             return typ
 
+    def shrink(self):
+        """Mutate self in-place by removing redundant codes from the sequence
+
+        Specifically what is removed:
+            - codes that occur before a ``b"0"``
+            - fg / bg colors occurring before a respective reset code
+                and vice-versa, or a subsequent color of the same kind
+            - duplicate codes. the highest-index occurrence is kept
+        """
+
+        buf = []
+        seen = set()
+        seen_fg = seen_bg = False
+        for x in reversed(self):
+            if x in seen:
+                continue
+            seen.add(x)
+            if x == b"0":
+                buf.append(x)
+                break
+            elif x == b"39":
+                if not seen_fg:
+                    buf.append(x)
+                    seen_fg = True
+                continue
+            elif x == b"49":
+                if not seen_bg:
+                    buf.append(x)
+                    seen_bg = True
+                continue
+            elif not x.is_color():
+                buf.append(x)
+                continue
+            elif x._value.kind() == "fg":
+                if seen_fg:
+                    continue
+                seen_fg = True
+            elif seen_bg:
+                continue
+            else:
+                seen_bg = True
+            buf.append(x)
+        self[:] = buf[::-1]
+
     def __add__(self, other, /):
         if isinstance(other, self.__class__):
             return self.__class__(x for xs in (self, other) for x in xs)
@@ -1850,6 +1894,7 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
             while idx + 1 < maxlen and not s:
                 idx, (_sgr, s) = next(it)
                 sgr += _sgr
+            sgr.shrink()
             buf.append((sgr, s))
         idx = len(buf) - 1
         while idx > 0:
@@ -1868,20 +1913,33 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
             return []
         pend_cr = opened = False
         buf, out = [], []
-        carry = None
+        carry = SgrSequence()
         for sgr, s in self:
             if s:
                 if pend_cr:
                     s = s.removeprefix("\n")
                 pend_cr = s.endswith("\r")
             if s:
-                lines = s.splitlines()
+                # cpython/main/Objects/stringlib/split.h#L336
+                # splitlines just for '\n'
+                lines = []
+                str_len = len(s)
+                i = j = 0
+                while i < str_len:
+                    while i < str_len and s[i] != "\n":
+                        i += 1
+                    eol = i
+                    if i < str_len:
+                        i += 1
+                    lines.append(s[j:eol])
+                    j = i
+
                 last = len(lines) - 1
                 tail_open = s[-1] not in "\r\n\v\f"
                 for i, line in enumerate(lines):
                     if not opened:
                         if carry:
-                            buf.append((carry, ""))
+                            buf.append((carry.copy(), ""))
                         opened = True
                     buf.append((sgr, line))
                     if i < last or not tail_open:
@@ -1889,7 +1947,8 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
                         buf, opened = [], False
             elif opened:
                 buf.append((sgr, ""))
-            carry = sgr.copy() if carry is None else carry + sgr
+            carry += sgr
+            carry.shrink()
         if opened:
             out.append(buf)
         cls = self.__class__

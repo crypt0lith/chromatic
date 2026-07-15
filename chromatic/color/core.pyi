@@ -589,8 +589,8 @@ class ColorStr(str, _IntFloatMixin):
 ColorChainDType = np.dtype([('char', '<U1'), ('sgr', '<u8'), ('rgb', 'u1', (2, 4))])
 
 class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
-    __slots__ = ('_ansi_type', '_masks')
-    __match_args__ = ('_masks',)
+    __slots__ = ('_ansi_type', '_items')
+    __match_args__ = ('_items',)
 
     @classmethod
     def fromarray(
@@ -667,4 +667,4 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
     ) -> None: ...
 
     _ansi_type: AnsiColorType | None
-    _masks: list[tuple[SgrSequence, str]]
+    _items: list[tuple[SgrSequence, str]]

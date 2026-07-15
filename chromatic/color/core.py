@@ -1749,8 +1749,8 @@ ColorChainDType = np.dtype(
 
 
 class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
-    __slots__ = ("_ansi_type", "_masks")
-    __match_args__ = ("_masks",)
+    __slots__ = ("_ansi_type", "_items")
+    __match_args__ = ("_items",)
 
     def __array__(self, dtype=None, copy=None):
         if copy is False:
@@ -1887,7 +1887,9 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
 
     def insert(self, index, value, /):
         [value] = self._coerce(value)
-        self._masks.insert(index, value)
+        if (ansi_type := self._ansi_type) and (rgb_d := value[0].rgb_dict):
+            value[0].set_colors(rgb_d, ansi_type)
+        self._items.insert(index, value)
 
     def shrink(self):
         """Mutate self in-place by joining SGR sequences for spans of empty string parts
@@ -2004,26 +2006,29 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         return NotImplemented
 
     def __bool__(self):
-        return bool(self._masks)
+        return bool(self._items)
 
     def __call__(self, obj='', /):
         return f"{self}{obj}\x1b[0m"
 
     def __delitem__(self, index, /):
-        del self._masks[index]
+        del self._items[index]
 
     def __eq__(self, other, /):
         if isinstance(other, color_chain):
-            return self._masks == other._masks
+            return self._items == other._items
         return NotImplemented
 
     def __getitem__(self, index, /):
-        return self._masks[index]
+        return self._items[index]
 
     def __init__(self, iterable=None, /, *, ansi_type=None):
-        self._ansi_type = get_ansi_type(ansi_type) if ansi_type else None
+        if ansi_type is not None:
+            self._ansi_type = ansi_type = get_ansi_type(ansi_type)
+        else:
+            self._ansi_type = None
         if iterable is None:
-            self._masks = []
+            self._items = []
             return
         elif isinstance(iterable, str):
             iterable = [iterable]
@@ -2033,10 +2038,10 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
                 if ansi_type and (sgr.bg or sgr.fg):
                     sgr.set_colors(sgr.rgb_dict, ansi_type)
                 buf.append((sgr, s))
-        self._masks = buf
+        self._items = buf
 
     def __len__(self):
-        return len(self._masks)
+        return len(self._items)
 
     def __radd__(self, other, /):
         if isinstance(other, str):
@@ -2055,6 +2060,8 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         return "{.__class__.__name__}({})".format(self, constructor_args)
 
     def __setitem__(self, index, value, /):
+        ansi_type = self._ansi_type
+
         def _validate(obj, /):
             if (
                 isinstance(obj, tuple)
@@ -2062,13 +2069,16 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
                 and isinstance(obj[0], SgrSequence)
                 and obj[1].__class__ is str
             ):
+                sgr, _ = obj
+                if ansi_type and (rgb_d := sgr.rgb_dict):
+                    sgr.set_colors(rgb_d, ansi_type)
                 return obj
             raise TypeError
 
         if isinstance(index, slice):
-            self._masks[index] = list(map(_validate, value))
+            self._items[index] = list(map(_validate, value))
         else:
-            self._masks[index] = _validate(value)
+            self._items[index] = _validate(value)
 
     def __str__(self):
         return ''.join(

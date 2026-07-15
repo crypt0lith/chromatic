@@ -472,16 +472,21 @@ def set_default_ansi(typ, /):
 @ft.lru_cache(maxsize=1)
 def sgr_pattern():
     uint8_re = r"(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)"
-    ansicolor_re = f"[3-4]8;(?:2(?:;{uint8_re}){{3}}|5;{uint8_re})"
-    sgr_param_re = (
-        rf"(?:{ansicolor_re}|10[0-7]|9[0-7]|6[0-3]|5[02-5]|2[0-68-9]|[13-4]\d|\d)"
-    )
+    truecolor_re = f"(?:2;(?:{uint8_re}?;){{2}}(?:{uint8_re}|;))"
+    ansi256_re = f"(?:5;(?:{uint8_re}?|;))"
+    color_re = f"[3-4]8;(?:{truecolor_re}|{ansi256_re})"
+    sgr_param_re = rf"(?:{color_re}|10[0-7]|9[0-7]|6[0-3]|5[02-5]|2[0-68-9]|[13-4]?\d)?"
 
     return re.compile(rf"\x1b\[(?:{sgr_param_re}(?:;{sgr_param_re})*)?m")
 
 
 def _unwrap_ansi_escape(b: bytes | bytearray, /):
-    return bytes(b.removeprefix(CSI).removesuffix(b'm')).split(b';')
+    return [
+        x or b"0"
+        for x in (
+            bytes(b).removeprefix(CSI).removesuffix(b"m").removesuffix(b";").split(b";")
+        )
+    ]
 
 
 def _concat_ansi_escape(iterable: abc.Iterable[bytes | bytearray], /):
@@ -628,7 +633,7 @@ def _get_sgr_nums(x: bytes, /) -> list[int]:
     Roughly, bitwise equivalent to ``list(map(int, bytes().split(b';')))``
 
     """
-    x = x.removeprefix(CSI)[: i if ~(i := x.find(*b"m")) else None].removesuffix(b'm')
+    x = x.removeprefix(CSI)[: i if ~(i := x.find(*b"m")) else None].removesuffix(b"m")
     length = len(x)
     mask_indices = enumerate(
         map(
@@ -648,8 +653,7 @@ def _get_sgr_nums(x: bytes, /) -> list[int]:
         except StopIteration:
             break
         finally:
-            if digits:
-                res.append(int(digits))
+            res.append(int(digits) if digits else 0)
         digits.clear()
     return res
 
@@ -658,7 +662,7 @@ def _iter_normalized_sgr[_T: (abc.Buffer, tp.SupportsInt)](
     iterable: bytes | bytearray | abc.Iterable[_T], /
 ) -> abc.Iterator[int | AnsiColorFormat]:
     if isinstance(iterable, (bytes, bytearray)):
-        iterable = iterable.split(b";")
+        iterable = _unwrap_ansi_escape(iterable)
     for elt in iterable:
         match elt:
             case (colorbytes() as x) | SgrParamBuffer(colorbytes() as x):
@@ -698,6 +702,10 @@ def _co_yield_colorbytes(
             kind = next(iterable)
             if kind == 5:
                 obj = ansicolor8Bit(b'%d;%d;%d' % (value, kind, next(iterable)))
+            elif kind != 2:
+                raise ValueError(
+                    f"invalid param after extended color: '{value};{kind}'"
+                )
             else:
                 r, g, b = (next(iterable) for _ in range(3))
                 obj = ansicolor24Bit.from_rgb((key, (r, g, b)))
@@ -1094,8 +1102,9 @@ def _colorstr[_T](
             base_str = getattr(obj, 'base_str', obj)
             sgr_match = sgr_pattern().match
             while m := sgr_match(base_str):
-                sgr.extend(m[0].removeprefix("\x1b[").removesuffix('m').encode())
-                base_str = base_str[m.end() :]
+                start, end = m.span(0)
+                sgr.extend(base_str[start + 2 : end - 1].encode())
+                base_str = base_str[end:]
             if base_str:
                 base_str = _END_RESET_PATTERN.sub('', base_str)
             elif sgr and sgr[-1] == b"0":
@@ -1121,28 +1130,22 @@ def _colorstr[_T](
         colors["fg"] = fg
     if bg is not None:
         colors["bg"] = bg
-    try:
-        for k, v in colors.items():
-            match v:
-                case Color(rgb=(_ as r, _ as g, _ as b)):
-                    pass
-                case tp.SupportsInt():
-                    r, g, b = int2rgb(v)
-                case [tp.SupportsInt(), tp.SupportsInt(), tp.SupportsInt()]:
-                    r, g, b = (int(x) & 0xFF for x in v)
-                case np.ndarray(shape=(3,)):
-                    r, g, b = map(int, np.astype(v, np.uint8))
-                case _:
-                    raise TypeError(v.__class__)
-            sgr.append(ansi_type.from_rgb((k, (r, g, b))).to_param_buffer())
-    except TypeError as e:
-        [typ] = e.args
-        err = TypeError(
-            "expected integer or vector of 3 integers, "
-            f"got {typ.__name__!r} object instead"
-        )
-        err.__cause__ = e.__cause__
-        raise err
+    for k, v in colors.items():
+        match v:
+            case Color(rgb=(_ as r, _ as g, _ as b)):
+                pass
+            case tp.SupportsInt():
+                r, g, b = int2rgb(v)
+            case [tp.SupportsInt(), tp.SupportsInt(), tp.SupportsInt()]:
+                r, g, b = (int(x) & 0xFF for x in v)
+            case np.ndarray(shape=(3,)):
+                r, g, b = map(int, np.astype(v, np.uint8))
+            case _:
+                raise TypeError(
+                    "expected integer or vector of 3 integers, "
+                    "got {.__class__.__name__!r} object instead".format(v)
+                )
+        sgr.append(ansi_type.from_rgb((k, (r, g, b))).to_param_buffer())
     suffix = SGR_RESET_S if reset else ''
     inst: tp.Any = supercls.__new__(
         supercls.__thisclass__, f"{sgr}{base_str}{suffix}"  # type: ignore
@@ -1836,47 +1839,55 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         return cls(masks, ansi_type=ansi_type)
 
     @staticmethod
-    def _coerce_one(obj, /) -> tuple[tp.Optional[SgrSequence], str]:
-        sgr, s = None, ""
-        match obj:
-            case "" | ColorStr(_sgr=[], base_str=""):
-                return sgr, s
-            case _ if obj.__class__ is str:
-                if sgr_pattern().match(obj):
-                    cs = ColorStr(obj)
-                    sgr = cs._sgr or None
-                    s = cs.base_str
-                else:
-                    s = obj
-            case ColorStr(_sgr=sgr, base_str=s):
-                sgr = sgr or None
-            case SgrSequence([]):
-                pass
-            case SgrSequence() as sgr:
-                pass
+    def _coerce(item, /) -> abc.Iterator[tuple[SgrSequence, str]]:
+        match item:
+            case (SgrSequence() as sgr, _ as s) | ColorStr(
+                _sgr=sgr, base_str=_ as s
+            ) if s.__class__ is str:
+                yield (sgr.copy(), s)
             case str() as s:
-                pass
+                if spans := [m.span(0) for m in sgr_pattern().finditer(s)]:
+                    [ix0, *bounds] = [
+                        slice(*x)
+                        for i, span in enumerate(spans)
+                        for x in [
+                            (None if i == 0 else spans[i - 1][1], span[0]),
+                            (span[0] + 2, span[1] - 1),
+                        ]
+                    ]
+                    if s0 := s[ix0]:
+                        yield (SgrSequence(), s0)
+                    if not bounds:
+                        return
+                    bounds.append(slice(spans[-1][1], None))
+                    sgr_prev: SgrSequence | None = None
+                    for ix_sgr, ix_s in zip(bounds[::2], bounds[1::2], strict=True):
+                        params = (
+                            int(n or 0) for n in s[ix_sgr].removesuffix(";").split(";")
+                        )
+                        if sn := s[ix_s]:
+                            if sgr_prev is None:
+                                yield (SgrSequence(params), sn)
+                            else:
+                                sgr_prev.extend(params)
+                                yield (sgr_prev, sn)
+                                sgr_prev = None
+                        elif sgr_prev is None:
+                            sgr_prev = SgrSequence(params)
+                        else:
+                            sgr_prev.extend(params)
+                    if sgr_prev is not None:
+                        yield (sgr_prev, "")
+                else:
+                    yield (SgrSequence(), s)
+            case SgrSequence() as sgr:
+                yield (sgr, "")
             case _:
                 raise TypeError
-        return sgr, s
-
-    def _coerce_item(self, item, /):
-        match item:
-            case (SgrSequence() as sgr, _ as s):
-                sgr = sgr.copy()
-                if s.__class__ is not str:
-                    other_sgr, s = self._coerce_one(s)
-                    if other_sgr is not None:
-                        sgr += other_sgr
-            case _ as s:
-                sgr, s = self._coerce_one(s)
-                sgr = SgrSequence() if sgr is None else sgr.copy()
-        if self._ansi_type is not None and (sgr.bg or sgr.fg):
-            sgr.set_colors(sgr.rgb_dict, self._ansi_type)
-        return sgr, s
 
     def insert(self, index, value, /):
-        self._masks.insert(index, self._coerce_item(value))
+        [value] = self._coerce(value)
+        self._masks.insert(index, value)
 
     def shrink(self):
         """Mutate self in-place by joining SGR sequences for spans of empty string parts
@@ -2009,34 +2020,20 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
     def __getitem__(self, index, /):
         return self._masks[index]
 
-    _split_fromstr = re.compile(
-        rf"({sgr_pattern().pattern})([^\x1b]*)(?:\x1b\[0?m)?"
-    ).split
-
     def __init__(self, iterable=None, /, *, ansi_type=None):
         self._ansi_type = get_ansi_type(ansi_type) if ansi_type else None
         if iterable is None:
             self._masks = []
             return
         elif isinstance(iterable, str):
-            it = iter(self._split_fromstr(iterable))
-            buf = []
-            for start in it:
-                if start:
-                    buf.append((SgrSequence(), start))
-                try:
-                    sgr, s = next(it), next(it)
-                    sgr = SgrSequence(sgr[2:-1].encode())
-                    # regex invariant
-                    # sgr[2:-1] => '\x1b[' (...) 'm'
-                    if self._ansi_type is not None and (sgr.bg or sgr.fg):
-                        sgr.set_colors(sgr.rgb_dict, self._ansi_type)
-                    buf.append((sgr, s))
-                except StopIteration:
-                    break
-            self._masks = buf
-        else:
-            self._masks = list(map(self._coerce_item, iterable))
+            iterable = [iterable]
+        buf = []
+        for item in iterable:
+            for sgr, s in self._coerce(item):
+                if ansi_type and (sgr.bg or sgr.fg):
+                    sgr.set_colors(sgr.rgb_dict, ansi_type)
+                buf.append((sgr, s))
+        self._masks = buf
 
     def __len__(self):
         return len(self._masks)

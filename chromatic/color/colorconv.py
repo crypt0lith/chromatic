@@ -92,10 +92,6 @@ def rgb2int(rgb: RGBVectorLike, /) -> int:
 
 
 def int2rgb(x: int, /) -> Int3Tuple:
-    try:
-        return getattr(x, 'rgb')
-    except AttributeError:
-        pass
     x = int(x) & 0xFFFFFF
     return (x >> 16) & 0xFF, (x >> 8) & 0xFF, x & 0xFF
 
@@ -155,10 +151,11 @@ def hsl2rgb(hsl: FloatSequence, /) -> Int3Tuple:
     if h < 0:
         h += 1
     v = (L * (1.0 + s)) if L <= 0.5 else (L + s - L * s)
-    if v > 0 and 0 <= (sextant := int(h)) <= 5:
+    if v > 0:
         m = L + L - v
         sv = (v - m) / v
         h *= 6.0
+        sextant = int(h)
         vsf = v * sv * (h - sextant)
         mid1 = m + vsf
         mid2 = v - vsf
@@ -170,6 +167,7 @@ def hsl2rgb(hsl: FloatSequence, /) -> Int3Tuple:
                 [m, v, mid1],
                 [m, mid2, v],
                 [mid1, m, v],
+                [v, m, mid2],
             ][sextant]
         )
     else:

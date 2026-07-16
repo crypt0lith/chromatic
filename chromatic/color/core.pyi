@@ -586,11 +586,13 @@ class ColorStr(str, _IntFloatMixin):
     _ansi_type: AnsiColorType
     _reset: L["\x1b[0m", ""]
 
-ColorChainDType = np.dtype([('char', '<U1'), ('sgr', '<u8'), ('rgb', 'u1', (2, 4))])
+ColorChainDType: tp.Final[np.dtype[np.void]]
 
 class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
     __slots__ = ('_ansi_type', '_items')
     __match_args__ = ('_items',)
+
+    dtype: tp.ClassVar[np.dtype[np.void]]
 
     @classmethod
     def fromarray(

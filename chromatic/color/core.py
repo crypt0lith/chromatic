@@ -1752,39 +1752,54 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
     __slots__ = ("_ansi_type", "_items")
     __match_args__ = ("_items",)
 
+    dtype = ColorChainDType
+
     def __array__(self, dtype=None, copy=None):
+        if dtype is None:
+            dtype = self.dtype
+        elif not np.issubdtype(dtype, self.dtype):
+            raise TypeError(
+                "only subdtypes of {.dtype} are allowed, got {}".format(self, dtype)
+            )
         if copy is False:
             raise ValueError("`copy=False` isn't supported. a copy is always created")
         flags = 0
         rgb = np.zeros((2, 4), np.uint8)
-        mask_flags: list[int] = []
-        mask_rgb: list[np.ndarray] = []
-        strs: list[str] = []
+        items: list[tuple[str, int, np.ndarray]] = []
+        resets = _P2F[0] | _P2F[39] | _P2F[49]
         for sgr, s in self:
-            for p in sgr:
+            _ = sgr.rgb_dict
+            color_indices = (
+                getattr(sgr, "_fg_idx", None),
+                getattr(sgr, "_bg_idx", None),
+            )
+            for i, p in enumerate(sgr):
                 v = p._value
                 if p.is_color():
-                    v: AnsiColorFormat
-                    [(k, (r, g, b))] = v.rgb_dict.items()
-                    rgb[0 if k == "fg" else 1] = (v.typecode, r, g, b)
+                    if i not in color_indices:
+                        continue
+                    [(r, g, b)] = v.rgb_dict.values()
+                    row = color_indices.index(i)
+                    rgb[row] = (v.typecode, r, g, b)
+                    flags &= ~_P2F[39 if row == 0 else 49]
                 else:
                     iv = int(v)
                     if iv == 0:
-                        flags = 0
-                        rgb[:] = 0
+                        flags = rgb[:] = 0
                     elif iv == 39:
                         rgb[0] = 0
                     elif iv == 49:
                         rgb[1] = 0
-                    else:
-                        flags |= _P2F[iv]
-            mask_flags.append(flags)
-            mask_rgb.append(rgb.copy())
-            strs.append(s)
-        if not strs:
-            return np.empty(0, ColorChainDType)
+                    flags |= _P2F.get(iv, 0)
+            if not s:
+                continue
+            items.append((s, flags, rgb.copy()))
+            flags &= ~resets
+        if not items:
+            return np.empty(0, dtype)
+        strs, mask_flags, mask_rgb = zip(*items)
         lengths = np.fromiter(map(len, strs), np.intp, len(strs))
-        arr = np.empty(int(lengths.sum()), ColorChainDType)
+        arr = np.empty(int(lengths.sum()), dtype)
         if not arr.size:
             return arr
         arr["char"] = np.frombuffer("".join(strs).encode("utf-32-le"), dtype="<U1")
@@ -1794,7 +1809,16 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
 
     @classmethod
     def fromarray(cls, arr, /, *, ansi_type=None) -> tp.Self:
-        arr = np.asarray(arr, ColorChainDType).reshape(-1)
+        arr = np.asarray(arr, cls.dtype)
+        if arr.ndim > 2:
+            raise ValueError
+        elif arr.ndim == 2:
+            newlines = np.zeros((arr.shape[0], 1), dtype=cls.dtype)
+            newlines["char"][:-1] = "\n"
+            if arr.shape[1]:
+                newlines["rgb"] = arr["rgb"][:, -1:]
+            arr = np.concatenate((arr, newlines), axis=1)
+        arr = arr.reshape(-1)
         n = arr.size
         if not n:
             return cls(ansi_type=ansi_type)
@@ -1806,37 +1830,32 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         )   # fmt: skip
         prev_flags = 0
         prev_rgb = np.zeros((2, 4), np.uint8)
-        masks: list[tuple[SgrSequence, str]] = []
+        resets = _P2F[0] | _P2F[39] | _P2F[49]
+        items: list[tuple[SgrSequence, str]] = []
         chars = arr["char"]
+        k2i = {"fg": 0, "bg": 1}
         for start, stop in pairwise([*map(int, np.flatnonzero(change)), n]):
-            cur_flags = int(arr["sgr"][start])
+            emit_flags = cur_flags = int(arr["sgr"][start])
             cur_rgb = arr["rgb"][start]
-            params: list[int] = []
-            if prev_flags & ~cur_flags:
-                params.append(0)
-                emit_flags = cur_flags
-                emit_rows = [i for i in (0, 1) if cur_rgb[i, 0]]
+            if prev_flags & ~cur_flags or cur_flags & _P2F[0]:
+                emit_keys = [k for k, i in k2i.items() if cur_rgb[i, 0]]
             else:
-                emit_flags = cur_flags & ~prev_flags
-                emit_rows = [
-                    i
-                    for i in (0, 1)
+                emit_flags &= ~prev_flags
+                emit_keys = [
+                    k
+                    for k, i in k2i.items()
                     if cur_rgb[i, 0] and (cur_rgb[i] != prev_rgb[i]).any()
                 ]
-                if prev_rgb[0, 0] and not cur_rgb[0, 0]:
-                    params.append(39)
-                if prev_rgb[1, 0] and not cur_rgb[1, 0]:
-                    params.append(49)
-            params.extend(_F2P[m.value] for m in SgrFlag(emit_flags))
-            sgr = SgrSequence(sorted(params))
-            for i in emit_rows:
+            sgr = SgrSequence(_F2P[m.value] for m in SgrFlag(emit_flags))
+            for k in emit_keys:
+                i = k2i[k]
                 sgr.set_colors(
-                    {("fg" if i == 0 else "bg"): tuple(map(int, cur_rgb[i, 1:]))},
+                    {k: tuple(map(int, cur_rgb[i, 1:]))},
                     _ANSI_FORMAT_MAP[int(cur_rgb[i, 0])],
                 )
-            masks.append((sgr, "".join(chars[start:stop])))
-            prev_flags, prev_rgb = cur_flags, cur_rgb
-        return cls(masks, ansi_type=ansi_type)
+            items.append((sgr, "".join(chars[start:stop])))
+            prev_flags, prev_rgb = cur_flags & ~resets, cur_rgb
+        return cls(items, ansi_type=ansi_type)
 
     @staticmethod
     def _coerce(item, /) -> abc.Iterator[tuple[SgrSequence, str]]:
@@ -1885,11 +1904,21 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
             case _:
                 raise TypeError
 
+    def _handle_sgr[_T: SgrSequence](self, sgr: _T, /) -> _T:
+        if (
+            (ansi_type := self._ansi_type) is not None
+            and sgr.is_color()
+            and any(
+                sgr[getattr(sgr, sgr._key2idx[k])].__class__ is not ansi_type
+                for k in sgr.rgb_dict
+            )
+        ):
+            sgr.set_colors(sgr.rgb_dict, ansi_type)
+        return sgr
+
     def insert(self, index, value, /):
-        [value] = self._coerce(value)
-        if (ansi_type := self._ansi_type) and (rgb_d := value[0].rgb_dict):
-            value[0].set_colors(rgb_d, ansi_type)
-        self._items.insert(index, value)
+        [(sgr, s)] = self._coerce(value)
+        self._items.insert(index, (_handle_sgr(sgr), s))
 
     def shrink(self):
         """Mutate self in-place by joining SGR sequences for spans of empty string parts
@@ -1983,12 +2012,12 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
             rows = [r[i : i + w] for r in rows for i in range(0, len(r) or 1, w)]
         if h is not None:
             del rows[h:]
-            rows += [np.empty(0, ColorChainDType)] * (h - len(rows))
+            rows += [np.empty(0, self.dtype)] * (h - len(rows))
         if not rows:
-            return np.zeros((0, 0), ColorChainDType)
+            return np.zeros((0, 0), self.dtype)
         lengths = np.fromiter(map(len, rows), np.intp, len(rows))
         width = int(lengths.max(initial=0)) if w is None else w
-        out = np.zeros((len(rows), width), ColorChainDType)
+        out = np.zeros((len(rows), width), self.dtype)
         mask = np.arange(width) < lengths[:, None]
         out[mask] = np.concatenate(rows)
         if fillchar:
@@ -2035,9 +2064,7 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         buf = []
         for item in iterable:
             for sgr, s in self._coerce(item):
-                if ansi_type and (sgr.bg or sgr.fg):
-                    sgr.set_colors(sgr.rgb_dict, ansi_type)
-                buf.append((sgr, s))
+                buf.append((self._handle_sgr(sgr), s))
         self._items = buf
 
     def __len__(self):
@@ -2060,8 +2087,6 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         return "{.__class__.__name__}({})".format(self, constructor_args)
 
     def __setitem__(self, index, value, /):
-        ansi_type = self._ansi_type
-
         def _validate(obj, /):
             if (
                 isinstance(obj, tuple)
@@ -2069,10 +2094,8 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
                 and isinstance(obj[0], SgrSequence)
                 and obj[1].__class__ is str
             ):
-                sgr, _ = obj
-                if ansi_type and (rgb_d := sgr.rgb_dict):
-                    sgr.set_colors(rgb_d, ansi_type)
-                return obj
+                sgr, s = obj
+                return self._handle_sgr(sgr), s
             raise TypeError
 
         if isinstance(index, slice):
@@ -2081,7 +2104,4 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
             self._items[index] = _validate(value)
 
     def __str__(self):
-        return ''.join(
-            ColorStr(f"{sgr}{s}", ansi_type=self._ansi_type, reset=False) if sgr else s
-            for sgr, s in self
-        )
+        return ''.join(f"{sgr}{s}" for sgr, s in self)

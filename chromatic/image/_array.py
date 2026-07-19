@@ -300,28 +300,9 @@ def get_rgb_array(img: str | os.PathLike[str] | _tp.RGBImageLike, /):
     return img
 
 
-def _rgb_transform2vec(
-    pyfunc: abc.Callable[[_tp.Int3Tuple], _tp.Int3Tuple],
-) -> np.ufunc:
-    return np.frompyfunc(lambda *rgb: pyfunc(rgb), 3, 3)
-
-
-def _apply_rgb_ufunc(img: _tp.RGBArray, rgb_ufunc: np.ufunc) -> _tp.RGBArray:
-    return np.uint8(rgb_ufunc(*np.moveaxis(img, -1, 0))).transpose(1, 2, 0)
-
-
-_ANSI_QUANTIZERS = {
-    t: partial(_apply_rgb_ufunc, rgb_ufunc=_rgb_transform2vec(f))
-    for t, f in zip(
-        (core.ansicolor4Bit, core.ansicolor8Bit),
-        (nearest_ansi_4bit_rgb, nearest_ansi_8bit_rgb),
-    )
-}
-
-
 def ansi_quantize(
     img: _tp.RGBArray,
-    ansi_type: type[core.ansicolor4Bit | core.ansicolor8Bit],
+    ansi_type: core.AnsiColorType | _tp.AnsiColorAlias,
     *,
     equalize: bool | tp.Literal['white_point'] = False,
 ):
@@ -350,25 +331,16 @@ def ansi_quantize(
     quantized : RGBArray
         The image with RGB values transformed into ANSI color space.
     """
-    try:
-        quantizer = _ANSI_QUANTIZERS[ansi_type]
-    except KeyError:
-        union = _tp.unionize(_ANSI_QUANTIZERS.keys())
-        err = TypeError(_tp.type_error_msg(ansi_type, context=f"ansi_type=({union})"))
-        raise err from None
+    ansi_type = core.get_ansi_type(ansi_type)
     if equalize is True:
         img = contrast_stretch(img)
     elif equalize == "white_point":
         img = equalize_white_point(img)
-    if img.size > 1024**2:  # downsize for faster quantization
-        w, h, _ = img.shape
-        new_w, new_h = (int(x * 768 / max(w, h)) for x in (w, h))
-        img = np.array(
-            PIL.Image.fromarray(img, mode='RGB').resize(
-                (new_h, new_w), resample=PIL.Image.Resampling.LANCZOS
-            )
-        )
-    return quantizer(img)
+    if ansi_type is core.ansicolor4Bit:
+        img = nearest_ansi_4bit_rgb(img)
+    elif ansi_type is core.ansicolor8Bit:
+        img = nearest_ansi_8bit_rgb(img)
+    return img
 
 
 def equalize_white_point(img: _tp.RGBArray) -> _tp.RGBArray:

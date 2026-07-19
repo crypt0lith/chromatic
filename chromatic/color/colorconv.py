@@ -23,21 +23,14 @@ __all__ = [
     'xyz2rgb',
 ]
 
+import typing as tp
 from functools import lru_cache
-from operator import mul, truediv
 from types import MappingProxyType as mappingproxy
-from typing import Final, Literal, SupportsInt, TypeGuard
+from typing import Final, Literal as L, SupportsInt, TypeGuard
 
 import numpy as np
 
-from .._typing import (
-    Float3Tuple,
-    FloatSequence,
-    Int3Tuple,
-    RGBPixel,
-    RGBVectorLike,
-    ShapedNDArray,
-)
+from .._typing import Float3Tuple, Int3Tuple, RGBPixel, RGBVectorLike, ShapedNDArray
 
 
 @lru_cache
@@ -96,17 +89,24 @@ def int2rgb(x: int, /) -> Int3Tuple:
     return (x >> 16) & 0xFF, (x >> 8) & 0xFF, x & 0xFF
 
 
+# fmt: off
 # sRGB RGB to XYZ [M]
 M_RGB2XYZ = np.array(
     [[0.4124564, 0.3575761, 0.1804375],
      [0.2126729, 0.7151522, 0.0721750],
      [0.0193339, 0.1191920, 0.9503041]],
     dtype=np.float64
-)  # fmt: skip
+)
 M_XYZ2RGB = np.linalg.inv(M_RGB2XYZ)
 
 # D65 reference white
 REFWT = M_RGB2XYZ.sum(axis=1)
+
+M_RGB2XYZ.flags.writeable   = \
+M_XYZ2RGB.flags.writeable   = \
+REFWT.flags.writeable       = False
+# fmt: on
+
 EPS = 216 / 24389
 LIN = (1 / 3) * (6 / 29) ** -2
 
@@ -251,7 +251,7 @@ def rgb_diff(rgb1, rgb2, /):
     return lab2rgb((rgb2lab(rgb1) + rgb2lab(rgb2)) / 2)
 
 
-ANSI_4BIT_RGB: Final[tuple[Int3Tuple, ...]] = (
+ANSI_4BIT_RGB = (
     (0,   0,   0),      # black
     (170, 0,   0),      # red
     (0,   170, 0),      # green
@@ -285,7 +285,7 @@ def ansi_4bit_to_rgb(value: int, /):
     return ANSI_4BIT_RGB[value]
 
 
-def _4b_lookup() -> dict[Int3Tuple, Int3Tuple]:
+def _4b_lookup() -> ShapedNDArray[tuple[L[32], L[32], L[32], L[3]], np.uint8]:
     def rgb_dist(rgb, ansi):
         r_mean = (rgb[:, 0:1] + ansi[:, 0]) / 2
         r_diff = (rgb[:, 0:1] - ansi[:, 0]) * (2 + r_mean / 256)
@@ -294,56 +294,65 @@ def _4b_lookup() -> dict[Int3Tuple, Int3Tuple]:
         return r_diff**2 + g_diff**2 + b_diff**2
 
     rgb_4b_arr = np.asarray(ANSI_4BIT_RGB)
-    quants = np.stack(
-        np.meshgrid(*np.repeat(np.arange(32).reshape(1, -1), 3, 0), indexing='ij'),
-        axis=-1,
-    ).reshape([-1, 3])
+    shape = (32,) * 3
+    quants = np.indices(shape).reshape(3, -1).T
     nearest_colors = rgb_4b_arr[np.argmin(rgb_dist(quants * 8, rgb_4b_arr), axis=1)]
-    table: dict = {
-        tuple(map(int, color)): tuple(map(int, nearest_colors[i]))
-        for i, color in enumerate(quants)
-    }
-    return table
+    lut = nearest_colors.reshape(*shape, 3).astype(np.uint8)
+    lut.flags.writeable = False
+    return lut  # type: ignore
 
 
-ANSI_4BIT_RGB_MAP = mappingproxy(_4b_lookup())
+ANSI_4BIT_RGB_LUT = _4b_lookup()
 
 
-def _quantize_rgb(rgb: RGBVectorLike, /):
-    r, g, b = rgb
-    return min(r >> 3, 0x1F), min(g >> 3, 0x1F), min(b >> 3, 0x1F)
+def nearest_ansi_4bit_rgb(rgb, /):
+    if is_3tuple := (rgb.__class__ is tuple and len(rgb) == 3):
+        r, g, b = (min(x >> 3, 32) for x in rgb)
+    else:
+        arr = np.asarray(rgb, dtype=np.uint8) >> 3
+        if not arr.shape or arr.shape[-1] != 3:
+            raise ValueError
+        r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+    out = ANSI_4BIT_RGB_LUT[r, g, b]
+    return tuple(out.tolist()) if is_3tuple else out
 
 
-def nearest_ansi_4bit_rgb(value: RGBVectorLike, /) -> Int3Tuple:
-    return ANSI_4BIT_RGB_MAP[_quantize_rgb(value)]
+def nearest_ansi_8bit_rgb(value, /):
+    return ansi_8bit_to_rgb(rgb_to_ansi_8bit(value))
 
 
-def nearest_ansi_8bit_rgb(value: RGBVectorLike, /) -> Int3Tuple:
-    try:
-        return ansi_8bit_to_rgb(rgb_to_ansi_8bit(value))
-    except ValueError:
-        raise ValueError(f"invalid RGB value: {value!r}") from None
+def ansi_8bit_to_rgb(value, /):
+    arr = np.atleast_1d(value).astype(np.uint8)
+    out = np.empty((*arr.shape, 3), dtype=np.uint8)
+    mask = np.ones(arr.shape, dtype=np.bool_)
+    if np.any(ansi_16c := arr < 16):
+        out[ansi_16c] = np.take(ANSI_4BIT_RGB, arr[ansi_16c], axis=0)
+        mask &= ~ansi_16c
+    if np.any(colorcube := (arr >= 16) & (arr < 232)):
+        c = arr[colorcube] - 16
+        out[colorcube, 0] = (c // 36) * 51
+        out[colorcube, 1] = (c % 36 // 6) * 51
+        out[colorcube, 2] = (c % 6) * 51
+        mask &= ~colorcube
+    out[mask] = (8 + (arr[mask] - 232) * 10)[:, None]
+    return tuple(out[0].tolist()) if np.isscalar(value) else out
 
 
-def ansi_8bit_to_rgb(value: int, /):
-    if 0 <= value < 16:
-        return ANSI_4BIT_RGB[value]
-    elif value < 232:
-        value -= 16
-        return value // 36 * 51, (value % 36 // 6) * 51, (value % 6) * 51
-    elif value <= 255:
-        grey = 8 + (value - 232) * 10
-        return grey, grey, grey
-    raise ValueError(f"expected an unsigned 8-bit integer, got {value}")
-
-
-def rgb_to_ansi_8bit(rgb: RGBVectorLike, /) -> int:
-    if len(set(rgb)) == 1:
-        c = rgb[0]
-        if c < 8:
-            return 16
-        if c > 248:
-            return 231
-        return round((c - 8) / 247 * 24) + 232
-    r, g, b = (round((x / 255) * 5) for x in rgb)
-    return 16 + (36 * r) + (6 * g) + b
+def rgb_to_ansi_8bit(rgb, /) -> int | ShapedNDArray[tuple[int, ...], np.uint8]:
+    is_3tuple = rgb.__class__ is tuple and len(rgb) == 3
+    arr = np.asarray(rgb, dtype=np.uint8)
+    out = np.zeros(arr.shape[:-1], dtype=np.uint8)
+    mask = np.ones(arr.shape[:-1], dtype=np.bool_)
+    if np.any(grey := (arr[..., 1:] == arr[..., 0:1]).all(axis=-1)):
+        c = arr[..., 0]
+        r_lo = grey & (c < 8)
+        r_hi = grey & (c > 248)
+        mid = grey & ~(r_lo | r_hi)
+        out[r_lo] = 16
+        out[r_hi] = 231
+        out[mid] = np.rint((c[mid] - 8) / 247 * 24) + 232
+        mask &= ~grey
+    rest = np.rint(arr[mask] / 255 * 5)
+    r, g, b = rest[..., 0], rest[..., 1], rest[..., 2]
+    out[mask] = 16 + (36 * r) + (6 * g) + b
+    return out.item() if is_3tuple else out

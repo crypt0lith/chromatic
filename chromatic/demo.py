@@ -20,24 +20,28 @@ DEMO_FUNCS = FunctionNamespace()
 @DEMO_FUNCS.register
 def escher_dragon_ascii():
     """Displays the image-to-ASCII transform of 'Dragon' by M.C. Escher."""
-    input_img = cm.data.escher()
     font = cm.userfonts['vga437']
     char_set = r"  ._-~+<vX♦'^Vx>|πΦ0Ω#$║╫"
-    ascii_str = cm.img2ascii(
-        input_img, font, factor=240, char_set=char_set, sort_glyphs=True
-    )
-    ascii_img = cm.ascii2img(ascii_str, font, font_size=16, fg='white', bg='black')
-    ascii_img.show()
+    with cm.data.escher() as img:
+        ascii_str = cm.img2ascii(
+            img, font, factor=240, char_set=char_set, sort_glyphs=True
+        )
+    with cm.ascii2img(
+        ascii_str, font, font_size=16, fg='white', bg='black'
+    ) as ascii_img:
+        ascii_img.show()
 
 
 @DEMO_FUNCS.register
 def escher_dragon_256color():
     """Displays the image-to-ANSI transform of 'Dragon' by M.C. Escher in 8-bit color."""
-    input_img = cm.data.escher()
     font = cm.userfonts['vga437']
-    ansi_array = cm.img2ansi(input_img, font, factor=240, ansi_type='8b', equalize=True)
-    ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
-    ansi_img.show()
+    with cm.data.escher() as img:
+        ansi_array = cm.img2ansi(
+            img, font, factor=240, ansi_type='8b', equalize=True, outarray=True
+        )
+    with cm.ansi2img(ansi_array, font, font_size=16) as ansi_img:
+        ansi_img.show()
 
 
 @DEMO_FUNCS.register
@@ -46,63 +50,73 @@ def butterfly_16color():
 
     Good ol' C-x M-c M-butterfly...
     """
-    input_img = cm.data.butterfly()
     font = cm.userfonts['vga437']
     char_set = r"'·,•-_→+<>ⁿ*%⌂7√Iï∞πbz£9yîU{}1αHSw♥æ?GX╕╒éà⌡MF╝╩ΘûÇƒQ½☻Å¶┤▄╪║▒█"
-    ansi_array = cm.img2ansi(
-        input_img,
-        font,
-        factor=200,
-        char_set=char_set,
-        equalize=True,
-        ansi_type=cm.ansicolor4Bit,
-    )
-    ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
-    ansi_img.show()
+    with cm.data.butterfly() as img:
+        ansi_array = cm.img2ansi(
+            img,
+            font,
+            factor=200,
+            char_set=char_set,
+            equalize=True,
+            ansi_type=cm.ansicolor4Bit,
+            outarray=True,
+        )
+    with cm.ansi2img(ansi_array, font, font_size=16) as ansi_img:
+        ansi_img.show()
 
 
 @DEMO_FUNCS.register
 def butterfly_truecolor():
     """Displays the image-to-ANSI transform of 'Spider Lily & Papilio xuthus' in 24-bit color."""
-    input_img = cm.data.butterfly()
     font = cm.userfonts['vga437']
-    ansi_array = cm.img2ansi(
-        input_img, font, factor=200, ansi_type='24b', equalize='white_point'
-    )
-    ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
-    ansi_img.show()
+    with cm.data.butterfly() as img:
+        ansi_array = cm.img2ansi(
+            img,
+            font,
+            factor=200,
+            ansi_type='24b',
+            equalize='white_point',
+            outarray=True,
+        )
+    with cm.ansi2img(ansi_array, font, font_size=16) as ansi_img:
+        ansi_img.show()
 
 
 @DEMO_FUNCS.register
-def butterfly_randcolor():
-    input_img = cm.data.butterfly()
+def butterfly_rainbowcolor():
+    import numpy as np
+
     font = cm.userfonts['vga437']
-    ansi_array = cm.img2ansi(
-        input_img, font, factor=200, ansi_type='8b', equalize='white_point'
-    )
-    for row in range(len(ansi_array)):
-        for idx, cs in enumerate(ansi_array[row]):
-            if (fg := cs.fg) is not None:
-                _, _, v = cm.color.rgb2hsv(fg.rgb)
-                h, s, _ = cm.color.rgb2hsv(cm.color.randcolor().rgb)
-                ansi_array[row][idx] = cs.recolor(
-                    fg=cm.Color.from_rgb(cm.color.hsv2rgb((h, s, v)))
-                )
-    ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
-    ansi_img.show()
+    with cm.data.butterfly() as img:
+        ansi_array = cm.img2ansi(
+            img,
+            font,
+            factor=200,
+            ansi_type='24b',
+            equalize='white_point',
+            outarray=True,
+        )
+    ansi_array["rgb"][..., 0, 0] = 3
+    hsl = cm.color.rgb2hsl(ansi_array["rgb"][..., 0, 1:])
+    hsl[..., 0] = np.linspace(0, 1, ansi_array.shape[1], endpoint=False)
+    hsl[..., 1] = 1.0
+    ansi_array["rgb"][..., 0, 1:] = cm.color.hsl2rgb(hsl)
+    with cm.ansi2img(ansi_array, font, font_size=16) as ansi_img:
+        ansi_img.show()
 
 
 @DEMO_FUNCS.register
 def goblin_virus_truecolor():
     """`G-O-B-L-I-N VIRUS <https://imgur.com/n0Mng2P>`__"""
-    input_img = cm.data.goblin_virus()
     font = cm.userfonts['vga437']
     char_set = r'  .-|_⌐¬^:()═+<>v≥≤«*»x└┘π╛╘┴┐┌┬╧╚╙X╒╜╨#0╓╝╩╤╥│╔┤├╞╗╦┼╪║╟╠╫╣╬░▒▓█▄▌▐▀'
-    ansi_array = cm.img2ansi(
-        input_img, font, factor=200, char_set=char_set, ansi_type='24b', equalize=False
-    )
-    ansi_img = cm.ansi2img(ansi_array, font, font_size=16)
-    ansi_img.show()
+    with cm.data.goblin_virus() as img:
+        ansi_array = cm.img2ansi(
+            img, font, factor=200, char_set=char_set, ansi_type='24b', equalize=False
+        )
+    with cm.ansi2img(ansi_array, font, font_size=16) as ansi_img:
+        ansi_img.show()
 
 
 @DEMO_FUNCS.register

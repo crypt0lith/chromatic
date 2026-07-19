@@ -2,10 +2,10 @@ __all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_col
 
 import collections.abc as abc
 import functools as ft
+import types
 import typing as tp
-from types import FunctionType, MappingProxyType as mappingproxy
+from types import MappingProxyType as mappingproxy
 
-from .._typing import Int3Tuple
 from .core import Color, ColorStr, SgrSequence, color_chain
 
 
@@ -23,8 +23,15 @@ class _ns_member_descriptor:
         return typ.__members__[self.name]
 
 
+_ASCII_UPCASE = mappingproxy({x: x ^ 0x20 for x in range(0x61, 0x7B)} | {0x20: 0x5F})
+
+
 class _DynamicNSMeta(type):
     __members__: abc.Mapping[str, tp.Any]
+
+    if tp.TYPE_CHECKING:
+
+        def _getmember(cls, key: str, /) -> tp.Any: ...
 
     @classmethod
     def __prepare__(mcls, name, bases, /, **_) -> abc.MutableMapping[str, object]:
@@ -38,7 +45,7 @@ class _DynamicNSMeta(type):
         }
 
     def __new__(mcls, name, bases, ns, /, **kwargs):
-        ignored = ns.get("__ignore__", ())
+        ignored = ns.setdefault("__ignore__", ())
         ns.update(
             {
                 k: _ns_member_descriptor(v)
@@ -51,17 +58,52 @@ class _DynamicNSMeta(type):
             }
         )
         res = type.__new__(mcls, name, bases, ns)
+        assert isinstance(res.__members__, abc.Mapping)
         if (wrapper_f := kwargs.get("wrapper")) is not None:
             if not callable(wrapper_f):
                 raise ValueError(f"expected callable object: {wrapper_f!r}")
-            assert isinstance(res.__members__, abc.MutableMapping)
-            res.__members__.update(
-                {k: wrapper_f(v) for k, v in res.__members__.items()}
+            setattr(
+                res,
+                "__members__",
+                mappingproxy({k: wrapper_f(v) for k, v in res.__members__.items()}),
             )
+        elif not isinstance(res.__members__, mappingproxy):
+            setattr(res, "__members__", mappingproxy(res.__members__))
+
+        def _getmember(cls, key: str, /):
+            try:
+                _key_ = key.translate(_ASCII_UPCASE)
+                return cls.__members__[_key_]
+            except KeyError as e:
+                e.args = (key,)
+                raise
+            except (AttributeError, TypeError) as e:
+                err = TypeError(
+                    "expected {.__name__} object, "
+                    "got {.__class__.__name__!r} instead"
+                    .format(str, key)   # fmt: skip
+                )
+                err.__cause__ = e
+                raise err
+
+        for attr, v in [
+            ("__qualname__", qualname := f"{res.__qualname__}.{_getmember.__name__}"),
+            ("__code__", _getmember.__code__.replace(co_qualname=qualname)),
+        ]:
+            setattr(_getmember, attr, v)
+        setattr(res, "_getmember", types.MethodType(ft.cache(_getmember), res))
         return res
 
+    def __getitem__(cls, key, /):
+        try:
+            return cls._getmember(key)
+        except Exception:
+            if callable(subscript := getattr(cls, "__class_getitem__", None)):
+                return subscript(key)
+            raise
+
     def asdict(cls):
-        return mappingproxy(cls.__members__)
+        return cls.__members__
 
 
 class DynamicNamespace(metaclass=_DynamicNSMeta):
@@ -210,7 +252,101 @@ class ColorNamespace(DynamicNamespace, wrapper=Color):
     PINK = 0xFFC0CB
 
 
-class AnsiStyle(DynamicNamespace, wrapper=lambda x: color_chain([SgrSequence([x])])):
+class _wrap_frozen:
+    def __set_name__(self, owner, name, /):
+        for base in owner.mro()[1:]:
+            try:
+                f = getattr(base, name)
+            except AttributeError:
+                continue
+            if not callable(f):
+                raise ValueError
+            break
+        else:
+            raise ValueError(f"name not in mro: {name!r}")
+        if name == "__setitem__":
+            err = f"{owner.__name__!r} does not support item assignment"
+        elif name == "__delitem__":
+            err = f"{owner.__name__!r} does not support item deletion"
+        else:
+            err = f"{owner.__name__!r} does not support {name!r}"
+
+        def _throw_immutable(*args, **kwargs):
+            raise TypeError(err)
+
+        qualname = f"{owner.__qualname__}.{name}"
+        setattr(
+            _throw_immutable,
+            "__code__",
+            _throw_immutable.__code__.replace(co_name=name, co_qualname=qualname),
+        )
+        names = {"__qualname__": qualname, "__name__": name}
+        ft.update_wrapper(_throw_immutable, f, names.keys() ^ ft.WRAPPER_ASSIGNMENTS)
+        for attr, value in names.items():
+            setattr(_throw_immutable, attr, value)
+        setattr(owner, name, _throw_immutable)
+
+
+class _method_descriptor:
+    def __init__(self, function, /):
+        if not isinstance(function, types.FunctionType):
+            raise TypeError(
+                "expected function object, "
+                "got {.__class__.__name__!r} object instead".format(function)
+            )
+        self.__func__ = function
+
+    def __set_name__(self, owner, name, /):
+        self.__objclass__ = owner
+        f = self.__func__
+        qualname = f"{owner.__qualname__}.{name}"
+        self.__func__ = types.FunctionType(
+            f.__code__.replace(co_name=name, co_qualname=qualname),
+            f.__globals__,
+            name=name,
+            argdefs=f.__defaults__,
+            closure=f.__closure__,
+        )
+        ft.update_wrapper(
+            self.__func__,
+            f,
+            ("__doc__", "__annotations__", "__type_params__", "__kwdefaults__"),
+        )
+        for attr, value in [
+            ("__module__", owner.__module__),
+            ("__qualname__", qualname),
+        ]:
+            setattr(self.__func__, attr, value)
+
+    def __get__(self, inst, owner=None):
+        if inst is None:
+            return self.__func__
+        return types.MethodType(self.__func__, inst)
+
+    def __call__(self, /, *args, **kwargs):
+        return self.__func__(*args, **kwargs)
+
+
+_frozen_color_chain = type(
+    "_frozen_color_chain",
+    (color_chain,),
+    {
+        "__module__": __name__,
+        "__hash__": _method_descriptor(lambda self: hash((self.__class__, str(self)))),
+        **{
+            k: _wrap_frozen()
+            for k in dir(abc.MutableSequence)
+            if not hasattr(abc.Sequence, k) and k in color_chain.__dict__
+        },
+    },
+)
+
+del _wrap_frozen, _method_descriptor
+
+
+class AnsiStyle(
+    DynamicNamespace, wrapper=lambda x: _frozen_color_chain([SgrSequence([x])])
+):
     RESET = 0
     BOLD = 1
     FAINT = 2
@@ -287,31 +423,33 @@ class AnsiStyle(DynamicNamespace, wrapper=lambda x: color_chain([SgrSequence([x]
 
 class AnsiBack(
     ColorNamespace,
-    wrapper=lambda x: color_chain([ColorStr(bg=x)._sgr], ansi_type='24b'),
+    wrapper=lambda x: _frozen_color_chain(ColorStr(bg=x), ansi_type='24b'),
 ):
     __ignore__ = ("RESET",)
     RESET = AnsiStyle.DEFAULT_BG_COLOR
 
     def __call__(self, bg: Color | int | tuple[int, int, int]):
-        return color_chain([ColorStr(bg=bg)._sgr])
+        return color_chain(ColorStr(bg=bg))
 
 
 class AnsiFore(
     ColorNamespace,
-    wrapper=lambda x: color_chain([ColorStr(fg=x)._sgr], ansi_type='24b'),
+    wrapper=lambda x: _frozen_color_chain(ColorStr(fg=x), ansi_type='24b'),
 ):
     __ignore__ = ("RESET",)
     RESET = AnsiStyle.DEFAULT_FG_COLOR
 
     def __call__(self, fg: Color | int | tuple[int, int, int]):
-        return color_chain([ColorStr(fg=fg)._sgr])
+        return color_chain(ColorStr(fg=fg))
 
 
-_ASCII_UPCASE = mappingproxy({x: x ^ 0x20 for x in range(0x61, 0x7B)} | {0x20: 0x5F})
+_rgb_lookup = _DynamicNSMeta(
+    "_RGB_LOOKUP", (ColorNamespace,), {}, wrapper=lambda x: x.rgb
+)._getmember
 
 
 def rgb_dispatch(*names):
-    def decorator(f: FunctionType, /):
+    def decorator(f: types.FunctionType, /):
         def _prepare():
             assert isinstance(names, set)
             code = f.__code__
@@ -334,13 +472,11 @@ def rgb_dispatch(*names):
                         or name.endswith(("_bg", "_fg"))
                     )
                 )
-            paramd = {param: param in names for param in params}
+            mask_params = {name: name in names for name in params}
             positions, keywords = [], {}
             if names:
-                if total == 0 or not (has_varkwds or names <= paramd.keys()):
-                    unexpected = ", ".join(
-                        f"{name!r}" for name in names.difference(paramd)
-                    )
+                if total == 0 or not (has_varkwds or names <= mask_params.keys()):
+                    unexpected = ", ".join(map(repr, names.difference(mask_params)))
                     raise ValueError(f"unexpected parameter names: {unexpected}")
             elif total == 0 or not (n_pos_or_kw or n_kwonly or has_varkwds):
                 if total > 0:
@@ -352,14 +488,14 @@ def rgb_dispatch(*names):
             if n_posonly > 0:
                 posonly = params[:n_posonly]
                 for name in posonly:
-                    if paramd[name]:
+                    if mask_params[name]:
                         positions.append(i)
                     i += 1
                 del params[:n_posonly]
             if n_pos_or_kw > 0:
                 pos_or_kw = params[:n_pos_or_kw]
                 for name in pos_or_kw:
-                    if paramd[name]:
+                    if mask_params[name]:
                         positions.append(i)
                         keywords[name] = positions[-1]
                     i += 1
@@ -367,25 +503,21 @@ def rgb_dispatch(*names):
             if n_kwonly > 0:
                 kwonly = params[:n_kwonly]
                 for name in kwonly:
-                    if paramd[name]:
+                    if mask_params[name]:
                         keywords[name] = None
                 del params[:n_kwonly]
             if has_varargs:
                 varargs = params.pop(0)
-                if paramd[varargs]:
+                if mask_params[varargs]:
                     positions.append(slice(i, None))
             if has_varkwds:
                 varkwds = params.pop(0)
-                if paramd[varkwds]:
+                if mask_params[varkwds]:
                     keywords[None] = None
             return tuple(positions), mappingproxy(keywords)
 
         POSITIONS, KEYWORDS = _prepare()
         HAS_VARKW = None in KEYWORDS
-
-        @ft.cache
-        def _lookup(s: str, /) -> Int3Tuple:
-            return ColorNamespace.__members__[s.translate(_ASCII_UPCASE)].rgb
 
         @ft.wraps(f)
         def wrapper(*args, **kwargs):
@@ -404,7 +536,7 @@ def rgb_dispatch(*names):
                 if not (k in KEYWORDS or HAS_VARKW):
                     continue
                 try:
-                    v = _lookup(v)
+                    v = _rgb_lookup(v)
                 except KeyError:
                     continue
                 _kwargs[k] = v
@@ -417,7 +549,7 @@ def rgb_dispatch(*names):
                     _args.append(v)
                     continue
                 try:
-                    res = _lookup(v)
+                    res = _rgb_lookup(v)
                 except KeyError:
                     _args.append(v)
                     continue

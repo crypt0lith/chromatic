@@ -197,19 +197,48 @@ def parse_args():
         def color_parser(allow_rgba=False):
             def parsed_color(
                 s: str, /
-            ) -> tuple[int, int, int] | tuple[int, int, int, int]:
+            ) -> tuple[int, int, int, int] | tuple[int, int, int]:
                 try:
                     return color_ns[s.strip().replace(" ", "_").upper()]
                 except KeyError:
-                    pass
-                values = tuple(bytes.fromhex(s))
-                if len(values) == 3 or (allow_rgba and len(values) == 4):
-                    return values
-                raise ValueError
+                    if any(c not in "0123456789abcdef" for c in s.casefold()):
+                        raise
+                n = len(s)
+                if allow_rgba and n % 4 == 0:
+                    if n == 4:
+                        s = "".join(c * 2 for c in s)
+                    x = int(s, 16)
+                    if not 0 <= x < (1 << 32):
+                        raise ValueError(f"{x:#x} is not u32")
+                    return (
+                        (x >> 24)   & 0xFF,
+                        (x >> 16)   & 0xFF,
+                        (x >>  8)   & 0xFF,
+                         x          & 0xFF,
+                    )               # fmt: skip
+                elif n % 3 == 0:
+                    if n == 3:
+                        s = "".join(c * 2 for c in s)
+                    x = int(s, 16)
+                    if not 0 <= x < (1 << 24):
+                        raise ValueError(f"{x:#x} is not u24")
+                    return (x >> 16) & 0xFF, (x >> 8) & 0xFF, x & 0xFF
+                raise ValueError(
+                    "expected hex digit with nbytes in {}, got {}".format(
+                        (3, 4, 6, 8), int(s, 16).bit_length() // 8
+                    )
+                )
 
             return parsed_color
 
         color_opts = ansify_base.add_argument_group("color defaults")
+        color_opts.add_argument(
+            "--bg",
+            dest="bg_default",
+            metavar="COLOR",
+            type=color_parser(allow_rgba=True),
+            help="default background color. can be hex rgb(a) value or color name",
+        )
         color_opts.add_argument(
             "--fg",
             dest="fg_default",
@@ -218,11 +247,10 @@ def parse_args():
             help="default foreground color. can be hex rgb(a) value or color name",
         )
         color_opts.add_argument(
-            "--bg",
-            dest="bg_default",
-            metavar="COLOR",
-            type=color_parser(allow_rgba=True),
-            help="default background color. can be hex rgb(a) value or color name",
+            "--alpha",
+            dest="alpha",
+            action="store_true",
+            help="use alpha channel with defaults: bg=0, fg=0xFF",
         )
 
         from_img_base = new_base_parser()
@@ -444,9 +472,7 @@ def parse_args():
             formatter_class=EnvHelpFormatter,
         )
         subcmd_p_ansify.add_argument(
-            dest="img",
-            metavar="IMAGEFILE",
-            help="input image",
+            dest="img", metavar="IMAGEFILE", help="input image"
         )
 
     font_cmd_subparser = cmd_subparsers.add_parser("font")
@@ -471,15 +497,26 @@ def _call_from_ns[R](f: abc.Callable[..., R], /, ns, **kwargs) -> R:
             f_kwargs[k] = kwargs[k]
     return f(*f_args, **f_kwargs)
 
+
 def handle_image(ns):
     vars(ns).setdefault("outfile_callback", ns._outfile_callback)
+    if getattr(ns, "alpha", False):
+        for k, x in [("bg_default", 0), ("fg_default", 0xFF)]:
+            v = getattr(ns, k, None) or (x,) * 4
+            if len(v) == 3:
+                v = *v, x
+            setattr(ns, k, v)
+        delattr(ns, "alpha")
     match ns.subcmd:
         case "ansify":
-            from .image import img2ansi, ansi2img
+            from .image import ansi2img, img2ansi
 
             ansi_array = _call_from_ns(img2ansi, ns)
             if hasattr(ns, "dumpfile"):
-                ns.dumpfile.writelines(f"{s}\n".encode() for s in map("".join, ansi_array))
+                ns.dumpfile.writelines(
+                    f"{s}\n".encode() for s in map("".join, ansi_array)
+                )
+                ns.dumpfile.write(b"\x1b[0m")
             img = _call_from_ns(ansi2img, ns, ansi_array=ansi_array)
             try:
                 outpath = ns.outfile_callback(ns, img)

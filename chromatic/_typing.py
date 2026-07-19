@@ -1,5 +1,4 @@
 import collections.abc as abc
-import sys
 import types
 import typing as tp
 from functools import reduce
@@ -16,14 +15,9 @@ if tp.TYPE_CHECKING:
 type ArrayReducerFunc[_SCT: np.generic, **_P] = abc.Callable[
     tp.Concatenate[_ArrayLike[_SCT], _P], NDArray[_SCT]
 ]
-if sys.version_info >= (3, 13):
-    type ShapedNDArray[_Shape: tuple[int, ...], _SCT = np.generic] = np.ndarray[
-        _Shape, np.dtype[_SCT]
-    ]
-else:
-    type ShapedNDArray[_Shape: tuple[int, ...], _SCT: np.generic] = np.ndarray[
-        _Shape, np.dtype[_SCT]
-    ]
+type ShapedNDArray[_Shape: tuple[int, ...], _SCT: np.generic] = np.ndarray[
+    _Shape, np.dtype[_SCT]
+]
 type MatrixLike[_SCT: np.generic] = ShapedNDArray[TupleOf2[int], _SCT]
 type SquareMatrix[_I: int, _SCT: np.generic] = ShapedNDArray[TupleOf2[_I], _SCT]
 type GlyphArray[_SCT: np.generic] = SquareMatrix[L[24], _SCT]
@@ -45,11 +39,11 @@ RGBPixel: tp.TypeAlias = ShapedNDArray[tuple[L[3]], np.uint8]
 RGBImageLike: tp.TypeAlias = Image | RGBArray
 RGBVectorLike: tp.TypeAlias = IntSequence | RGBPixel
 ColorDictKeys = L['fg', 'bg']
-Ansi4BitAlias = L['4b']
-Ansi8BitAlias = L['8b']
-Ansi24BitAlias = L['24b']
+Ansi4BitAlias = L['4b', 1]
+Ansi8BitAlias = L['8b', 2]
+Ansi24BitAlias = L['24b', 3]
 AnsiColorAlias = Ansi4BitAlias | Ansi8BitAlias | Ansi24BitAlias
-FontArgType: tp.TypeAlias = 'FreeTypeFont | UserFont | str'
+FontArgType: tp.TypeAlias = tp.Union[FreeTypeFont, "UserFont", str]
 
 
 def type_error_msg(err_obj, *expected, context: str = '', obj_repr=False):

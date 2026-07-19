@@ -1,5 +1,4 @@
 __all__ = [
-    'AnsiImage',
     'Back',
     'Color',
     'ColorNamespace',
@@ -8,7 +7,6 @@ __all__ = [
     'SgrParameter',
     'Style',
     'UserFont',
-    '__version__',
     'ansi2img',
     'ansi_quantize',
     'ansicolor24Bit',
@@ -40,7 +38,6 @@ __all__ = [
     'rgb2hexstr',
     'rgb2int',
     'sort_glyphs',
-    'to_sgr_array',
     'ttf_extract_codepoints',
     'userfonts',
     'set_default_ansi',
@@ -69,7 +66,6 @@ from .color import (
 )
 from .data import UserFont, register_userfont, userfonts
 from .image import (
-    AnsiImage,
     ansi2img,
     ansi_quantize,
     ansify,
@@ -85,6 +81,5 @@ from .image import (
     read_ans,
     render_ans,
     reshape_ansi,
-    to_sgr_array,
 )
 from .image._glyph import get_glyph_masks, sort_glyphs, ttf_extract_codepoints

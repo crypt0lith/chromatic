@@ -1,5 +1,4 @@
 __all__ = [
-    'AnsiImage',
     'ControlCharacter',
     'alt',
     'ansi2img',
@@ -7,6 +6,7 @@ __all__ = [
     'ansify',
     'ascii2img',
     'ascii_printable',
+    'backtrans_cp437',
     'contrast_stretch',
     'cp437_printable',
     'ctrl',
@@ -28,13 +28,11 @@ __all__ = [
     'scaled_hu_moments',
     'shuffle_char_set',
     'sort_glyphs',
-    'to_sgr_array',
     'translate_cp437',
     'ttf_extract_codepoints',
     'unctrl',
 ]
 from ._array import (
-    AnsiImage,
     ansi2img,
     ansi_quantize,
     ansify,
@@ -54,12 +52,12 @@ from ._array import (
     scale_saturation,
     scaled_hu_moments,
     shuffle_char_set,
-    to_sgr_array,
 )
 from ._curses import (
     ControlCharacter,
     alt,
     ascii_printable,
+    backtrans_cp437,
     cp437_printable,
     ctrl,
     isctrl,

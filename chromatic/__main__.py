@@ -514,10 +514,10 @@ def handle_image(ns):
             ansi_array = _call_from_ns(img2ansi, ns)
             if hasattr(ns, "dumpfile"):
                 ns.dumpfile.writelines(
-                    f"{s}\n".encode() for s in map("".join, ansi_array)
+                    f"{s}\n".encode() for s in ansi_array.splitlines()
                 )
                 ns.dumpfile.write(b"\x1b[0m")
-            img = _call_from_ns(ansi2img, ns, ansi_array=ansi_array)
+            img = _call_from_ns(ansi2img, ns, arr=ansi_array)
             try:
                 outpath = ns.outfile_callback(ns, img)
             except Exception as e:

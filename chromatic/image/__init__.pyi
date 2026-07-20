@@ -25,7 +25,6 @@ __all__ = [
     'render_font_str',
     'reshape_ansi',
     'scale_saturation',
-    'scaled_hu_moments',
     'shuffle_char_set',
     'sort_glyphs',
     'translate_cp437',
@@ -50,7 +49,6 @@ from ._array import (
     render_font_str,
     reshape_ansi,
     scale_saturation,
-    scaled_hu_moments,
     shuffle_char_set,
 )
 from ._curses import (

@@ -25,8 +25,6 @@ dependencies = [
     "pillow>=12.2.0",
     "scipy>=1.11.4,<2.0",
     "opencv-python",
-    "scikit-image",
-    "scikit-learn",
     "fonttools>=4.60.2",
     "lazy_loader",
 ]

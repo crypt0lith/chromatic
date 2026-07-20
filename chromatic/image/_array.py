@@ -16,7 +16,6 @@ __all__ = [
     'render_font_str',
     'reshape_ansi',
     'scale_saturation',
-    'scaled_hu_moments',
     'shuffle_char_set',
 ]
 
@@ -36,7 +35,6 @@ import numpy as np
 import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageFont
-import skimage as ski
 
 from .. import _typing as _tp
 from ..color import core
@@ -1287,94 +1285,3 @@ def otsu_mask(
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))
     img = cv.morphologyEx(img, cv.MORPH_OPEN, kernel)
     return cv.threshold(img, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)[1]
-
-
-def _canny_edges[_SCT: np.generic](arr: _tp.MatrixLike[_SCT]) -> _tp.MatrixLike[_SCT]:
-    return ski.feature.canny(
-        arr, sigma=0.1, low_threshold=0.1, high_threshold=0.2, use_quantiles=False
-    )
-
-
-def scaled_hu_moments(arr: _tp.ShapedNDArray[_tp.TupleOf2[int], np.uint8]):
-    if set.isdisjoint({0, 0xFF}, np.unique_values(arr)):
-        arr = otsu_mask(arr)
-    hms = cv.HuMoments(cv.moments(arr)).ravel()
-    nz = hms.nonzero()
-    out = np.zeros_like(hms)
-    out[nz] = -np.sign(hms[nz]) * np.log10(np.abs(hms[nz]))
-    return out
-
-
-def approx_gridlike(
-    fp: os.PathLike[str] | str,
-    font: _tp.FontArgType = uf.VGA437,
-    shape: tp.Optional[_tp.TupleOf2[int]] = None,
-):
-    from ._curses import cp437_printable
-
-    if shape is None:
-        shape = get_terminal_size()
-
-    def _get_grid_indices(arr: np.ndarray) -> list[_tp.TupleOf2[slice]]:
-        regions = ski.measure.regionprops(ski.measure.label(_canny_edges(arr)))
-        area_bboxes = np.zeros([np.shape(regions)[0]])
-        bboxes = np.int32([area_bboxes] * 4).T
-        for n, region in enumerate(regions):
-            bboxes[n], area_bboxes[n] = region.bbox, region.area_bbox
-        bboxes = bboxes[area_bboxes < np.std(area_bboxes) * 2]
-        r, c = zip(np.min(bboxes[:, :2], axis=0), np.max(bboxes[:, 2:], axis=0), shape)
-        h, w = map(round, ((x[1] - x[0]) / x[-1] for x in (r, c)))
-        rr = r[0] + np.asarray(rs := range(r[-1])) * h
-        cc = c[0] + np.asarray(cs := range(c[-1])) * w
-        out: tp.Any = [
-            np.index_exp[rr[rx] : (rr + h)[rx], cc[cx] : (cc + w)[cx]]
-            for rx in rs
-            for cx in cs
-        ]
-        return out
-
-    def _normalize_cell(arr: np.ndarray):
-        cell = np.zeros(cell_shape, dtype=np.uint8)
-        coords = np.argwhere(arr)
-        if coords.size == 0:
-            return cell
-        y0, x0 = coords.min(axis=0)
-        y1, x1 = coords.max(axis=0) + 1
-        cropped = arr[y0:y1, x0:x1]
-        dy, dx = cropped.shape
-        ys, xs = map(lambda t, d: (t - d) // 2, cell_shape, (dy, dx))
-        cell[ys : ys + dy, xs : xs + dx] = cropped
-        return cell
-
-    with PIL.Image.open(fp).convert('L') as grey:
-        thresh = otsu_mask(grey)
-
-    grid_indices = _get_grid_indices(thresh)
-    cell_shape = thresh[grid_indices[0]].shape
-
-    from sklearn.cluster import DBSCAN
-
-    dbscan = DBSCAN(eps=0.5, min_samples=2, metric='euclidean').fit(
-        np.array([scaled_hu_moments(thresh[ind]) for ind in grid_indices])
-    )
-    clustered_grid = np.reshape(dbscan.labels_, shape)
-    char_grid = np.full_like(clustered_grid, ' ', dtype=np.str_)
-    glyph_map = {
-        c: otsu_mask(render_font_char(c, font, size=cell_shape[::-1]).convert('L'))
-        for c in cp437_printable()
-    }
-    for uniq in np.unique_values(clustered_grid):
-        u_indices = clustered_grid == uniq
-        u_slice = thresh[
-            grid_indices[
-                next(idx for (idx, v) in enumerate(np.ravel(u_indices)) if v is True)
-            ]
-        ]
-        char_grid[u_indices] = min(
-            glyph_map,
-            key=lambda k: ski.metrics.mean_squared_error(
-                *map(_normalize_cell, (glyph_map[k], u_slice))
-            ),
-        )
-
-    return core.color_chain(["".join(r) for r in char_grid])

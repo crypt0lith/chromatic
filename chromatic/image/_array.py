@@ -101,7 +101,7 @@ def get_font_object(
 ) -> PIL.ImageFont.FreeTypeFont | str:
     """Return a FreeTypeFont object or its filepath.
 
-    The result is cached to prevent FreeType from tp.overloading resources.
+    The result is cached to prevent FreeType from consuming excessive resources.
 
     Parameters
     ----------
@@ -272,10 +272,11 @@ def get_rgb_array(img: str | os.PathLike[str] | _tp.RGBImageLike, /):
     TypeError
         If the input is not a valid image or path.
     """
-    if isinstance(img, os.PathLike):
-        img = ski.io.imread(os.fspath(img))
-    elif isinstance(img, str):
-        img = ski.io.imread(img)
+    if isinstance(img, (str, os.PathLike)):
+        x = cv.imread(os.fspath(img))
+        if x is None:
+            raise ValueError
+        img = x
     if not _is_rgb_array(img):
         if _is_image(img):
             img = img.convert('RGB')
@@ -291,7 +292,7 @@ def get_rgb_array(img: str | os.PathLike[str] | _tp.RGBImageLike, /):
                 _tp.type_error_msg(img, os.PathLike, PIL.Image.Image, np.ndarray)
             )
             raise err
-        img = np.uint8(img)
+        img = np.asarray(img, dtype=np.uint8)
     return img
 
 
@@ -367,8 +368,26 @@ def contrast_stretch(
     --------
     equalize_white_point
     """
-    lo, hi = np.percentile(img, percentile)
-    return ski.exposure.rescale_intensity(img, in_range=(lo, hi))
+    imin, imax = np.percentile(img, percentile)
+    out_dtype = img.dtype
+    if issubclass(dt := img.dtype.type, np.integer):
+        info = np.iinfo(dt)
+        omin, omax = info.min, info.max
+    elif issubclass(dt, np.inexact):
+        omin, omax = -1, 1
+    elif dt is np.bool_:
+        omin, omax = False, True
+    else:
+        omin, omax = imin, imax
+    omin, omax = map(float, (omin, omax))
+    if imin >= 0:
+        omin = 0.0
+    img = np.clip(img, imin, imax)
+    if imin != imax:
+        img = (img - imin) / (imax - imin)
+        return (img * (omax - omin) + omin).astype(out_dtype)
+    else:
+        return np.clip(img, omin, omax).astype(out_dtype)
 
 
 def scale_saturation(
@@ -478,8 +497,26 @@ def img2ascii(  # type: ignore
     img_aspect = shape[-1] / shape[0]
     ch, cw = _get_bbox_shape(font)
     char_aspect = ceil(cw / ch)
-    h = int(factor / img_aspect / char_aspect)
-    grey = (ski.transform.resize(grey, (h, factor)) * 255).astype(np.uint8)
+    out_h = int(factor / img_aspect / char_aspect)
+    out_w = factor
+    blur = grey.astype(np.float64) / 255.0
+    if (sy := (shape[0] / out_h - 1) / 2) > 0:
+        blur = cv.filter2D(
+            blur,
+            -1,
+            cv.getGaussianKernel(2 * int(4.0 * sy + 0.5) + 1, sy),
+            borderType=cv.BORDER_REFLECT_101,
+        )
+    if (sx := (shape[1] / out_w - 1) / 2) > 0:
+        blur = cv.filter2D(
+            blur,
+            -1,
+            cv.getGaussianKernel(2 * int(4.0 * sx + 0.5) + 1, sx).T,
+            borderType=cv.BORDER_REFLECT_101,
+        )
+    grey = (
+        cv.resize(blur, (out_w, out_h), interpolation=cv.INTER_LINEAR) * 255.0
+    ).astype(np.uint8)
     if char_set is None:
         if font.path is uf.VGA437:
             from ._curses import cp437_printable
@@ -504,8 +541,7 @@ def img2ascii(  # type: ignore
     newlines = np.zeros((interp.shape[0], 1), dtype="<U1")
     newlines[:-1] = "\n"
     interp = np.concatenate((interp, newlines), axis=1)
-    out_s = "".join(interp.flat)
-    return out_s
+    return "".join(interp.flat)
 
 
 @tp.overload

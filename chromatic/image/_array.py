@@ -1278,10 +1278,10 @@ def render_ans(
 
 
 def otsu_mask(
-    img: tp.Union[PIL.Image.Image, _tp.MatrixLike[np.uint8]],
+    img: _tp.MatrixLike[np.uint8] | cv.typing.MatLike | PIL.Image.Image,
 ) -> _tp.MatrixLike[np.uint8]:
-    if type(img) is not np.ndarray:
-        img = np.uint8(img)
+    img = np.asarray(img, dtype=np.uint8)
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))
     img = cv.morphologyEx(img, cv.MORPH_OPEN, kernel)
-    return cv.threshold(img, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)[1]
+    out = cv.threshold(img, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)[1]
+    return out  # type: ignore[return-type]

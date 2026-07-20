@@ -1918,7 +1918,7 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
 
     def insert(self, index, value, /):
         [(sgr, s)] = self._coerce(value)
-        self._items.insert(index, (_handle_sgr(sgr), s))
+        self._items.insert(index, (self._handle_sgr(sgr), s))
 
     def shrink(self):
         """Mutate self in-place by joining SGR sequences for spans of empty string parts
@@ -1995,7 +1995,9 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
             out.append(buf)
         cls = self.__class__
         for i, line in enumerate(out):
-            color_chain.shrink(x := cls(line))
+            x = object.__new__(cls)
+            x._ansi_type, x._items = self._ansi_type, line
+            x.shrink()
             out[i] = x
         return out
 
@@ -2027,10 +2029,21 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
     def __add__(self, other, /):
         if isinstance(other, str):
             return color_chain(f"{self}{other}")
-        if isinstance(other, abc.Iterable):
+        elif isinstance(other, color_chain):
+            res = object.__new__(color_chain)
+            res._ansi_type = self._ansi_type
+            res._items = (
+                [(sgr.copy(), s) for xs in (self, other) for sgr, s in xs]
+                if self._ansi_type is other._ansi_type
+                else (
+                    [(sgr.copy(), s) for sgr, s in self]
+                    + [(self._handle_sgr(sgr.copy()), s) for sgr, s in other]
+                )
+            )
+            return res
+        elif isinstance(other, abc.Iterable):
             return color_chain(
-                (x for xs in (self, other) for x in xs),
-                ansi_type=self._ansi_type or getattr(other, "_ansi_type", None),
+                (x for xs in (self, other) for x in xs), ansi_type=self._ansi_type
             )
         return NotImplemented
 
@@ -2059,13 +2072,20 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         if iterable is None:
             self._items = []
             return
+        elif isinstance(iterable, color_chain):
+            self._items = (
+                [(sgr.copy(), s) for sgr, s in iterable]
+                if self._ansi_type is iterable._ansi_type
+                else [(self._handle_sgr(sgr.copy()), s) for sgr, s in iterable]
+            )
+            return
         elif isinstance(iterable, str):
             iterable = [iterable]
-        buf = []
-        for item in iterable:
-            for sgr, s in self._coerce(item):
-                buf.append((self._handle_sgr(sgr), s))
-        self._items = buf
+        self._items = [
+            (self._handle_sgr(sgr), s)
+            for item in iterable
+            for sgr, s in self._coerce(item)
+        ]
 
     def __len__(self):
         return len(self._items)
@@ -2073,10 +2093,9 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
     def __radd__(self, other, /):
         if isinstance(other, str):
             return color_chain(f"{other}{self}")
-        if isinstance(other, abc.Iterable):
+        elif isinstance(other, abc.Iterable):
             return color_chain(
-                (x for xs in (other, self) for x in xs),
-                ansi_type=getattr(other, "_ansi_type", self._ansi_type),
+                (x for xs in (other, self) for x in xs), ansi_type=self._ansi_type
             )
         return NotImplemented
 

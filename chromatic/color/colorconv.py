@@ -306,53 +306,77 @@ ANSI_4BIT_RGB_LUT = _4b_lookup()
 
 
 def nearest_ansi_4bit_rgb(rgb, /):
-    if is_3tuple := (rgb.__class__ is tuple and len(rgb) == 3):
-        r, g, b = (min(x >> 3, 32) for x in rgb)
-    else:
-        arr = np.asarray(rgb, dtype=np.uint8) >> 3
-        if not arr.shape or arr.shape[-1] != 3:
-            raise ValueError
-        r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
-    out = ANSI_4BIT_RGB_LUT[r, g, b]
-    return tuple(out.tolist()) if is_3tuple else out
+    arr = np.asarray(rgb, dtype=np.uint8) >> 3
+    out = ANSI_4BIT_RGB_LUT[arr[..., 0], arr[..., 1], arr[..., 2]]
+    return tuple(out.tolist()) if arr.shape == (3,) else out
 
 
 def nearest_ansi_8bit_rgb(value, /):
     return ansi_8bit_to_rgb(rgb_to_ansi_8bit(value))
 
 
+def _ansi_8bit_to_rgb_fast(value: int, /):
+    if value < 16:
+        return ANSI_4BIT_RGB[value]
+    elif value < 232:
+        value -= 16
+        return value // 36 * 51, (value % 36 // 6) * 51, (value % 6) * 51
+    else:
+        return (8 + (value - 232) * 10,) * 3
+
+
 def ansi_8bit_to_rgb(value, /):
-    arr = np.atleast_1d(value).astype(np.uint8)
-    out = np.empty((*arr.shape, 3), dtype=np.uint8)
+    arr = np.asarray(value, dtype=np.uint8)
+    if arr.ndim == 0:
+        return _ansi_8bit_to_rgb_fast(arr.item())
+    out = np.empty(arr.shape + (3,), dtype=np.uint8)
     mask = np.ones(arr.shape, dtype=np.bool_)
-    if np.any(ansi_16c := arr < 16):
-        out[ansi_16c] = np.take(ANSI_4BIT_RGB, arr[ansi_16c], axis=0)
-        mask &= ~ansi_16c
-    if np.any(colorcube := (arr >= 16) & (arr < 232)):
-        c = arr[colorcube] - 16
-        out[colorcube, 0] = (c // 36) * 51
-        out[colorcube, 1] = (c % 36 // 6) * 51
-        out[colorcube, 2] = (c % 6) * 51
-        mask &= ~colorcube
+    ansi_16c = arr < 16
+    out[ansi_16c] = np.take(ANSI_4BIT_RGB, arr[ansi_16c], axis=0)
+    mask &= ~ansi_16c
+    colorcube = (arr >= 16) & (arr < 232)
+    c = arr[colorcube] - 16
+    out[colorcube, 0] = c // 36
+    out[colorcube, 1] = c % 36 // 6
+    out[colorcube, 2] = c % 6
+    out[colorcube, :] *= 51
+    mask &= ~colorcube
     out[mask] = (8 + (arr[mask] - 232) * 10)[:, None]
-    return tuple(out[0].tolist()) if np.isscalar(value) else out
+    return out
+
+
+def _rgb_to_ansi_8bit_fast(r: int, g: int, b: int, /):
+    if not (r == g == b):
+        return (
+            16
+            + (36 * round(r / 255 * 5))
+            + (6 * round(g / 255 * 5))
+            + round(b / 255 * 5)
+        )
+    elif r < 8:
+        return 16
+    elif r > 248:
+        return 231
+    else:
+        return round((r - 8) / 247 * 24) + 232
 
 
 def rgb_to_ansi_8bit(rgb, /) -> int | ShapedNDArray[tuple[int, ...], np.uint8]:
-    is_3tuple = rgb.__class__ is tuple and len(rgb) == 3
     arr = np.asarray(rgb, dtype=np.uint8)
+    if arr.shape == (3,):
+        return _rgb_to_ansi_8bit_fast(*arr.tolist())
     out = np.zeros(arr.shape[:-1], dtype=np.uint8)
     mask = np.ones(arr.shape[:-1], dtype=np.bool_)
-    if np.any(grey := (arr[..., 1:] == arr[..., 0:1]).all(axis=-1)):
-        c = arr[..., 0]
-        r_lo = grey & (c < 8)
-        r_hi = grey & (c > 248)
-        mid = grey & ~(r_lo | r_hi)
-        out[r_lo] = 16
-        out[r_hi] = 231
-        out[mid] = np.rint((c[mid] - 8) / 247 * 24) + 232
-        mask &= ~grey
+    grey = (arr[..., 1:] == arr[..., 0:1]).all(axis=-1)
+    c = arr[..., 0]
+    r_lo = grey & (c < 8)
+    r_hi = grey & (c > 248)
+    mid = grey & ~(r_lo | r_hi)
+    out[r_lo] = 16
+    out[r_hi] = 231
+    out[mid] = np.rint((c[mid] - 8) / 247 * 24) + 232
+    mask &= ~grey
     rest = np.rint(arr[mask] / 255 * 5)
     r, g, b = rest[..., 0], rest[..., 1], rest[..., 2]
     out[mask] = 16 + (36 * r) + (6 * g) + b
-    return out.item() if is_3tuple else out
+    return out

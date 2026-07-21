@@ -48,7 +48,6 @@ chromatic = ["data/fonts/*", "data/images/*"]
 [tool.black]
 preview = true
 skip-magic-trailing-comma = true
-skip-string-normalization = true
 target-version = ["py313"]
 
 [tool.isort]

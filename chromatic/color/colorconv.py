@@ -1,26 +1,26 @@
 __all__ = [
-    'ANSI_4BIT_RGB',
-    'ansi_4bit_to_rgb',
-    'ansi_8bit_to_rgb',
-    'int2rgb',
-    'hexstr2rgb',
-    'hsl2rgb',
-    'hsv2rgb',
-    'is_u24',
-    'lab2rgb',
-    'lab2xyz',
-    'nearest_ansi_4bit_rgb',
-    'nearest_ansi_8bit_rgb',
-    'rgb2int',
-    'rgb2hexstr',
-    'rgb2hsl',
-    'rgb2hsv',
-    'rgb2lab',
-    'rgb2xyz',
-    'rgb_diff',
-    'rgb_to_ansi_8bit',
-    'xyz2lab',
-    'xyz2rgb',
+    "ANSI_4BIT_RGB",
+    "ansi_4bit_to_rgb",
+    "ansi_8bit_to_rgb",
+    "int2rgb",
+    "hexstr2rgb",
+    "hsl2rgb",
+    "hsv2rgb",
+    "is_u24",
+    "lab2rgb",
+    "lab2xyz",
+    "nearest_ansi_4bit_rgb",
+    "nearest_ansi_8bit_rgb",
+    "rgb2int",
+    "rgb2hexstr",
+    "rgb2hsl",
+    "rgb2hsv",
+    "rgb2lab",
+    "rgb2xyz",
+    "rgb_diff",
+    "rgb_to_ansi_8bit",
+    "xyz2lab",
+    "xyz2rgb",
 ]
 
 import typing as tp
@@ -68,7 +68,7 @@ def hexstr2rgb(s: str, /) -> Int3Tuple:
         n //= 4
         s = s[:n]
     if n == 3:  # rgb -> rrggbb
-        s = ''.join(c * 2 for c in s)
+        s = "".join(c * 2 for c in s)
     x = int(s, 16)
     if not 0 <= x < (1 << 24):
         raise ValueError(f"{x:#x} is not u24")

@@ -1,4 +1,4 @@
-__all__ = ['get_glyph_masks', 'ttf_extract_codepoints', 'sort_glyphs']
+__all__ = ["get_glyph_masks", "ttf_extract_codepoints", "sort_glyphs"]
 
 import collections.abc as abc
 import os
@@ -53,13 +53,13 @@ def get_glyph_masks(
     font = get_font_object(font)
 
     def _get_threshold(c: str, /):
-        out = otsu_mask(render_font_char(c, font).convert('L'))
+        out = otsu_mask(render_font_char(c, font).convert("L"))
         if dist_transform is True:
             return distance_transform_edt(out)
         return out
 
-    space = _get_threshold(' ')
-    non_printable = _get_threshold('�')
+    space = _get_threshold(" ")
+    non_printable = _get_threshold("�")
     glyph_masks = {}
     for char in set(char_set):
         thresh = _get_threshold(char)
@@ -74,10 +74,10 @@ def sort_glyphs(s: str, /, font: _tp.FontArgType, reverse: bool = False):
     mapping = {}
     for c, arr in get_glyph_masks(font, s, dist_transform=True).items():
         v = np.sum(arr)
-        if v <= 0 and c != ' ':
+        if v <= 0 and c != " ":
             continue
         mapping[c] = v
-    return ''.join(
+    return "".join(
         sorted(
             filter(mapping.__contains__, all_chars),
             key=mapping.__getitem__,
@@ -90,6 +90,6 @@ def ttf_extract_codepoints(
     fp: str | os.PathLike[str], /, **kwargs
 ) -> _tp.ShapedNDArray[tuple[int], np.uint32]:
     with TTFont(fp, **kwargs) as font:
-        codepoints = {i for table in font['cmap'].tables for i in table.cmap}
-    arr = np.array([i for i in codepoints if chr(i).isprintable()], dtype='<u4')
+        codepoints = {i for table in font["cmap"].tables for i in table.cmap}
+    arr = np.array([i for i in codepoints if chr(i).isprintable()], dtype="<u4")
     return np.sort(arr)  # type: ignore[arg-type]

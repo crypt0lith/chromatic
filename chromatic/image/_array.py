@@ -1,22 +1,22 @@
 __all__ = [
-    'ansi2img',
-    'ansi_quantize',
-    'ansify',
-    'ascii2img',
-    'contrast_stretch',
-    'equalize_white_point',
-    'get_font_key',
-    'get_font_object',
-    'img2ansi',
-    'img2ascii',
-    'otsu_mask',
-    'read_ans',
-    'render_ans',
-    'render_font_char',
-    'render_font_str',
-    'reshape_ansi',
-    'scale_saturation',
-    'shuffle_char_set',
+    "ansi2img",
+    "ansi_quantize",
+    "ansify",
+    "ascii2img",
+    "contrast_stretch",
+    "equalize_white_point",
+    "get_font_key",
+    "get_font_object",
+    "img2ansi",
+    "img2ascii",
+    "otsu_mask",
+    "read_ans",
+    "render_ans",
+    "render_font_char",
+    "render_font_str",
+    "reshape_ansi",
+    "scale_saturation",
+    "shuffle_char_set",
 ]
 
 import collections.abc as abc
@@ -65,7 +65,7 @@ def get_font_key(font: PIL.ImageFont.FreeTypeFont):
     font_key = font.getname()
     if not all(font_key):
         missing = []
-        s = 'font %s'
+        s = "font %s"
         if font_key[0] is None:
             missing.append(f"{s % 'name'!r}")
         if font_key[-1] is None:
@@ -122,7 +122,7 @@ def get_font_object(
 
     if retpath:
         return (
-            getattr(font.path, 'name', os.fspath(font.path))
+            getattr(font.path, "name", os.fspath(font.path))
             if isinstance(font, PIL.ImageFont.FreeTypeFont)
             else get_font_object(get_font_object(font), retpath=True)
         )
@@ -161,7 +161,7 @@ def shuffle_char_set(chars: abc.Iterable[str]):
     """
     xs = list(c for s in chars for c in s)
     random.shuffle(xs)
-    return ''.join(xs)
+    return "".join(xs)
 
 
 def render_font_str(s: str, /, font: _tp.FontArgType):
@@ -198,7 +198,7 @@ def render_font_str(s: str, /, font: _tp.FontArgType):
                         for c in line
                     ]
                 )
-                for line in map(lambda x: f'{x:<{maxlen}}', lines)
+                for line in map(lambda x: f"{x:<{maxlen}}", lines)
             ]
         )
         return PIL.Image.fromarray(stacked)
@@ -239,7 +239,7 @@ def render_font_char(
     """
     if len(c) > 1:
         raise ValueError(f"expected a character, but string of length {len(c)} found")
-    img = PIL.Image.new('RGB', size=size)
+    img = PIL.Image.new("RGB", size=size)
     draw = PIL.ImageDraw.Draw(img)
     font_obj = get_font_object(font)
     bbox = draw.textbbox((0, 0), c, font=font_obj)
@@ -277,7 +277,7 @@ def get_rgb_array(img: str | os.PathLike[str] | _tp.RGBImageLike, /):
         img = x
     if not _is_rgb_array(img):
         if _is_image(img):
-            img = img.convert('RGB')
+            img = img.convert("RGB")
         elif _is_array(img):
             if img.ndim == 2:
                 img = cv.cvtColor(img[:, :, 0], cv.COLOR_GRAY2RGB)
@@ -404,7 +404,7 @@ def _get_asciidraw_vars(
 
 
 def _get_bbox_shape(font: PIL.ImageFont.FreeTypeFont, /):
-    return font.getbbox(' ')[2:]
+    return font.getbbox(" ")[2:]
 
 
 @tp.overload
@@ -551,7 +551,7 @@ def img2ansi(
     char_set: tp.Optional[str] = ...,
     sort_glyphs: bool | tp.Literal[-1] = ...,
     ansi_type: tp.Optional[core.AnsiColorParam] = ...,
-    equalize: bool | tp.Literal['white_point'] = ...,
+    equalize: bool | tp.Literal["white_point"] = ...,
     bg: tp.Optional[_tp.Int3Tuple | str] = ...,
     *,
     outarray: tp.Literal[False] = False,
@@ -567,14 +567,14 @@ def img2ansi(
     char_set: tp.Optional[str] = ...,
     sort_glyphs: bool | tp.Literal[-1] = ...,
     ansi_type: tp.Optional[core.AnsiColorParam] = ...,
-    equalize: bool | tp.Literal['white_point'] = ...,
+    equalize: bool | tp.Literal["white_point"] = ...,
     bg: tp.Optional[_tp.Int3Tuple | str] = ...,
     *,
     outarray: tp.Literal[True],
 ) -> _tp.ShapedNDArray[tuple[int, int], np.void]: ...
 
 
-@rgb_dispatch('bg')
+@rgb_dispatch("bg")
 def img2ansi(
     img: str | os.PathLike[str] | _tp.RGBImageLike,
     /,
@@ -583,7 +583,7 @@ def img2ansi(
     char_set: tp.Optional[str] = None,
     sort_glyphs: bool | tp.Literal[-1] = True,
     ansi_type: tp.Optional[core.AnsiColorParam] = None,
-    equalize: bool | tp.Literal['white_point'] = False,
+    equalize: bool | tp.Literal["white_point"] = False,
     bg: tp.Optional[_tp.Int3Tuple | str] = None,
     *,
     outarray=False,
@@ -669,7 +669,7 @@ def img2ansi(
     ansi_type = core.get_ansi_type(ansi_type)
     rgb = ansi_quantize(rgb, ansi_type=ansi_type)
     with (
-        PIL.Image.fromarray(rgb, mode='RGB') as img,
+        PIL.Image.fromarray(rgb, mode="RGB") as img,
         img.resize((w, h), resample=PIL.Image.Resampling.LANCZOS) as resized,
     ):
         out = np.zeros(s.shape, dtype=core.color_chain.dtype)
@@ -682,7 +682,7 @@ def img2ansi(
         return out if outarray is True else core.color_chain.fromarray(out)
 
 
-@rgb_dispatch('fg', 'bg')
+@rgb_dispatch("fg", "bg")
 def ascii2img(
     s: str,
     /,
@@ -721,12 +721,12 @@ def ascii2img(
     img2ascii : Convert an image into an ASCII string.
     """
     font = PIL.ImageFont.truetype(get_font_object(font, retpath=True), font_size)
-    lines = s.split('\n')
+    lines = s.split("\n")
     n_rows, n_cols = map(len, (lines, lines[0]))
     cw, ch = _get_bbox_shape(font)
     iw, ih = (int(i * j) for i, j in zip((cw, ch), (n_cols, n_rows)))
     r, g, b = tuple(map(int, bg))
-    img = PIL.Image.new('RGB', (iw, ih), (r, g, b))
+    img = PIL.Image.new("RGB", (iw, ih), (r, g, b))
     draw = PIL.ImageDraw.Draw(img)
     y_offset = 0
     for line in lines:
@@ -735,7 +735,7 @@ def ascii2img(
     return img
 
 
-@rgb_dispatch('fg_default', 'bg_default')
+@rgb_dispatch("fg_default", "bg_default")
 def ansi2img(
     arr: (
         _tp.ShapedNDArray[tuple[int, int], np.void]
@@ -856,7 +856,7 @@ def ansify(
     char_set: tp.Optional[str] = None,
     sort_glyphs: bool | tp.Literal[-1] = True,
     ansi_type: tp.Optional[core.AnsiColorParam] = None,
-    equalize: bool | tp.Literal['white_point'] = False,
+    equalize: bool | tp.Literal["white_point"] = False,
     fg: _tp.Int3Tuple | str = (170, 170, 170),
     bg: _tp.Int3Tuple | str = (0, 0, 0),
 ):
@@ -894,7 +894,7 @@ def _is_image(obj: tp.Any, /) -> tp.TypeGuard[PIL.Image.Image]:
 
 @lru_cache(maxsize=1)
 def cursor_or_sgr_pattern():
-    sgr_re = core.sgr_pattern().pattern.removeprefix(r'\x1b\[')
+    sgr_re = core.sgr_pattern().pattern.removeprefix(r"\x1b\[")
     return re.compile(
         r"(?:"
         r"\x1b\[(?:"

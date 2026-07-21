@@ -18,13 +18,13 @@ def _load_registry() -> mappingproxy[str, str]:
 registry = _load_registry()
 
 
-def filehash(fp: str | PathLike[str], alg='sha256'):
+def filehash(fp: str | PathLike[str], alg="sha256"):
     import hashlib
 
     if alg not in hashlib.algorithms_available:
         raise ValueError(f"unavailable hashing algorithm: {alg!r}")
     hasher = hashlib.new(alg)
-    with open(fp, mode='rb') as f:
+    with open(fp, mode="rb") as f:
         chunksize = 0xFFFF + 1
         while chunk := f.read(chunksize):
             hasher.update(chunk)
@@ -39,7 +39,7 @@ def _fetch_remote(relpath: str, out_path: str):
 
     from chromatic import __version__
 
-    version = re.sub(r"\.dev\d+\+.+$", '', __version__)
+    version = re.sub(r"\.dev\d+\+.+$", "", __version__)
     remote_dir = f"crypt0lith/chromatic/raw/v{version}/chromatic/data"
     url = f"https://github.com/{remote_dir}/{relpath}"
     print(f"fetching {url!r}...", file=sys.stderr)

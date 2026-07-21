@@ -1,4 +1,4 @@
-__all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']
+__all__ = ["Back", "ColorNamespace", "Fore", "Style", "rgb_dispatch", "named_color"]
 
 import collections.abc as abc
 import typing as tp
@@ -271,7 +271,7 @@ def rgb_dispatch[_F: abc.Callable[..., tp.Any]](
     *names: str,
 ) -> abc.Callable[[_F], _F]: ...
 
-named_color: MappingProxyType[str | tuple[str, tp.Literal['4b', '24b']], Color]
+named_color: MappingProxyType[str | tuple[str, tp.Literal["4b", "24b"]], Color]
 
 def named_color_idents() -> list[ColorStr]: ...
 

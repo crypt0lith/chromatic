@@ -21,7 +21,7 @@ from types import MappingProxyType as mappingproxy
 
 from .._typing import TypedDictMatcher
 
-_TRUETYPE_EXT = frozenset({'.ttf', '.ttc'})
+_TRUETYPE_EXT = frozenset({".ttf", ".ttc"})
 _ROOT_FONT_DIR = Path(__file__).parent / "fonts"
 _ROOT_FONT_KEY = "vga437"
 _DEFAULT_FONT = None
@@ -32,7 +32,7 @@ class UserFont:
     font: str
     size: int = field(default=24, kw_only=True)
     index: int = field(default=0, kw_only=True)
-    encoding: str = field(default='', kw_only=True)
+    encoding: str = field(default="", kw_only=True)
     is_default: bool = field(default=False, kw_only=True, compare=False)
     _base_dir: Path = field(init=False, compare=False)
 

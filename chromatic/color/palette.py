@@ -1,4 +1,4 @@
-__all__ = ['Back', 'ColorNamespace', 'Fore', 'Style', 'rgb_dispatch', 'named_color']
+__all__ = ["Back", "ColorNamespace", "Fore", "Style", "rgb_dispatch", "named_color"]
 
 import collections.abc as abc
 import functools as ft
@@ -423,7 +423,7 @@ class AnsiStyle(
 
 class AnsiBack(
     ColorNamespace,
-    wrapper=lambda x: _frozen_color_chain(ColorStr(bg=x), ansi_type='24b'),
+    wrapper=lambda x: _frozen_color_chain(ColorStr(bg=x), ansi_type="24b"),
 ):
     __ignore__ = ("RESET",)
     RESET = AnsiStyle.DEFAULT_BG_COLOR
@@ -434,7 +434,7 @@ class AnsiBack(
 
 class AnsiFore(
     ColorNamespace,
-    wrapper=lambda x: _frozen_color_chain(ColorStr(fg=x), ansi_type='24b'),
+    wrapper=lambda x: _frozen_color_chain(ColorStr(fg=x), ansi_type="24b"),
 ):
     __ignore__ = ("RESET",)
     RESET = AnsiStyle.DEFAULT_FG_COLOR
@@ -588,22 +588,22 @@ def _named_color():
     from .colorconv import ANSI_4BIT_RGB
 
     ansi_4bit_names = (
-        'BLACK',
-        'RED',
-        'GREEN',
-        'YELLOW',
-        'BLUE',
-        'MAGENTA',
-        'CYAN',
-        'GREY',
-        'DARK_GREY',
-        'BRIGHT_RED',
-        'BRIGHT_GREEN',
-        'BRIGHT_YELLOW',
-        'BRIGHT_BLUE',
-        'BRIGHT_MAGENTA',
-        'BRIGHT_CYAN',
-        'WHITE',
+        "BLACK",
+        "RED",
+        "GREEN",
+        "YELLOW",
+        "BLUE",
+        "MAGENTA",
+        "CYAN",
+        "GREY",
+        "DARK_GREY",
+        "BRIGHT_RED",
+        "BRIGHT_GREEN",
+        "BRIGHT_YELLOW",
+        "BRIGHT_BLUE",
+        "BRIGHT_MAGENTA",
+        "BRIGHT_CYAN",
+        "WHITE",
     )
     ansi_4bit_dict = dict(zip(ansi_4bit_names, map(Color.from_rgb, ANSI_4BIT_RGB)))
 
@@ -617,7 +617,7 @@ def _named_color():
 
 def named_color_idents():
     return [
-        ColorStr(name.translate({0x5F: 0x20}).lower(), color, ansi_type='24b')
+        ColorStr(name.translate({0x5F: 0x20}).lower(), color, ansi_type="24b")
         for name, color in ColorNamespace.asdict().items()
     ]
 

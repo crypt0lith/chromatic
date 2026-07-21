@@ -271,10 +271,10 @@ def get_rgb_array(img: str | os.PathLike[str] | _tp.RGBImageLike, /):
         If the input is not a valid image or path.
     """
     if isinstance(img, (str, os.PathLike)):
-        x = cv.imread(os.fspath(img))
+        x = cv.imread(fp := os.fspath(img))
         if x is None:
-            raise ValueError
-        img = x
+            raise FileNotFoundError(fp)
+        img = cv.cvtColor(x, cv.COLOR_BGR2RGB)
     if not _is_rgb_array(img):
         if _is_image(img):
             img = img.convert("RGB")

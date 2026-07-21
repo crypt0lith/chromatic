@@ -1,60 +1,65 @@
-from __future__ import annotations
+__all__ = ["get_glyph_masks", "ttf_extract_codepoints", "sort_glyphs"]
 
-__all__ = ['get_glyph_masks', 'ttf_extract_codepoints', 'sort_glyphs']
-
-from os import PathLike
-from typing import Literal, Sequence, Union, overload
+import collections.abc as abc
+import os
+import typing as tp
+from typing import Literal as L
 
 import numpy as np
 from fontTools.ttLib import TTFont
-from numpy import float64, uint8
 from scipy.ndimage import distance_transform_edt
 
-from .._typing import FontArgType, GlyphArray, GlyphBitmask, ShapedNDArray
+from .. import _typing as _tp
 from ._array import otsu_mask
 from ._curses import ascii_printable
 
 
-@overload
+@tp.overload
 def get_glyph_masks(
-    font: FontArgType,
+    font: _tp.FontArgType, /, char_set: abc.Sequence[str] | None = ...
+) -> dict[str, _tp.GlyphArray[np.uint8]]: ...
+
+
+@tp.overload
+def get_glyph_masks(
+    font: _tp.FontArgType,
     /,
-    char_set: Sequence[str] = ...,
-    dist_transform: Literal[False] = False,
-) -> dict[str, GlyphBitmask]: ...
+    char_set: abc.Sequence[str] | None = ...,
+    *,
+    dist_transform: L[False],
+) -> dict[str, _tp.GlyphArray[np.uint8]]: ...
 
 
-@overload
+@tp.overload
 def get_glyph_masks(
-    font: FontArgType,
+    font: _tp.FontArgType,
     /,
-    char_set: Sequence[str] = ...,
-    dist_transform: Literal[True] = ...,
-) -> dict[str, GlyphArray[float64]]: ...
-
-
-@overload
-def get_glyph_masks(
-    font: FontArgType, /, char_set: Sequence[str] = ..., dist_transform: bool = ...
-) -> dict[str, GlyphArray[Union[uint8, float64]]]: ...
+    char_set: abc.Sequence[str] | None = ...,
+    *,
+    dist_transform: L[True],
+) -> dict[str, _tp.GlyphArray[np.float64]]: ...
 
 
 def get_glyph_masks(
-    font: FontArgType, /, char_set: Sequence[str] = None, dist_transform: bool = False
-) -> dict[str, GlyphArray[Union[uint8, float64]]]:
+    font: _tp.FontArgType,
+    /,
+    char_set: abc.Sequence[str] | None = None,
+    *,
+    dist_transform: bool = False,
+):
     from ._array import get_font_object, render_font_char
 
     char_set = char_set or ascii_printable()
     font = get_font_object(font)
 
     def _get_threshold(c: str, /):
-        out = otsu_mask(render_font_char(c, font).convert('L'))
+        out = otsu_mask(render_font_char(c, font).convert("L"))
         if dist_transform is True:
             return distance_transform_edt(out)
         return out
 
-    space = _get_threshold(' ')
-    non_printable = _get_threshold('�')
+    space = _get_threshold(" ")
+    non_printable = _get_threshold("�")
     glyph_masks = {}
     for char in set(char_set):
         thresh = _get_threshold(char)
@@ -64,15 +69,15 @@ def get_glyph_masks(
     return glyph_masks
 
 
-def sort_glyphs(s: str, /, font: FontArgType, reverse: bool = False):
+def sort_glyphs(s: str, /, font: _tp.FontArgType, reverse: bool = False):
     all_chars = list(s)
     mapping = {}
     for c, arr in get_glyph_masks(font, s, dist_transform=True).items():
         v = np.sum(arr)
-        if v <= 0 and c != ' ':
+        if v <= 0 and c != " ":
             continue
         mapping[c] = v
-    return ''.join(
+    return "".join(
         sorted(
             filter(mapping.__contains__, all_chars),
             key=mapping.__getitem__,
@@ -82,11 +87,9 @@ def sort_glyphs(s: str, /, font: FontArgType, reverse: bool = False):
 
 
 def ttf_extract_codepoints(
-    fp: FontArgType | PathLike[str], /, **kwargs
-) -> ShapedNDArray[tuple[int], np.uint16]:
-    codepoints = set()
+    fp: str | os.PathLike[str], /, **kwargs
+) -> _tp.ShapedNDArray[tuple[int], np.uint32]:
     with TTFont(fp, **kwargs) as font:
-        for table in font['cmap'].tables:
-            codepoints |= table.cmap.keys()
-    arr = np.array([i for i in codepoints if chr(i).isprintable()], dtype='<u2')
+        codepoints = {i for table in font["cmap"].tables for i in table.cmap}
+    arr = np.array([i for i in codepoints if chr(i).isprintable()], dtype="<u4")
     return np.sort(arr)  # type: ignore[arg-type]

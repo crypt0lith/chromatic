@@ -22,7 +22,7 @@ class UserFont:
     font: str
     size: int = field(default=24, kw_only=True)
     index: int = field(default=0, kw_only=True)
-    encoding: str = field(default='', kw_only=True)
+    encoding: str = field(default="", kw_only=True)
     is_default: bool = field(default=False, kw_only=True, compare=False)
     def __post_init__(self) -> None: ...
     def __hash__(self) -> int: ...

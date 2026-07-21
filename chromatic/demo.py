@@ -20,14 +20,14 @@ DEMO_FUNCS = FunctionNamespace()
 @DEMO_FUNCS.register
 def escher_dragon_ascii():
     """Displays the image-to-ASCII transform of 'Dragon' by M.C. Escher."""
-    font = cm.userfonts['vga437']
+    font = cm.userfonts["vga437"]
     char_set = r"  ._-~+<vX♦'^Vx>|πΦ0Ω#$║╫"
     with cm.data.escher() as img:
         ascii_str = cm.img2ascii(
             img, font, factor=240, char_set=char_set, sort_glyphs=True
         )
     with cm.ascii2img(
-        ascii_str, font, font_size=16, fg='white', bg='black'
+        ascii_str, font, font_size=16, fg="white", bg="black"
     ) as ascii_img:
         ascii_img.show()
 
@@ -35,10 +35,10 @@ def escher_dragon_ascii():
 @DEMO_FUNCS.register
 def escher_dragon_256color():
     """Displays the image-to-ANSI transform of 'Dragon' by M.C. Escher in 8-bit color."""
-    font = cm.userfonts['vga437']
+    font = cm.userfonts["vga437"]
     with cm.data.escher() as img:
         ansi_array = cm.img2ansi(
-            img, font, factor=240, ansi_type='8b', equalize=True, outarray=True
+            img, font, factor=240, ansi_type="8b", equalize=True, outarray=True
         )
     with cm.ansi2img(ansi_array, font, font_size=16) as ansi_img:
         ansi_img.show()
@@ -50,7 +50,7 @@ def butterfly_16color():
 
     Good ol' C-x M-c M-butterfly...
     """
-    font = cm.userfonts['vga437']
+    font = cm.userfonts["vga437"]
     char_set = r"'·,•-_→+<>ⁿ*%⌂7√Iï∞πbz£9yîU{}1αHSw♥æ?GX╕╒éà⌡MF╝╩ΘûÇƒQ½☻Å¶┤▄╪║▒█"
     with cm.data.butterfly() as img:
         ansi_array = cm.img2ansi(
@@ -69,14 +69,14 @@ def butterfly_16color():
 @DEMO_FUNCS.register
 def butterfly_truecolor():
     """Displays the image-to-ANSI transform of 'Spider Lily & Papilio xuthus' in 24-bit color."""
-    font = cm.userfonts['vga437']
+    font = cm.userfonts["vga437"]
     with cm.data.butterfly() as img:
         ansi_array = cm.img2ansi(
             img,
             font,
             factor=200,
-            ansi_type='24b',
-            equalize='white_point',
+            ansi_type="24b",
+            equalize="white_point",
             outarray=True,
         )
     with cm.ansi2img(ansi_array, font, font_size=16) as ansi_img:
@@ -87,14 +87,14 @@ def butterfly_truecolor():
 def butterfly_rainbowcolor():
     import numpy as np
 
-    font = cm.userfonts['vga437']
+    font = cm.userfonts["vga437"]
     with cm.data.butterfly() as img:
         ansi_array = cm.img2ansi(
             img,
             font,
             factor=200,
-            ansi_type='24b',
-            equalize='white_point',
+            ansi_type="24b",
+            equalize="white_point",
             outarray=True,
         )
     ansi_array["rgb"][..., 0, 0] = 3
@@ -109,11 +109,11 @@ def butterfly_rainbowcolor():
 @DEMO_FUNCS.register
 def goblin_virus_truecolor():
     """`G-O-B-L-I-N VIRUS <https://imgur.com/n0Mng2P>`__"""
-    font = cm.userfonts['vga437']
-    char_set = r'  .-|_⌐¬^:()═+<>v≥≤«*»x└┘π╛╘┴┐┌┬╧╚╙X╒╜╨#0╓╝╩╤╥│╔┤├╞╗╦┼╪║╟╠╫╣╬░▒▓█▄▌▐▀'
+    font = cm.userfonts["vga437"]
+    char_set = r"  .-|_⌐¬^:()═+<>v≥≤«*»x└┘π╛╘┴┐┌┬╧╚╙X╒╜╨#0╓╝╩╤╥│╔┤├╞╗╦┼╪║╟╠╫╣╬░▒▓█▄▌▐▀"
     with cm.data.goblin_virus() as img:
         ansi_array = cm.img2ansi(
-            img, font, factor=200, char_set=char_set, ansi_type='24b', equalize=False
+            img, font, factor=200, char_set=char_set, ansi_type="24b", equalize=False
         )
     with cm.ansi2img(ansi_array, font, font_size=16) as ansi_img:
         ansi_img.show()
@@ -138,7 +138,7 @@ def named_colors():
             named[start + 1 if start else None : stop + 1 if ~stop else None],
             key=lambda x: cm.color.rgb2lab(x.fg.rgb),
         )
-        print(' | '.join(xs))
+        print(" | ".join(xs))
 
 
 @DEMO_FUNCS.register
@@ -149,17 +149,17 @@ def color_cube():
     for i in range(0x10):
         if i and i % 8 == 0:
             print("\x1b[m")
-        print(fmt_code(next(ansi_256_codes)), end='')
+        print(fmt_code(next(ansi_256_codes)), end="")
     else:
         print("\x1b[m")
     for i in range(6**3):
         if i and i % 6**2 == 0:
             print("\x1b[m")
-        print(fmt_code(next(ansi_256_codes)), end='')
+        print(fmt_code(next(ansi_256_codes)), end="")
     else:
         print("\x1b[m")
     for x in ansi_256_codes:
-        print(fmt_code(x), end='')
+        print(fmt_code(x), end="")
     else:
         print("\x1b[m")
 
@@ -176,15 +176,15 @@ def color_table():
     colors: dict[str, cm.Color] = {
         name.title(): getattr(cm.ColorNamespace, name)
         for name in [
-            'BLACK',
-            'WHITE',
-            'RED',
-            'ORANGE',
-            'YELLOW',
-            'GREEN',
-            'BLUE',
-            'INDIGO',
-            'PURPLE',
+            "BLACK",
+            "WHITE",
+            "RED",
+            "ORANGE",
+            "YELLOW",
+            "GREEN",
+            "BLUE",
+            "INDIGO",
+            "PURPLE",
         ]
     }
     spacing = max(map(len, colors)) + 1
@@ -196,16 +196,16 @@ def color_table():
         c.recolor(fg=None, bg=c.fg) for c in fg_colors
     ]
     print(
-        '|'.join(
+        "|".join(
             f"{'%dbit' % n: {'>' if n == 24 else '^'}{spacing - 1}}" for n in (4, 8, 24)
         )
     )
     for row in fg_colors:
         for col in bg_colors:
             for typ in ansi_types:
-                print(row.as_ansi_type(typ).recolor(bg=col.bg), end='\x1b[0m')
+                print(row.as_ansi_type(typ).recolor(bg=col.bg), end="\x1b[0m")
         print()
-    print('\nstyles:', end='\t')
+    print("\nstyles:", end="\t")
     style_params = [
         cm.SgrParameter.BOLD,
         cm.SgrParameter.ITALICS,
@@ -220,7 +220,7 @@ def color_table():
             cm.ColorStr(f"{cm.SgrParameter.__qualname__}.{style.name}").add_sgr_param(
                 style
             ),
-            end=('\n' if style is style_params[-1] else "\x1b[0m".ljust(8)),
+            end=("\n" if style is style_params[-1] else "\x1b[0m".ljust(8)),
         )
 
 
@@ -240,7 +240,7 @@ class _time_wrapper[**P, R]:
     def _delta(start: float, stop: float) -> tuple[float, str]:
         delta = stop - start
         mag, fmt = min(
-            [(1, 's'), (1e-3, 'ms'), (1e-6, 'μs'), (1e-9, 'ns'), (1e-12, 'ps')],
+            [(1, "s"), (1e-3, "ms"), (1e-6, "μs"), (1e-9, "ns"), (1e-12, "ps")],
             key=lambda x: abs(math.log10(x[0]) - math.log10(delta)),
         )
         delta *= 1 / mag
@@ -258,12 +258,12 @@ def print_help(ns: dict[str, FunctionType], choices: dict[int, str]):
     print(f"{'\t-h, --help': <{indent}}\t\tprint this message and exit")
     for idx, k in choices.items():
         head = f"\t{idx}, {k}"
-        desc = '\n'.join(
+        desc = "\n".join(
             wrap(
-                ns[k].__doc__ or '',
+                ns[k].__doc__ or "",
                 columns,
-                initial_indent='\t\t',
-                subsequent_indent='\t\t',
+                initial_indent="\t\t",
+                subsequent_indent="\t\t",
             )
         )
         print(f"{head: <{indent}}{desc}")
@@ -284,11 +284,11 @@ def main():
     choice: FunctionType | None = None
     if len(sys.argv) > 1:
         arg = sys.argv[1]
-        if arg.casefold() in {'-h', '--help'}:
+        if arg.casefold() in {"-h", "--help"}:
             return print_help(ns, choices)
         elif len(sys.argv) != 2:
             print(
-                f"unexpected arguments: " + f"{sys.argv[1:]}".strip('[]'),
+                f"unexpected arguments: " + f"{sys.argv[1:]}".strip("[]"),
                 file=sys.stderr,
             )
             return 1
@@ -306,7 +306,7 @@ def main():
                 from_user = input("select a demo function> ").strip()
                 if not from_user:
                     continue
-                if from_user == 'exit':
+                if from_user == "exit":
                     return
                 choice = get_choice(from_user)
                 break
@@ -317,11 +317,11 @@ def main():
                 print(f"\n{KeyboardInterrupt.__name__}", file=sys.stderr)
                 return
     if choice is not None:
-        print(f"running {choice.__name__!r}...", end='\n\n')
+        print(f"running {choice.__name__!r}...", end="\n\n")
         _, delta, fmt = _time_wrapper(choice)()
         print(f"\ntotal execution time: {delta} {fmt}")
         return
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

@@ -1,21 +1,21 @@
 __all__ = [
-    'CSI',
-    'Color',
-    'ColorChainDType',
-    'ColorStr',
-    'SGR_RESET',
-    'SgrFlag',
-    'SgrParameter',
-    'SgrSequence',
-    'ansicolor24Bit',
-    'ansicolor4Bit',
-    'ansicolor8Bit',
-    'color_chain',
-    'colorbytes',
-    'get_ansi_type',
-    'is_vt_enabled',
-    'randcolor',
-    'rgb2ansi_escape',
+    "CSI",
+    "Color",
+    "ColorChainDType",
+    "ColorStr",
+    "SGR_RESET",
+    "SgrFlag",
+    "SgrParameter",
+    "SgrSequence",
+    "ansicolor24Bit",
+    "ansicolor4Bit",
+    "ansicolor8Bit",
+    "color_chain",
+    "colorbytes",
+    "get_ansi_type",
+    "is_vt_enabled",
+    "randcolor",
+    "rgb2ansi_escape",
 ]
 
 import collections.abc as abc
@@ -169,13 +169,13 @@ _P2F: tp.Final[dict[int, int]]
 _F2P: tp.Final[dict[int, int]]
 _ANSI16C_I2KV: tp.Final[dict[int, tuple[ColorDictKeys, Int3Tuple]]]
 _ANSI16C_KV2I: tp.Final[dict[tuple[ColorDictKeys, Int3Tuple], int]]
-_ANSI256_B2KEY: tp.Final[dict[L[b'38', b'48'], ColorDictKeys]]
+_ANSI256_B2KEY: tp.Final[dict[L[b"38", b"48"], ColorDictKeys]]
 _ANSI256_KEY2I: tp.Final[dict[ColorDictKeys, int]]
 
 class colorbytes(bytes):
     @classmethod
     @tp.overload
-    def from_rgb[_T, _KT: (L['bg'], L['fg']), _VT: (tp.SupportsInt, RGBVectorLike)](
+    def from_rgb[_T, _KT: (L["bg"], L["fg"]), _VT: (tp.SupportsInt, RGBVectorLike)](
         cls: type[_T], rgb: tuple[ColorDictKeys, _VT] | abc.Mapping[_KT, _VT], /
     ) -> _T: ...
     @classmethod
@@ -197,15 +197,15 @@ class colorbytes(bytes):
     rgb_dict: mappingproxy[L["fg"], Int3Tuple] | mappingproxy[L["bg"], Int3Tuple]
 
 class ansicolor4Bit(colorbytes):
-    alias: tp.ClassVar[L['4b']]
+    alias: tp.ClassVar[L["4b"]]
     typecode: tp.ClassVar[L[1]]
 
 class ansicolor8Bit(colorbytes):
-    alias: tp.ClassVar[L['8b']]
+    alias: tp.ClassVar[L["8b"]]
     typecode: tp.ClassVar[L[2]]
 
 class ansicolor24Bit(colorbytes):
-    alias: tp.ClassVar[L['24b']]
+    alias: tp.ClassVar[L["24b"]]
     typecode: tp.ClassVar[L[3]]
 
 def is_vt_enabled() -> bool: ...
@@ -252,8 +252,8 @@ class Color(int):
 def randcolor() -> Color: ...
 
 class SgrParamBuffer[_VT: (bytes, ansicolor4Bit, ansicolor8Bit, ansicolor24Bit)]:
-    __slots__ = ('_value', '_bytes', '_is_color', '_is_reset')
-    __match_args__ = ('value',)
+    __slots__ = ("_value", "_bytes", "_is_color", "_is_reset")
+    __match_args__ = ("value",)
 
     def __buffer__(self, flags: int, /) -> memoryview: ...
     def __bytes__(self) -> bytes: ...
@@ -286,8 +286,8 @@ class SgrParamBuffer[_VT: (bytes, ansicolor4Bit, ansicolor8Bit, ansicolor24Bit)]
     _is_reset: bool
 
 class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
-    __slots__ = ('_sgr_params', '_bg_idx', '_fg_idx')
-    __match_args__ = ('_sgr_params',)
+    __slots__ = ("_sgr_params", "_bg_idx", "_fg_idx")
+    __match_args__ = ("_sgr_params",)
 
     class _color_descriptor:
         def __set_name__(self, objtype: type, name: str, /) -> None: ...
@@ -423,7 +423,7 @@ class ColorStr(str, _IntFloatMixin):
     def double_underline(self) -> tp.Self: ...
     def capitalize(self) -> tp.Self: ...
     def casefold(self) -> tp.Self: ...
-    def center(self, width: tp.SupportsIndex, fillchar: str = ' ', /) -> tp.Self: ...
+    def center(self, width: tp.SupportsIndex, fillchar: str = " ", /) -> tp.Self: ...
     def count(
         self,
         sub: str,
@@ -470,7 +470,7 @@ class ColorStr(str, _IntFloatMixin):
     def istitle(self) -> bool: ...
     def isupper(self) -> bool: ...
     def join(self, iterable: abc.Iterable[str], /) -> tp.Self: ...
-    def ljust(self, width: tp.SupportsIndex, fillchar: str = ' ', /) -> tp.Self: ...
+    def ljust(self, width: tp.SupportsIndex, fillchar: str = " ", /) -> tp.Self: ...
     def lower(self) -> tp.Self: ...
     def lstrip(self, chars: str | None = None, /) -> tp.Self: ...
     def partition(self, sep: str, /) -> TupleOf3[tp.Self]: ...
@@ -493,7 +493,7 @@ class ColorStr(str, _IntFloatMixin):
         end: tp.SupportsIndex | None = ...,
         /,
     ) -> int: ...
-    def rjust(self, width: tp.SupportsIndex, fillchar: str = ' ', /) -> tp.Self: ...
+    def rjust(self, width: tp.SupportsIndex, fillchar: str = " ", /) -> tp.Self: ...
     def rstrip(self, chars: str | None = None, /) -> tp.Self: ...
     def rpartition(self, sep: str, /) -> TupleOf3[tp.Self]: ...
     def rsplit(
@@ -519,7 +519,7 @@ class ColorStr(str, _IntFloatMixin):
     def __add__[_T: (ColorStr, str)](self, other: _T, /) -> tp.Self: ...
     def __contains__(self, key: str, /) -> bool: ...
     def __eq__(self, other, /) -> bool: ...
-    def __format__(self, format_spec: str = '', /) -> tp.Self: ...
+    def __format__(self, format_spec: str = "", /) -> tp.Self: ...
     def __ge__(self, other: str, /) -> bool: ...
 
     @tp.overload
@@ -589,8 +589,8 @@ class ColorStr(str, _IntFloatMixin):
 ColorChainDType: tp.Final[np.dtype[np.void]]
 
 class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
-    __slots__ = ('_ansi_type', '_items')
-    __match_args__ = ('_items',)
+    __slots__ = ("_ansi_type", "_items")
+    __match_args__ = ("_items",)
 
     dtype: tp.ClassVar[np.dtype[np.void]]
 
@@ -623,7 +623,7 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         self, dtype: tp.Any | None = None, copy: bool | None = None
     ) -> ShapedNDArray[tuple[int], np.void]: ...
     def __bool__(self) -> bool: ...
-    def __call__(self, obj: object = '', /) -> str: ...
+    def __call__(self, obj: object = "", /) -> str: ...
 
     @tp.overload
     def __delitem__(self, index: tp.SupportsIndex, /) -> None: ...

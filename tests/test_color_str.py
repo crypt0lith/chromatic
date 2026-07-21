@@ -41,7 +41,7 @@ def coerce_argspec[**P, R](
         args = tuple()
     if kwargs is None:
         kwargs = dict()
-    if isbuiltin(f) or getattr(f, '__module__', '') == 'builtins':
+    if isbuiltin(f) or getattr(f, "__module__", "") == "builtins":
         if not isinstance(args, tuple):
             args = tuple([args])
     else:
@@ -78,7 +78,7 @@ class cprofile_wrapper[**P, R]:
         if self.func is not None:
             profiler_kwargs = {}
             if self.use_perf_counter:
-                profiler_kwargs['timer'] = time.perf_counter
+                profiler_kwargs["timer"] = time.perf_counter
             profiler = cProfile.Profile(**profiler_kwargs)
             result = None
             profiler.enable()
@@ -86,7 +86,7 @@ class cprofile_wrapper[**P, R]:
                 result = self.func(*args, **kwargs)
             profiler.disable()
             out_stream = io.StringIO()
-            p = pstats.Stats(profiler, stream=out_stream).sort_stats('cumulative')
+            p = pstats.Stats(profiler, stream=out_stream).sort_stats("cumulative")
             p.print_stats()
             print(out_stream.getvalue())
             out_stream.close()
@@ -119,8 +119,8 @@ ANSI_4BIT_RGB: list[tuple[int, int, int]] = [
 
 def _rand_color_str_array(n_rows=10, n_cols=10):
     size = n_rows * n_cols
-    bit_str = ''
-    while '1' not in set(bit_str):
+    bit_str = ""
+    while "1" not in set(bit_str):
         rand_bits = random.getrandbits(size)
         bit_str = f"{rand_bits:0{size}b}"
     rand_bin = list(map(lambda x: bool(int(x)), bit_str))
@@ -133,12 +133,12 @@ def _rand_color_str_array(n_rows=10, n_cols=10):
         for col in range(n_cols):
             char = random.choice(printable_chars) if next(rand_bin_iter) else None
             current.append(
-                ColorStr(char, randcolor(), ansi_type=ansicolor24Bit) if char else ' '
+                ColorStr(char, randcolor(), ansi_type=ansicolor24Bit) if char else " "
             )
         output.append(
-            '{}{}{}{}'.format(
+            "{}{}{}{}".format(
                 *map(
-                    ''.join,
+                    "".join,
                     (
                         current,
                         *(
@@ -152,7 +152,7 @@ def _rand_color_str_array(n_rows=10, n_cols=10):
                 )
             )
         )
-    return '\n'.join(output)
+    return "\n".join(output)
 
 
 def test_performance_benchmark():
@@ -163,17 +163,17 @@ def test_performance_benchmark():
 class TestAnsiColorBytes(unittest.TestCase):
 
     def test_colorbytes_init(self):
-        self.assertIsInstance(colorbytes(b'\x1b[38;5;46m'), colorbytes)
-        self.assertIsInstance(ansicolor4Bit(b'\x1b[31m'), ansicolor4Bit)
-        self.assertIsInstance(ansicolor8Bit(b'\x1b[38;5;46m'), ansicolor8Bit)
-        self.assertIsInstance(ansicolor24Bit(b'\x1b[38;2;255;0;0m'), ansicolor24Bit)
+        self.assertIsInstance(colorbytes(b"\x1b[38;5;46m"), colorbytes)
+        self.assertIsInstance(ansicolor4Bit(b"\x1b[31m"), ansicolor4Bit)
+        self.assertIsInstance(ansicolor8Bit(b"\x1b[38;5;46m"), ansicolor8Bit)
+        self.assertIsInstance(ansicolor24Bit(b"\x1b[38;2;255;0;0m"), ansicolor24Bit)
 
     def test_colorbytes_bad_input(self):
         with self.assertRaises(ValueError):
-            ansicolor4Bit(b'\x1b[invalidm')
+            ansicolor4Bit(b"\x1b[invalidm")
 
         with self.assertRaises(TypeError):
-            ansicolor4Bit('not_bytes')
+            ansicolor4Bit("not_bytes")
 
     def test_ansi_4bit_to_rgb(self):
         for value, expected_rgb in enumerate(ANSI_4BIT_RGB):
@@ -211,55 +211,55 @@ class TestAnsiColorBytes(unittest.TestCase):
 class TestColorStr(unittest.TestCase):
 
     def test_color_instances(self):
-        cs = ColorStr('Red text', fg=Color(0xFF0000))
+        cs = ColorStr("Red text", fg=Color(0xFF0000))
         self.assertEqual(cs.fg.rgb, (255, 0, 0))
 
-        cs_bg = ColorStr('Blue background text', bg=Color(0x0000FF))
+        cs_bg = ColorStr("Blue background text", bg=Color(0x0000FF))
         self.assertEqual(cs_bg.bg.rgb, (0, 0, 255))
 
     def test_rgb_tuple(self):
-        cs = ColorStr('Red text', fg=(255, 0, 0))
+        cs = ColorStr("Red text", fg=(255, 0, 0))
         self.assertEqual(cs.fg.rgb, (255, 0, 0))
 
-        cs_bg = ColorStr('Blue background text', bg=(0, 0, 255))
+        cs_bg = ColorStr("Blue background text", bg=(0, 0, 255))
         self.assertEqual(cs_bg.bg.rgb, (0, 0, 255))
 
     def test_int_hex(self):
-        cs = ColorStr('Red text', fg=0xFF0000)
+        cs = ColorStr("Red text", fg=0xFF0000)
         self.assertEqual(cs.fg.rgb, (255, 0, 0))
 
-        cs_bg = ColorStr('Blue background text', bg=0x0000FF)
+        cs_bg = ColorStr("Blue background text", bg=0x0000FF)
         self.assertEqual(cs_bg.bg.rgb, (0, 0, 255))
 
     def test_ansi_bytes(self):
-        cs = ColorStr(b'\x1b[38;5;46mGreen text\x1b[0m', encoding='utf-8')
+        cs = ColorStr(b"\x1b[38;5;46mGreen text\x1b[0m", encoding="utf-8")
         self.assertEqual(cs.fg.rgb, (0, 255, 0))
-        self.assertEqual(cs.base_str, 'Green text')
+        self.assertEqual(cs.base_str, "Green text")
 
-        cs_bg = ColorStr(b'\x1b[48;5;46mGreen background\x1b[0m', encoding='utf-8')
-        self.assertIn('bg', cs_bg.rgb_dict)
+        cs_bg = ColorStr(b"\x1b[48;5;46mGreen background\x1b[0m", encoding="utf-8")
+        self.assertIn("bg", cs_bg.rgb_dict)
         self.assertEqual(cs_bg.bg.rgb, (0, 255, 0))
 
     def test_ansi_str(self):
-        cs = ColorStr('\x1b[38;5;46mGreen text\x1b[0m')
+        cs = ColorStr("\x1b[38;5;46mGreen text\x1b[0m")
         self.assertEqual(cs.fg.rgb, (0, 255, 0))
-        self.assertEqual(cs.base_str, 'Green text')
+        self.assertEqual(cs.base_str, "Green text")
 
-        cs_bg = ColorStr('\x1b[48;5;46mGreen background')
-        self.assertIn('bg', cs_bg.rgb_dict)
+        cs_bg = ColorStr("\x1b[48;5;46mGreen background")
+        self.assertIn("bg", cs_bg.rgb_dict)
         self.assertEqual(cs_bg.bg.rgb, (0, 255, 0))
 
     def test_color_dict(self):
-        cs = ColorStr('Red on Blue text', fg=Color(0xFF0000), bg=Color(0x0000FF))
+        cs = ColorStr("Red on Blue text", fg=Color(0xFF0000), bg=Color(0x0000FF))
         self.assertEqual(cs.fg.rgb, (255, 0, 0))
         self.assertEqual(cs.bg.rgb, (0, 0, 255))
 
     def test_mixed_color_spec(self):
-        cs = ColorStr('Red on Green text', fg=Color(0xFF0000), bg=(0, 255, 0))
+        cs = ColorStr("Red on Green text", fg=Color(0xFF0000), bg=(0, 255, 0))
         self.assertEqual(cs.fg.rgb, (255, 0, 0))
         self.assertEqual(cs.bg.rgb, (0, 255, 0))
 
-        cs_mixed = ColorStr('Blue on Yellow text', fg=0x0000FF, bg=(255, 255, 0))
+        cs_mixed = ColorStr("Blue on Yellow text", fg=0x0000FF, bg=(255, 255, 0))
         self.assertEqual(cs_mixed.fg.rgb, (0, 0, 255))
         self.assertEqual(cs_mixed.bg.rgb, (255, 255, 0))
 
@@ -268,7 +268,7 @@ class TestColorStr(unittest.TestCase):
             r = random.randint(0, 255)
             g = random.randint(0, 255)
             b = random.randint(0, 255)
-            random_text = ''.join(
+            random_text = "".join(
                 random.choices(ascii_letters, k=random.randint(5, 15))
             )
 
@@ -283,14 +283,14 @@ class TestColorStr(unittest.TestCase):
             self.assertEqual(cs_int.fg.rgb, (r, g, b))
 
     def test_update_sgr(self):
-        cs = ColorStr(ansi_type='4b', reset=False)
-        self.assertEqual((cs.base_str, cs.ansi), ('', b''))
+        cs = ColorStr(ansi_type="4b", reset=False)
+        self.assertEqual((cs.base_str, cs.ansi), ("", b""))
 
         red_fg = cs.add_sgr_param(SgrParameter.RED_BRIGHT_FG)
-        self.assertEqual([ansicolor4Bit(b'91')], list(red_fg._sgr.values()))
-        red_fg += 'iadd'
-        self.assertEqual([ansicolor4Bit(b'91')], list(red_fg._sgr.values()))
-        self.assertEqual(red_fg.base_str, 'iadd')
+        self.assertEqual([ansicolor4Bit(b"91")], list(red_fg._sgr.values()))
+        red_fg += "iadd"
+        self.assertEqual([ansicolor4Bit(b"91")], list(red_fg._sgr.values()))
+        self.assertEqual(red_fg.base_str, "iadd")
 
 
 def main():
@@ -323,16 +323,16 @@ def main():
                 if inp_.isdigit():
                     inp_ = int(inp_)
             except KeyboardInterrupt:
-                print('\nGoodbye!')
+                print("\nGoodbye!")
                 exit()
     selected = modes[inp_]
     if selected is unittest.main:
         sys.argv[1:] = []
-    print(f'Running {selected.__qualname__!r}...')
+    print(f"Running {selected.__qualname__!r}...")
     out = selected()
     if out is not None:
         print(out)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

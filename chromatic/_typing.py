@@ -38,21 +38,21 @@ RGBPixel: tp.TypeAlias = ShapedNDArray[tuple[L[3]], np.uint8]
 
 RGBImageLike: tp.TypeAlias = Image | RGBArray
 RGBVectorLike: tp.TypeAlias = IntSequence | RGBPixel
-ColorDictKeys = L['fg', 'bg']
-Ansi4BitAlias = L['4b', 1]
-Ansi8BitAlias = L['8b', 2]
-Ansi24BitAlias = L['24b', 3]
+ColorDictKeys = L["fg", "bg"]
+Ansi4BitAlias = L["4b", 1]
+Ansi8BitAlias = L["8b", 2]
+Ansi24BitAlias = L["24b", 3]
 AnsiColorAlias = Ansi4BitAlias | Ansi8BitAlias | Ansi24BitAlias
 FontArgType: tp.TypeAlias = tp.Union[FreeTypeFont, "UserFont", str]
 
 
-def type_error_msg(err_obj, *expected, context: str = '', obj_repr=False):
+def type_error_msg(err_obj, *expected, context: str = "", obj_repr=False):
     n_expected = len(expected)
     name_slots = ["{%d.__name__!r}" % n for n in range(n_expected)]
     if n_expected > 1:
         name_slots[-1] = f"or {name_slots[-1]}"
     names = (
-        (', ' if n_expected > 2 else ' ')
+        (", " if n_expected > 2 else " ")
         .join([context.strip(), *name_slots])
         .format(*expected)
     )

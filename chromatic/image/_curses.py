@@ -1,14 +1,14 @@
 __all__ = [
-    'ControlCharacter',
-    'alt',
-    'ascii_printable',
-    'backtrans_cp437',
-    'cp437_printable',
-    'ctrl',
-    'isctrl',
-    'isprint',
-    'translate_cp437',
-    'unctrl',
+    "ControlCharacter",
+    "alt",
+    "ascii_printable",
+    "backtrans_cp437",
+    "cp437_printable",
+    "ctrl",
+    "isctrl",
+    "isprint",
+    "translate_cp437",
+    "unctrl",
 ]
 
 from enum import IntEnum
@@ -87,11 +87,11 @@ def backtrans_cp437(x: str, /, keys: Iterable[int] | None = None) -> str:
 
 def cp437_printable():
     """Return a string containing all graphical characters in code page 437"""
-    return translate_cp437(bytes([*range(1, 0x20), *range(0x21, 0xFF)]).decode('cp437'))
+    return translate_cp437(bytes([*range(1, 0x20), *range(0x21, 0xFF)]).decode("cp437"))
 
 
 def ascii_printable():
-    return bytes(range(32, 127)).decode('ascii')
+    return bytes(range(32, 127)).decode("ascii")
 
 
 def _ctoi(c: str | int):
@@ -126,11 +126,11 @@ def alt(c: str | int):
 def unctrl(c: str | int):
     bits = _ctoi(c)
     if bits == 0x7F:
-        rep = '^?'
+        rep = "^?"
     elif isprint(bits & 0x7F):
         rep = chr(bits & 0x7F)
     else:
-        rep = '^' + chr(((bits & 0x7F) | 0x20) + 0x20)
+        rep = "^" + chr(((bits & 0x7F) | 0x20) + 0x20)
     if bits & 0x80:
-        return '!' + rep
+        return "!" + rep
     return rep

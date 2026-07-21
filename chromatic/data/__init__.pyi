@@ -1,12 +1,12 @@
 __all__ = [
-    'DEFAULT_FONT',
-    'UserFont',
-    'VGA437',
-    'butterfly',
-    'escher',
-    'goblin_virus',
-    'register_userfont',
-    'userfonts',
+    "DEFAULT_FONT",
+    "UserFont",
+    "VGA437",
+    "butterfly",
+    "escher",
+    "goblin_virus",
+    "register_userfont",
+    "userfonts",
 ]
 
 import PIL.Image

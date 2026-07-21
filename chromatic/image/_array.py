@@ -1,23 +1,22 @@
 __all__ = [
-    'ansi2img',
-    'ansi_quantize',
-    'ansify',
-    'ascii2img',
-    'contrast_stretch',
-    'equalize_white_point',
-    'get_font_key',
-    'get_font_object',
-    'img2ansi',
-    'img2ascii',
-    'otsu_mask',
-    'read_ans',
-    'render_ans',
-    'render_font_char',
-    'render_font_str',
-    'reshape_ansi',
-    'scale_saturation',
-    'scaled_hu_moments',
-    'shuffle_char_set',
+    "ansi2img",
+    "ansi_quantize",
+    "ansify",
+    "ascii2img",
+    "contrast_stretch",
+    "equalize_white_point",
+    "get_font_key",
+    "get_font_object",
+    "img2ansi",
+    "img2ascii",
+    "otsu_mask",
+    "read_ans",
+    "render_ans",
+    "render_font_char",
+    "render_font_str",
+    "reshape_ansi",
+    "scale_saturation",
+    "shuffle_char_set",
 ]
 
 import collections.abc as abc
@@ -36,7 +35,6 @@ import numpy as np
 import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageFont
-import skimage as ski
 
 from .. import _typing as _tp
 from ..color import core
@@ -67,7 +65,7 @@ def get_font_key(font: PIL.ImageFont.FreeTypeFont):
     font_key = font.getname()
     if not all(font_key):
         missing = []
-        s = 'font %s'
+        s = "font %s"
         if font_key[0] is None:
             missing.append(f"{s % 'name'!r}")
         if font_key[-1] is None:
@@ -101,7 +99,7 @@ def get_font_object(
 ) -> PIL.ImageFont.FreeTypeFont | str:
     """Return a FreeTypeFont object or its filepath.
 
-    The result is cached to prevent FreeType from tp.overloading resources.
+    The result is cached to prevent FreeType from consuming excessive resources.
 
     Parameters
     ----------
@@ -124,7 +122,7 @@ def get_font_object(
 
     if retpath:
         return (
-            getattr(font.path, 'name', os.fspath(font.path))
+            getattr(font.path, "name", os.fspath(font.path))
             if isinstance(font, PIL.ImageFont.FreeTypeFont)
             else get_font_object(get_font_object(font), retpath=True)
         )
@@ -163,7 +161,7 @@ def shuffle_char_set(chars: abc.Iterable[str]):
     """
     xs = list(c for s in chars for c in s)
     random.shuffle(xs)
-    return ''.join(xs)
+    return "".join(xs)
 
 
 def render_font_str(s: str, /, font: _tp.FontArgType):
@@ -200,7 +198,7 @@ def render_font_str(s: str, /, font: _tp.FontArgType):
                         for c in line
                     ]
                 )
-                for line in map(lambda x: f'{x:<{maxlen}}', lines)
+                for line in map(lambda x: f"{x:<{maxlen}}", lines)
             ]
         )
         return PIL.Image.fromarray(stacked)
@@ -241,7 +239,7 @@ def render_font_char(
     """
     if len(c) > 1:
         raise ValueError(f"expected a character, but string of length {len(c)} found")
-    img = PIL.Image.new('RGB', size=size)
+    img = PIL.Image.new("RGB", size=size)
     draw = PIL.ImageDraw.Draw(img)
     font_obj = get_font_object(font)
     bbox = draw.textbbox((0, 0), c, font=font_obj)
@@ -272,13 +270,14 @@ def get_rgb_array(img: str | os.PathLike[str] | _tp.RGBImageLike, /):
     TypeError
         If the input is not a valid image or path.
     """
-    if isinstance(img, os.PathLike):
-        img = ski.io.imread(os.fspath(img))
-    elif isinstance(img, str):
-        img = ski.io.imread(img)
+    if isinstance(img, (str, os.PathLike)):
+        x = cv.imread(os.fspath(img))
+        if x is None:
+            raise ValueError
+        img = x
     if not _is_rgb_array(img):
         if _is_image(img):
-            img = img.convert('RGB')
+            img = img.convert("RGB")
         elif _is_array(img):
             if img.ndim == 2:
                 img = cv.cvtColor(img[:, :, 0], cv.COLOR_GRAY2RGB)
@@ -291,7 +290,7 @@ def get_rgb_array(img: str | os.PathLike[str] | _tp.RGBImageLike, /):
                 _tp.type_error_msg(img, os.PathLike, PIL.Image.Image, np.ndarray)
             )
             raise err
-        img = np.uint8(img)
+        img = np.asarray(img, dtype=np.uint8)
     return img
 
 
@@ -367,8 +366,26 @@ def contrast_stretch(
     --------
     equalize_white_point
     """
-    lo, hi = np.percentile(img, percentile)
-    return ski.exposure.rescale_intensity(img, in_range=(lo, hi))
+    imin, imax = np.percentile(img, percentile)
+    out_dtype = img.dtype
+    if issubclass(dt := img.dtype.type, np.integer):
+        info = np.iinfo(dt)
+        omin, omax = info.min, info.max
+    elif issubclass(dt, np.inexact):
+        omin, omax = -1, 1
+    elif dt is np.bool_:
+        omin, omax = False, True
+    else:
+        omin, omax = imin, imax
+    omin, omax = map(float, (omin, omax))
+    if imin >= 0:
+        omin = 0.0
+    img = np.clip(img, imin, imax)
+    if imin != imax:
+        img = (img - imin) / (imax - imin)
+        return (img * (omax - omin) + omin).astype(out_dtype)
+    else:
+        return np.clip(img, omin, omax).astype(out_dtype)
 
 
 def scale_saturation(
@@ -387,7 +404,7 @@ def _get_asciidraw_vars(
 
 
 def _get_bbox_shape(font: PIL.ImageFont.FreeTypeFont, /):
-    return font.getbbox(' ')[2:]
+    return font.getbbox(" ")[2:]
 
 
 @tp.overload
@@ -478,8 +495,26 @@ def img2ascii(  # type: ignore
     img_aspect = shape[-1] / shape[0]
     ch, cw = _get_bbox_shape(font)
     char_aspect = ceil(cw / ch)
-    h = int(factor / img_aspect / char_aspect)
-    grey = (ski.transform.resize(grey, (h, factor)) * 255).astype(np.uint8)
+    out_h = int(factor / img_aspect / char_aspect)
+    out_w = factor
+    blur = grey.astype(np.float64) / 255.0
+    if (sy := (shape[0] / out_h - 1) / 2) > 0:
+        blur = cv.filter2D(
+            blur,
+            -1,
+            cv.getGaussianKernel(2 * int(4.0 * sy + 0.5) + 1, sy),
+            borderType=cv.BORDER_REFLECT_101,
+        )
+    if (sx := (shape[1] / out_w - 1) / 2) > 0:
+        blur = cv.filter2D(
+            blur,
+            -1,
+            cv.getGaussianKernel(2 * int(4.0 * sx + 0.5) + 1, sx).T,
+            borderType=cv.BORDER_REFLECT_101,
+        )
+    grey = (
+        cv.resize(blur, (out_w, out_h), interpolation=cv.INTER_LINEAR) * 255.0
+    ).astype(np.uint8)
     if char_set is None:
         if font.path is uf.VGA437:
             from ._curses import cp437_printable
@@ -504,8 +539,7 @@ def img2ascii(  # type: ignore
     newlines = np.zeros((interp.shape[0], 1), dtype="<U1")
     newlines[:-1] = "\n"
     interp = np.concatenate((interp, newlines), axis=1)
-    out_s = "".join(interp.flat)
-    return out_s
+    return "".join(interp.flat)
 
 
 @tp.overload
@@ -517,7 +551,7 @@ def img2ansi(
     char_set: tp.Optional[str] = ...,
     sort_glyphs: bool | tp.Literal[-1] = ...,
     ansi_type: tp.Optional[core.AnsiColorParam] = ...,
-    equalize: bool | tp.Literal['white_point'] = ...,
+    equalize: bool | tp.Literal["white_point"] = ...,
     bg: tp.Optional[_tp.Int3Tuple | str] = ...,
     *,
     outarray: tp.Literal[False] = False,
@@ -533,14 +567,14 @@ def img2ansi(
     char_set: tp.Optional[str] = ...,
     sort_glyphs: bool | tp.Literal[-1] = ...,
     ansi_type: tp.Optional[core.AnsiColorParam] = ...,
-    equalize: bool | tp.Literal['white_point'] = ...,
+    equalize: bool | tp.Literal["white_point"] = ...,
     bg: tp.Optional[_tp.Int3Tuple | str] = ...,
     *,
     outarray: tp.Literal[True],
 ) -> _tp.ShapedNDArray[tuple[int, int], np.void]: ...
 
 
-@rgb_dispatch('bg')
+@rgb_dispatch("bg")
 def img2ansi(
     img: str | os.PathLike[str] | _tp.RGBImageLike,
     /,
@@ -549,7 +583,7 @@ def img2ansi(
     char_set: tp.Optional[str] = None,
     sort_glyphs: bool | tp.Literal[-1] = True,
     ansi_type: tp.Optional[core.AnsiColorParam] = None,
-    equalize: bool | tp.Literal['white_point'] = False,
+    equalize: bool | tp.Literal["white_point"] = False,
     bg: tp.Optional[_tp.Int3Tuple | str] = None,
     *,
     outarray=False,
@@ -635,7 +669,7 @@ def img2ansi(
     ansi_type = core.get_ansi_type(ansi_type)
     rgb = ansi_quantize(rgb, ansi_type=ansi_type)
     with (
-        PIL.Image.fromarray(rgb, mode='RGB') as img,
+        PIL.Image.fromarray(rgb, mode="RGB") as img,
         img.resize((w, h), resample=PIL.Image.Resampling.LANCZOS) as resized,
     ):
         out = np.zeros(s.shape, dtype=core.color_chain.dtype)
@@ -648,7 +682,7 @@ def img2ansi(
         return out if outarray is True else core.color_chain.fromarray(out)
 
 
-@rgb_dispatch('fg', 'bg')
+@rgb_dispatch("fg", "bg")
 def ascii2img(
     s: str,
     /,
@@ -687,12 +721,12 @@ def ascii2img(
     img2ascii : Convert an image into an ASCII string.
     """
     font = PIL.ImageFont.truetype(get_font_object(font, retpath=True), font_size)
-    lines = s.split('\n')
+    lines = s.split("\n")
     n_rows, n_cols = map(len, (lines, lines[0]))
     cw, ch = _get_bbox_shape(font)
     iw, ih = (int(i * j) for i, j in zip((cw, ch), (n_cols, n_rows)))
     r, g, b = tuple(map(int, bg))
-    img = PIL.Image.new('RGB', (iw, ih), (r, g, b))
+    img = PIL.Image.new("RGB", (iw, ih), (r, g, b))
     draw = PIL.ImageDraw.Draw(img)
     y_offset = 0
     for line in lines:
@@ -701,7 +735,7 @@ def ascii2img(
     return img
 
 
-@rgb_dispatch('fg_default', 'bg_default')
+@rgb_dispatch("fg_default", "bg_default")
 def ansi2img(
     arr: (
         _tp.ShapedNDArray[tuple[int, int], np.void]
@@ -822,7 +856,7 @@ def ansify(
     char_set: tp.Optional[str] = None,
     sort_glyphs: bool | tp.Literal[-1] = True,
     ansi_type: tp.Optional[core.AnsiColorParam] = None,
-    equalize: bool | tp.Literal['white_point'] = False,
+    equalize: bool | tp.Literal["white_point"] = False,
     fg: _tp.Int3Tuple | str = (170, 170, 170),
     bg: _tp.Int3Tuple | str = (0, 0, 0),
 ):
@@ -860,7 +894,7 @@ def _is_image(obj: tp.Any, /) -> tp.TypeGuard[PIL.Image.Image]:
 
 @lru_cache(maxsize=1)
 def cursor_or_sgr_pattern():
-    sgr_re = core.sgr_pattern().pattern.removeprefix(r'\x1b\[')
+    sgr_re = core.sgr_pattern().pattern.removeprefix(r"\x1b\[")
     return re.compile(
         r"(?:"
         r"\x1b\[(?:"
@@ -1244,101 +1278,10 @@ def render_ans(
 
 
 def otsu_mask(
-    img: tp.Union[PIL.Image.Image, _tp.MatrixLike[np.uint8]],
+    img: _tp.MatrixLike[np.uint8] | cv.typing.MatLike | PIL.Image.Image,
 ) -> _tp.MatrixLike[np.uint8]:
-    if type(img) is not np.ndarray:
-        img = np.uint8(img)
+    img = np.asarray(img, dtype=np.uint8)
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))
     img = cv.morphologyEx(img, cv.MORPH_OPEN, kernel)
-    return cv.threshold(img, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)[1]
-
-
-def _canny_edges[_SCT: np.generic](arr: _tp.MatrixLike[_SCT]) -> _tp.MatrixLike[_SCT]:
-    return ski.feature.canny(
-        arr, sigma=0.1, low_threshold=0.1, high_threshold=0.2, use_quantiles=False
-    )
-
-
-def scaled_hu_moments(arr: _tp.ShapedNDArray[_tp.TupleOf2[int], np.uint8]):
-    if set.isdisjoint({0, 0xFF}, np.unique_values(arr)):
-        arr = otsu_mask(arr)
-    hms = cv.HuMoments(cv.moments(arr)).ravel()
-    nz = hms.nonzero()
-    out = np.zeros_like(hms)
-    out[nz] = -np.sign(hms[nz]) * np.log10(np.abs(hms[nz]))
-    return out
-
-
-def approx_gridlike(
-    fp: os.PathLike[str] | str,
-    font: _tp.FontArgType = uf.VGA437,
-    shape: tp.Optional[_tp.TupleOf2[int]] = None,
-):
-    from ._curses import cp437_printable
-
-    if shape is None:
-        shape = get_terminal_size()
-
-    def _get_grid_indices(arr: np.ndarray) -> list[_tp.TupleOf2[slice]]:
-        regions = ski.measure.regionprops(ski.measure.label(_canny_edges(arr)))
-        area_bboxes = np.zeros([np.shape(regions)[0]])
-        bboxes = np.int32([area_bboxes] * 4).T
-        for n, region in enumerate(regions):
-            bboxes[n], area_bboxes[n] = region.bbox, region.area_bbox
-        bboxes = bboxes[area_bboxes < np.std(area_bboxes) * 2]
-        r, c = zip(np.min(bboxes[:, :2], axis=0), np.max(bboxes[:, 2:], axis=0), shape)
-        h, w = map(round, ((x[1] - x[0]) / x[-1] for x in (r, c)))
-        rr = r[0] + np.asarray(rs := range(r[-1])) * h
-        cc = c[0] + np.asarray(cs := range(c[-1])) * w
-        out: tp.Any = [
-            np.index_exp[rr[rx] : (rr + h)[rx], cc[cx] : (cc + w)[cx]]
-            for rx in rs
-            for cx in cs
-        ]
-        return out
-
-    def _normalize_cell(arr: np.ndarray):
-        cell = np.zeros(cell_shape, dtype=np.uint8)
-        coords = np.argwhere(arr)
-        if coords.size == 0:
-            return cell
-        y0, x0 = coords.min(axis=0)
-        y1, x1 = coords.max(axis=0) + 1
-        cropped = arr[y0:y1, x0:x1]
-        dy, dx = cropped.shape
-        ys, xs = map(lambda t, d: (t - d) // 2, cell_shape, (dy, dx))
-        cell[ys : ys + dy, xs : xs + dx] = cropped
-        return cell
-
-    with PIL.Image.open(fp).convert('L') as grey:
-        thresh = otsu_mask(grey)
-
-    grid_indices = _get_grid_indices(thresh)
-    cell_shape = thresh[grid_indices[0]].shape
-
-    from sklearn.cluster import DBSCAN
-
-    dbscan = DBSCAN(eps=0.5, min_samples=2, metric='euclidean').fit(
-        np.array([scaled_hu_moments(thresh[ind]) for ind in grid_indices])
-    )
-    clustered_grid = np.reshape(dbscan.labels_, shape)
-    char_grid = np.full_like(clustered_grid, ' ', dtype=np.str_)
-    glyph_map = {
-        c: otsu_mask(render_font_char(c, font, size=cell_shape[::-1]).convert('L'))
-        for c in cp437_printable()
-    }
-    for uniq in np.unique_values(clustered_grid):
-        u_indices = clustered_grid == uniq
-        u_slice = thresh[
-            grid_indices[
-                next(idx for (idx, v) in enumerate(np.ravel(u_indices)) if v is True)
-            ]
-        ]
-        char_grid[u_indices] = min(
-            glyph_map,
-            key=lambda k: ski.metrics.mean_squared_error(
-                *map(_normalize_cell, (glyph_map[k], u_slice))
-            ),
-        )
-
-    return core.color_chain(["".join(r) for r in char_grid])
+    out = cv.threshold(img, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)[1]
+    return out  # type: ignore[return-type]

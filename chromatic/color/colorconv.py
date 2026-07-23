@@ -2,20 +2,25 @@ __all__ = [
     "ANSI_4BIT_RGB",
     "ansi_4bit_to_rgb",
     "ansi_8bit_to_rgb",
-    "int2rgb",
     "hexstr2rgb",
     "hsl2rgb",
     "hsv2rgb",
+    "int2rgb",
     "is_u24",
+    "lab2lch",
     "lab2rgb",
     "lab2xyz",
+    "lch2lab",
+    "lch2rgb",
+    "lerp_lch",
     "nearest_ansi_4bit_rgb",
     "nearest_ansi_8bit_rgb",
-    "rgb2int",
     "rgb2hexstr",
     "rgb2hsl",
     "rgb2hsv",
+    "rgb2int",
     "rgb2lab",
+    "rgb2lch",
     "rgb2xyz",
     "rgb_diff",
     "rgb_to_ansi_8bit",
@@ -237,6 +242,49 @@ def lab2rgb(lab, /):
 
 def rgb2lab(rgb, /):
     return xyz2lab(rgb2xyz(rgb))
+
+
+def lab2lch(lab, /):
+    arr = np.asarray(lab, dtype=np.float64)
+    L, a, b = np.unstack(arr, axis=-1)
+    C = np.hypot(a, b)
+    h = np.degrees(np.arctan2(b, a)) % 360
+    return np.stack([L, C, h], axis=-1)
+
+
+def lch2lab(lch, /):
+    arr = np.asarray(lch, dtype=np.float64)
+    L, C, h = np.unstack(arr, axis=-1)
+    h = np.radians(h)
+    return np.stack([L, C * np.cos(h), C * np.sin(h)], axis=-1)
+
+
+def lch2rgb(lch, /):
+    return lab2rgb(lch2lab(lch))
+
+
+def rgb2lch(rgb, /):
+    return lab2lch(rgb2lab(rgb))
+
+
+def lerp_lch(lch1, lch2, /, num=8):
+    """Return a linear interpolation of the given LCh arrays.
+
+    Where `lch1` and `lch2` have dims `([D0[,...D-1],] 3)` and `num` is `N`,
+    the returned array will have dims `([D0[,...D-1],] N, 3)`.
+    """
+    lch1 = np.asarray(lch1, dtype=np.float64)
+    lch2 = np.asarray(lch2, dtype=np.float64)
+    L1, C1, h1 = np.unstack(lch1, axis=-1)
+    L2, C2, h2 = np.unstack(lch2, axis=-1)
+    h1 = np.where(C1 < 1e-6, h2, h1)
+    h2 = np.where(C2 < 1e-6, h1, h2)
+    dh = (h2 - h1 + 180) % 360 - 180
+    t = np.linspace(0, 1, num).reshape(num, *[1] * (lch1.ndim - 1))
+    L = L1 + t * (L2 - L1)
+    C = C1 + t * (C2 - C1)
+    h = (h1 + t * dh) % 360
+    return np.moveaxis(np.stack([L, C, h], axis=0), [0, 1], [-1, -2])
 
 
 def rgb_diff(rgb1, rgb2, /):

@@ -2,20 +2,25 @@ __all__ = [
     "ANSI_4BIT_RGB",
     "ansi_4bit_to_rgb",
     "ansi_8bit_to_rgb",
-    "int2rgb",
     "hexstr2rgb",
     "hsl2rgb",
     "hsv2rgb",
+    "int2rgb",
     "is_u24",
+    "lab2lch",
     "lab2rgb",
     "lab2xyz",
+    "lch2lab",
+    "lch2rgb",
+    "lerp_lch",
     "nearest_ansi_4bit_rgb",
     "nearest_ansi_8bit_rgb",
-    "rgb2int",
     "rgb2hexstr",
     "rgb2hsl",
     "rgb2hsv",
+    "rgb2int",
     "rgb2lab",
+    "rgb2lch",
     "rgb2xyz",
     "rgb_diff",
     "rgb_to_ansi_8bit",
@@ -105,6 +110,60 @@ def rgb2lab(rgb: Int3Tuple, /) -> ShapedNDArray[tuple[L[3]], np.float64]: ...
 def rgb2lab[_Shape: tuple[int, ...]](
     rgb: ShapedNDArray[_Shape, np.uint8], /
 ) -> ShapedNDArray[_Shape, np.float64]: ...
+
+@tp.overload
+def lab2lch(lab: Float3Tuple, /) -> ShapedNDArray[tuple[L[3]], np.float64]: ...
+@tp.overload
+def lab2lch[_Shape: tuple[int, ...]](
+    lab: ShapedNDArray[_Shape, np.floating], /
+) -> ShapedNDArray[_Shape, np.float64]: ...
+
+@tp.overload
+def lch2lab(lch: Float3Tuple, /) -> ShapedNDArray[tuple[L[3]], np.float64]: ...
+@tp.overload
+def lch2lab[_Shape: tuple[int, ...]](
+    lch: ShapedNDArray[_Shape, np.floating], /
+) -> ShapedNDArray[_Shape, np.float64]: ...
+
+@tp.overload
+def lch2rgb(lch: Float3Tuple, /) -> ShapedNDArray[tuple[L[3]], np.uint8]: ...
+@tp.overload
+def lch2rgb[_Shape: tuple[int, ...]](
+    lch: ShapedNDArray[_Shape, np.floating], /
+) -> ShapedNDArray[_Shape, np.uint8]: ...
+
+@tp.overload
+def rgb2lch(rgb: Int3Tuple, /) -> ShapedNDArray[tuple[L[3]], np.float64]: ...
+@tp.overload
+def rgb2lch[_Shape: tuple[int, ...]](
+    rgb: ShapedNDArray[_Shape, np.uint8], /
+) -> ShapedNDArray[_Shape, np.float64]: ...
+
+@tp.overload
+def lerp_lch[_N: int](
+    lch1: Float3Tuple | ShapedNDArray[tuple[L[3]], np.floating],
+    lch2: Float3Tuple | ShapedNDArray[tuple[L[3]], np.floating],
+    /,
+    num: _N = 8,
+) -> ShapedNDArray[tuple[_N, L[3]], np.float64]: ...
+@tp.overload
+def lerp_lch[_D1: int, _N: int](
+    lch1: ShapedNDArray[tuple[_D1, L[3]], np.floating],
+    lch2: ShapedNDArray[tuple[_D1, L[3]], np.floating],
+    /,
+    num: _N = 8,
+) -> ShapedNDArray[tuple[_D1, _N, L[3]], np.float64]: ...
+@tp.overload
+def lerp_lch[_D1: int, _D2: int, _N: int](
+    lch1: ShapedNDArray[tuple[_D1, _D2, L[3]], np.floating],
+    lch2: ShapedNDArray[tuple[_D1, _D2, L[3]], np.floating],
+    /,
+    num: _N = 8,
+) -> ShapedNDArray[tuple[_D1, _D2, _N, L[3]], np.float64]: ...
+@tp.overload
+def lerp_lch(
+    lch1: np.typing.NDArray[np.floating], lch2: np.typing.NDArray[np.floating], /, num=8
+) -> np.typing.NDArray[np.float64]: ...
 
 @tp.overload
 def rgb_diff(

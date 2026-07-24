@@ -519,6 +519,46 @@ def rgb_dispatch(*names):
         POSITIONS, KEYWORDS = _prepare()
         HAS_VARKW = None in KEYWORDS
 
+        def _replace_defaults():
+            argdefs = f.__defaults__
+            kwdefaults = f.__kwdefaults__
+            if argdefs is kwdefaults is None:
+                return f
+            if argdefs is not None:
+                argcount = f.__code__.co_argcount
+                buf = list(argdefs)
+                for i, (j, x) in zip(
+                    range(argcount - len(argdefs), argcount), enumerate(argdefs)
+                ):
+                    if not (i in POSITIONS and isinstance(x, str)):
+                        continue
+                    try:
+                        buf[j] = _rgb_lookup(x)
+                    except KeyError:
+                        continue
+                argdefs = tuple(buf)
+            if kwdefaults is not None:
+                kwdefaults = kwdefaults.copy()
+                for k, v in kwdefaults.items():
+                    if not (k in KEYWORDS and isinstance(v, str)):
+                        continue
+                    try:
+                        kwdefaults[k] = _rgb_lookup(v)
+                    except KeyError:
+                        continue
+            f_new = types.FunctionType(
+                f.__code__,
+                f.__globals__,
+                name=f.__name__,
+                argdefs=argdefs,
+                closure=f.__closure__,
+                kwdefaults=kwdefaults,
+            )
+            setattr(f_new, "__wrapped__", f)
+            return f_new
+
+        f = _replace_defaults()
+
         @ft.wraps(f)
         def wrapper(*args, **kwargs):
             _kwargs = kwargs.copy()

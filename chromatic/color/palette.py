@@ -2,6 +2,7 @@ __all__ = ["Back", "ColorNamespace", "Fore", "Style", "rgb_dispatch", "named_col
 
 import collections.abc as abc
 import functools as ft
+import sys
 import types
 import typing as tp
 from types import MappingProxyType as mappingproxy
@@ -546,14 +547,24 @@ def rgb_dispatch(*names):
                         kwdefaults[k] = _rgb_lookup(v)
                     except KeyError:
                         continue
-            f_new = types.FunctionType(
-                f.__code__,
-                f.__globals__,
-                name=f.__name__,
-                argdefs=argdefs,
-                closure=f.__closure__,
-                kwdefaults=kwdefaults,
-            )
+            if sys.version_info >= (3, 13):
+                f_new = types.FunctionType(
+                    f.__code__,
+                    f.__globals__,
+                    name=f.__name__,
+                    argdefs=argdefs,
+                    closure=f.__closure__,
+                    kwdefaults=kwdefaults,
+                )
+            else:
+                f_new = types.FunctionType(
+                    f.__code__,
+                    f.__globals__,
+                    name=f.__name__,
+                    argdefs=argdefs,
+                    closure=f.__closure__,
+                )
+                setattr(f_new, "__kwdefaults__", kwdefaults)
             setattr(f_new, "__wrapped__", f)
             return f_new
 

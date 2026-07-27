@@ -1,3 +1,4 @@
+# vim: foldmethod=marker foldenable
 import collections.abc as abc
 import os
 import sys
@@ -8,6 +9,8 @@ from inspect import signature
 
 def parse_args():
     import argparse as ap
+
+    from . import __version__
 
     class SetEnvAction(ap.Action):
         def __init__(self, *args, **kwargs):
@@ -37,7 +40,7 @@ def parse_args():
             out = super()._get_help_string(action)
             if out is not None and isinstance(action, SetEnvAction):
                 out += " (env: {}={})".format(
-                    *(lambda s: (s, os.environ.get(s, "")))(action.env)
+                    action.env, os.environ.get(action.env, "")
                 )
             return out
 
@@ -63,21 +66,57 @@ def parse_args():
 
     font_dir_env_base = init_font_dir_env_parser()
 
-    if os.path.isfile(sys.argv[0]) and os.path.samefile(sys.argv[0], __file__):
-        top_parser = ap.ArgumentParser(prog=__package__)
-    else:
-        top_parser = ap.ArgumentParser()
+    from .color.palette import ColorNamespace
 
-    cmd_subparsers = top_parser.add_subparsers(dest="cmd", required=True)
+    color_ns = ColorNamespace.asdict()
+
+    def ColorArgType(allow_rgba=False):
+        def color_arg(s: str, /) -> tuple[int, int, int, int] | tuple[int, int, int]:
+            try:
+                return color_ns[s.strip().replace(" ", "_").upper()]
+            except KeyError:
+                if any(c not in "0123456789abcdef" for c in s.casefold()):
+                    raise
+            n = len(s)
+            if allow_rgba and n % 4 == 0:
+                if n == 4:
+                    s = "".join(c * 2 for c in s)
+                x = int(s, 16)
+                if not 0 <= x < (1 << 32):
+                    raise ValueError(f"{x:#x} is not u32")
+                return (
+                        (x >> 24)   & 0xFF,
+                        (x >> 16)   & 0xFF,
+                        (x >>  8)   & 0xFF,
+                         x          & 0xFF,
+                    )               # fmt: skip
+            elif n % 3 == 0:
+                if n == 3:
+                    s = "".join(c * 2 for c in s)
+                x = int(s, 16)
+                if not 0 <= x < (1 << 24):
+                    raise ValueError(f"{x:#x} is not u24")
+                return (x >> 16) & 0xFF, (x >> 8) & 0xFF, x & 0xFF
+            raise ValueError(
+                "expected hex digit with nbytes in {}, got {}".format(
+                    (3, 4, 6, 8), int(s, 16).bit_length() // 8
+                )
+            )
+
+        return color_arg
 
     def init_font_subcmds(parser: ap.ArgumentParser):
         subcmds = parser.add_subparsers(dest="subcmd", required=True)
+
         mut_by_name_base = new_base_parser()
         mut_by_name_base.add_argument(
             dest="name", metavar="NAME", help="name of the registered font"
         )
+
         uf_attr_base = new_base_parser()
+
         uf_attr_opts = uf_attr_base.add_argument_group("font attribute options")
+        # font attribute options {{{
         uf_attr_opts.add_argument(
             "--size", dest="size", type=int, help="size in pixels"
         )
@@ -96,6 +135,9 @@ def parse_args():
             action=ap.BooleanOptionalAction,
             help="whether to set this font as the new default font",
         )
+        # }}}
+
+        # subcommands: font {{{
         subcmds.add_parser(
             "delete",
             parents=[font_dir_env_base, mut_by_name_base],
@@ -134,12 +176,18 @@ def parse_args():
             set a user font as the default font.
             it will be accessible as `{__package__}.DEFAULT_FONT`""",
         )
+        # }}}
+
+        # font edit {{{
         p_edit_font_opts = subcmd_p_edit.add_argument_group(
             "font options", argument_default=ap.SUPPRESS
         )
         p_edit_font_opts.add_argument(
             "--font", dest="font", metavar="FILE", help="path to truetype font file"
         )
+        # }}}
+
+        # font list {{{
         p_list_fmt_opts = subcmd_p_list.add_argument_group("formatting options")
         p_list_fmt_opts.add_argument(
             "--json",
@@ -147,6 +195,9 @@ def parse_args():
             action="store_true",
             help="emit entries in JSON format",
         )
+        # }}}
+
+        # font register {{{
         subcmd_p_register.add_argument(
             dest="font", metavar="FONT", help="path to truetype font file"
         )
@@ -167,210 +218,17 @@ def parse_args():
             create a symlink instead of copying the file.
             like `ln -s TARGET LINK_NAME`, this will fail if the link name already exists""",
         )
+        # }}}
+
+        # font rename {{{
         subcmd_p_rename.add_argument(
             dest="newname",
             metavar="NEWNAME",
             help="new name to give the registered font",
         )
+        # }}}
 
     def init_image_subcmds(parser: ap.ArgumentParser):
-        subcmds = parser.add_subparsers(dest="subcmd", required=True)
-        ansify_base = new_base_parser()
-        font_opts = ansify_base.add_argument_group("font options")
-        font_opts.add_argument(
-            "--font",
-            dest="font",
-            help="name of user font, or path to truetype font file",
-        )
-        font_opts.add_argument(
-            "--size",
-            dest="font_size",
-            type=int,
-            metavar="SIZE",
-            help="font size, in pixels",
-        )
-
-        from .color.palette import ColorNamespace
-
-        color_ns = ColorNamespace.asdict()
-
-        def color_parser(allow_rgba=False):
-            def parsed_color(
-                s: str, /
-            ) -> tuple[int, int, int, int] | tuple[int, int, int]:
-                try:
-                    return color_ns[s.strip().replace(" ", "_").upper()]
-                except KeyError:
-                    if any(c not in "0123456789abcdef" for c in s.casefold()):
-                        raise
-                n = len(s)
-                if allow_rgba and n % 4 == 0:
-                    if n == 4:
-                        s = "".join(c * 2 for c in s)
-                    x = int(s, 16)
-                    if not 0 <= x < (1 << 32):
-                        raise ValueError(f"{x:#x} is not u32")
-                    return (
-                        (x >> 24)   & 0xFF,
-                        (x >> 16)   & 0xFF,
-                        (x >>  8)   & 0xFF,
-                         x          & 0xFF,
-                    )               # fmt: skip
-                elif n % 3 == 0:
-                    if n == 3:
-                        s = "".join(c * 2 for c in s)
-                    x = int(s, 16)
-                    if not 0 <= x < (1 << 24):
-                        raise ValueError(f"{x:#x} is not u24")
-                    return (x >> 16) & 0xFF, (x >> 8) & 0xFF, x & 0xFF
-                raise ValueError(
-                    "expected hex digit with nbytes in {}, got {}".format(
-                        (3, 4, 6, 8), int(s, 16).bit_length() // 8
-                    )
-                )
-
-            return parsed_color
-
-        color_opts = ansify_base.add_argument_group("color defaults")
-        color_opts.add_argument(
-            "--bg",
-            dest="bg_default",
-            metavar="COLOR",
-            type=color_parser(allow_rgba=True),
-            help="default background color. can be hex rgb(a) value or color name",
-        )
-        color_opts.add_argument(
-            "--fg",
-            dest="fg_default",
-            metavar="COLOR",
-            type=color_parser(allow_rgba=True),
-            help="default foreground color. can be hex rgb(a) value or color name",
-        )
-        color_opts.add_argument(
-            "--alpha",
-            dest="alpha",
-            action="store_true",
-            help="use alpha channel with defaults: bg=0, fg=0xFF",
-        )
-
-        from_img_base = new_base_parser()
-
-        colorize_opts = from_img_base.add_argument_group("colorization options")
-        colorize_opts.add_argument(
-            "-a",
-            "--ansi-type",
-            metavar="ANSITYPE",
-            choices=("4b", "8b", "24b"),
-            help="""\
-            which ansi colorspace to use for color quantization.
-            since truecolor is rgb, '24b' effectively means 'original colors'
-            (choices: %(choices)s)""",
-        )
-        equalize_opts = colorize_opts.add_mutually_exclusive_group()
-        equalize_opts.add_argument(
-            "--equalize",
-            dest="equalize",
-            action=ap.BooleanOptionalAction,
-            help="""\
-            whether to apply contrast stretch equalization before image-to-ansi conversion""",
-        )
-        equalize_opts.add_argument(
-            "--white-point",
-            dest="equalize",
-            action="store_const",
-            const="white_point",
-            help="apply white-point equalization before image-to-ansi conversion",
-        )
-        colorize_opts.add_argument(
-            "--input-bg",
-            dest="bg",
-            metavar="COLOR",
-            type=color_parser(),
-            default=None,
-            help="""\
-            initial background (canvas) color,
-            injected as an attribute on the intermediate text object itself.
-            can be hex rgb value or color name""",
-        )
-        glyph_opts = from_img_base.add_argument_group("glyph options")
-        glyph_opts.add_argument(
-            "--factor",
-            dest="factor",
-            metavar="N",
-            type=int,
-            help="""\
-            scaling factor for image width to %(metavar)s columns per output line.
-            analogous to level-of-detail""",
-        )
-        char_set_opts = glyph_opts.add_mutually_exclusive_group()
-        char_set_opts.add_argument(
-            "-c",
-            "--chars",
-            dest="char_set",
-            metavar="CHARS",
-            help="""\
-            charset where %(metavar)s is a string containing chars to use for glyph selection.
-            a char can appear more than once, which affects frequency distribution""",
-        )
-
-        from .image._curses import ascii_printable, cp437_printable
-
-        char_set_preset_help = (
-            "use printable characters from {} character encoding as charset"
-        ).format
-        char_set_opts.add_argument(
-            "--ascii",
-            dest="char_set",
-            action="store_const",
-            const=ascii_printable(),
-            help=char_set_preset_help("ASCII"),
-        )
-        char_set_opts.add_argument(
-            "--latin1",
-            dest="char_set",
-            help=char_set_preset_help("Latin-1"),
-            action="store_const",
-            const="".join(filter(str.isprintable, bytes(range(256)).decode("latin1"))),
-        )
-        char_set_opts.add_argument(
-            "--cp437",
-            dest="char_set",
-            action="store_const",
-            const=cp437_printable(),
-            help=char_set_preset_help("code page 437"),
-        )
-        char_set_opts.add_argument(
-            "--cp1252",
-            dest="char_set",
-            help=char_set_preset_help("Windows-1252"),
-            action="store_const",
-            const="".join(
-                filter(
-                    str.isprintable, bytes(range(256)).decode("cp1252", errors="ignore")
-                )
-            ),
-        )
-
-        glyph_sort_opts = glyph_opts.add_mutually_exclusive_group()
-        glyph_sort_opts.add_argument(
-            "--sort",
-            dest="sort_glyphs",
-            action=ap.BooleanOptionalAction,
-            help="""\
-            whether to sort glyphs based on their perceived 'luminance'.
-            for example, ('.' -> '#') is (dark -> light)""",
-        )
-        glyph_sort_opts.add_argument(
-            "-r",
-            "--reverse",
-            dest="sort_glyphs",
-            action="store_const",
-            const=reversed,
-            help="""\
-            sort glyphs in reverse order.
-            flips the luminance mapping to (light -> dark)""",
-        )
-
         def save_img_callback(path: str | os.PathLike[str] | None = None, /):
 
             # deferred exception handler
@@ -425,8 +283,184 @@ def parse_args():
             outfile = Path(dirname, f"{__package__}_{timestamp}.png")
             return save_img_callback(outfile)
 
+        subcmds = parser.add_subparsers(dest="subcmd", required=True)
+
+        ansify_base = new_base_parser()
+
+        font_opts = ansify_base.add_argument_group("font options")
+        # font options {{{
+        font_opts.add_argument(
+            "--font",
+            dest="font",
+            help="name of user font, or path to truetype font file",
+        )
+        font_opts.add_argument(
+            "--size",
+            dest="font_size",
+            type=int,
+            metavar="SIZE",
+            help="font size, in pixels",
+        )
+        # }}}
+
+        color_opts = ansify_base.add_argument_group("color defaults")
+        # color defaults {{{
+        color_opts.add_argument(
+            "--bg",
+            dest="bg_default",
+            metavar="COLOR",
+            type=ColorArgType(allow_rgba=True),
+            help="default background color. can be hex rgb(a) value or color name",
+        )
+        color_opts.add_argument(
+            "--fg",
+            dest="fg_default",
+            metavar="COLOR",
+            type=ColorArgType(allow_rgba=True),
+            help="default foreground color. can be hex rgb(a) value or color name",
+        )
+        color_opts.add_argument(
+            "--alpha",
+            dest="alpha",
+            action="store_true",
+            help="use alpha channel with defaults: bg=0, fg=0xFF",
+        )
+        # }}}
+
+        from_img_base = new_base_parser()
+
+        colorize_opts = from_img_base.add_argument_group("colorization options")
+        # colorization options {{{
+        colorize_opts.add_argument(
+            "-a",
+            "--ansi-type",
+            metavar="ANSITYPE",
+            choices=("4b", "8b", "24b"),
+            help="""\
+            which ansi colorspace to use for color quantization.
+            since truecolor is rgb, '24b' effectively means 'original colors'
+            (choices: %(choices)s)""",
+        )
+
+        equalize_opts = colorize_opts.add_mutually_exclusive_group()
+        equalize_opts.add_argument(
+            "--equalize",
+            dest="equalize",
+            action=ap.BooleanOptionalAction,
+            help="""\
+            whether to apply contrast stretch equalization before image-to-ansi conversion""",
+        )
+        equalize_opts.add_argument(
+            "--white-point",
+            dest="equalize",
+            action="store_const",
+            const="white_point",
+            help="apply white-point equalization before image-to-ansi conversion",
+        )
+
+        colorize_opts.add_argument(
+            "--input-bg",
+            dest="bg",
+            metavar="COLOR",
+            type=ColorArgType(),
+            default=None,
+            help="""\
+            initial background (canvas) color,
+            injected as an attribute on the intermediate text object itself.
+            can be hex rgb value or color name""",
+        )
+        # }}}
+
+        glyph_opts = from_img_base.add_argument_group("glyph options")
+        # glyph options {{{
+        glyph_opts.add_argument(
+            "--factor",
+            dest="factor",
+            metavar="N",
+            type=int,
+            help="""\
+            scaling factor for image width to %(metavar)s columns per output line.
+            analogous to level-of-detail""",
+        )
+
+        char_set_opts = glyph_opts.add_mutually_exclusive_group()
+
+        from .image._curses import ascii_printable, cp437_printable
+
+        # char_set {{{
+        char_set_preset_help = (
+            "use printable characters from {} character encoding as charset"
+        ).format
+        char_set_opts.add_argument(
+            "-c",
+            "--chars",
+            dest="char_set",
+            metavar="CHARS",
+            help="""\
+            charset where %(metavar)s is a string containing chars to use for glyph selection.
+            a char can appear more than once, which affects frequency distribution""",
+        )
+        char_set_opts.add_argument(
+            "--ascii",
+            dest="char_set",
+            action="store_const",
+            const=ascii_printable(),
+            help=char_set_preset_help("ASCII"),
+        )
+        char_set_opts.add_argument(
+            "--latin1",
+            dest="char_set",
+            help=char_set_preset_help("Latin-1"),
+            action="store_const",
+            const="".join(filter(str.isprintable, bytes(range(256)).decode("latin1"))),
+        )
+        char_set_opts.add_argument(
+            "--cp437",
+            dest="char_set",
+            action="store_const",
+            const=cp437_printable(),
+            help=char_set_preset_help("code page 437"),
+        )
+        char_set_opts.add_argument(
+            "--cp1252",
+            dest="char_set",
+            help=char_set_preset_help("Windows-1252"),
+            action="store_const",
+            const="".join(
+                filter(
+                    str.isprintable, bytes(range(256)).decode("cp1252", errors="ignore")
+                )
+            ),
+        )
+        # }}}
+
+        glyph_sort_opts = glyph_opts.add_mutually_exclusive_group()
+        # sort_glyphs {{{
+        glyph_sort_opts.add_argument(
+            "--sort",
+            dest="sort_glyphs",
+            action=ap.BooleanOptionalAction,
+            help="""\
+            whether to sort glyphs based on their perceived 'luminance'.
+            for example, ('.' -> '#') is (dark -> light)""",
+        )
+        glyph_sort_opts.add_argument(
+            "-r",
+            "--reverse",
+            dest="sort_glyphs",
+            action="store_const",
+            const=reversed,
+            help="""\
+            sort glyphs in reverse order.
+            flips the luminance mapping to (light -> dark)""",
+        )
+        # }}}
+        # }}}
+
         output_opts_base = new_base_parser()
+
         output_opts = output_opts_base.add_argument_group("output options")
+        # output options {{{
         outfile_opts = output_opts.add_mutually_exclusive_group()
         outfile_opts.add_argument(
             "-O",
@@ -466,14 +500,32 @@ def parse_args():
             help="write the ansified image text to stdout",
         )
         output_opts_base.set_defaults(_outfile_callback=save_img_callback())
+        # }}}
+
+        # subcommands: image {{{
         subcmd_p_ansify = subcmds.add_parser(
             "ansify",
             parents=[font_dir_env_base, ansify_base, from_img_base, output_opts_base],
             formatter_class=EnvHelpFormatter,
         )
+        # }}}
+
+        # image ansify {{{
         subcmd_p_ansify.add_argument(
             dest="img", metavar="IMAGEFILE", help="input image"
         )
+        # }}}
+
+    if os.path.isfile(sys.argv[0]) and os.path.samefile(sys.argv[0], __file__):
+        top_parser = ap.ArgumentParser(prog=__package__)
+    else:
+        top_parser = ap.ArgumentParser()
+
+    top_parser.add_argument(
+        "-V", "--version", action="version", version=f"%(prog)s {__version__}"
+    )
+
+    cmd_subparsers = top_parser.add_subparsers(dest="cmd", required=True)
 
     font_cmd_subparser = cmd_subparsers.add_parser("font")
     image_cmd_subparser = cmd_subparsers.add_parser("image")

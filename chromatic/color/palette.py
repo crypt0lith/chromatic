@@ -523,8 +523,7 @@ def rgb_dispatch(*names):
         def _replace_defaults():
             argdefs = f.__defaults__
             kwdefaults = f.__kwdefaults__
-            if argdefs is kwdefaults is None:
-                return f
+            changed = False
             if argdefs is not None:
                 argcount = f.__code__.co_argcount
                 buf = list(argdefs)
@@ -537,6 +536,8 @@ def rgb_dispatch(*names):
                         buf[j] = _rgb_lookup(x)
                     except KeyError:
                         continue
+                    else:
+                        changed = True
                 argdefs = tuple(buf)
             if kwdefaults is not None:
                 kwdefaults = kwdefaults.copy()
@@ -547,6 +548,10 @@ def rgb_dispatch(*names):
                         kwdefaults[k] = _rgb_lookup(v)
                     except KeyError:
                         continue
+                    else:
+                        changed = True
+            if not changed:
+                return f
             if sys.version_info >= (3, 13):
                 f_new = types.FunctionType(
                     f.__code__,

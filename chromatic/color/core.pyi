@@ -286,7 +286,7 @@ class SgrParamBuffer[_VT: (bytes, ansicolor4Bit, ansicolor8Bit, ansicolor24Bit)]
     _is_reset: bool
 
 class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
-    __slots__ = ("_sgr_params", "_bg_idx", "_fg_idx")
+    __slots__ = ("_sgr_params", "_fg_idx", "_bg_idx")
     __match_args__ = ("_sgr_params",)
 
     class _color_descriptor:
@@ -298,8 +298,8 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         key: str
         idx: str
 
-    bg: _color_descriptor
     fg: _color_descriptor
+    bg: _color_descriptor
     def insert(
         self, index: tp.SupportsIndex, value: bytes | SgrParamBuffer, /
     ) -> None: ...
@@ -378,8 +378,8 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
     def rgb_dict(self) -> None: ...
 
     _sgr_params: list[SgrParamBuffer]
-    _bg_idx: int | None
     _fg_idx: int | None
+    _bg_idx: int | None
 
 class _IntFloatMixin:
     def __int__(self) -> int: ...

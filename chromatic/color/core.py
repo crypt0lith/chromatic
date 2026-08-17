@@ -731,10 +731,11 @@ def _iter_sgr[_T: (abc.Buffer, tp.SupportsInt)](
 
 
 class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
-    _idx_attrs = ("_bg_idx", "_fg_idx")
-    _key2idx = mappingproxy({"bg": "_bg_idx", "fg": "_fg_idx"})
-    __slots__ = ("_sgr_params", *_idx_attrs)
+    _idx_attrs = ("_fg_idx", "_bg_idx")
+    _key2idx = mappingproxy(dict(zip(("fg", "bg"), _idx_attrs)))
+    _reset2idx = mappingproxy(dict(zip((b"39", b"49"), _idx_attrs)))
     __match_args__ = ("_sgr_params",)
+    __slots__ = __match_args__ + _idx_attrs
 
     class _color_descriptor:
         def __set_name__(self, objtype, name, /):
@@ -749,23 +750,17 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
             try:
                 idx = getattr(inst, self.idx)
             except AttributeError:
-                k = self.key
                 params = inst._sgr_params
                 for i in reversed(range(len(params))):
                     x = params[i]
-                    if (
-                        x == b"0"
-                        or (x == b"39" and k == "fg")
-                        or (x == b"49" and k == "bg")
-                    ):
+                    if x == b"0" or inst._reset2idx.get(x) == self.idx:
                         break
                     if not x.is_color():
                         continue
                     rgb = x._value.rgb_dict
-                    if k not in rgb:
-                        continue
-                    setattr(inst, self.idx, i)
-                    return rgb[k]
+                    if self.key in rgb:
+                        setattr(inst, self.idx, i)
+                        return rgb[self.key]
                 setattr(inst, self.idx, None)
                 return
             else:
@@ -777,18 +772,13 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         def __set__(self, inst, value, /):
             if inst is None:
                 raise TypeError
-            k = self.key
             if value is None:
-                return delattr(inst, k)
+                return delattr(inst, self.key)
             params = inst._sgr_params
             idx = hi = None
             for i in reversed(range(len(params))):
                 x = params[i]
-                if (
-                    x == b"0"
-                    or (x == b"39" and k == "fg")
-                    or (x == b"49" and k == "bg")
-                ):
+                if x == b"0" or inst._reset2idx.get(x) == self.idx:
                     return setattr(inst, self.idx, None)
                 if not x.is_color():
                     continue
@@ -800,9 +790,8 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
                         continue
                     elif hi is None:
                         return setattr(inst, self.idx, i)
-                    else:
-                        idx = i
-                        break
+                    idx = i
+                    break
             else:
                 raise ValueError
             x = params[idx]
@@ -829,8 +818,8 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
                     break
             setattr(inst, self.idx, new_idx)
 
-    bg = _color_descriptor()
     fg = _color_descriptor()
+    bg = _color_descriptor()
 
     def _invalidate_indices(self):
         for idx_attr in self._idx_attrs:
@@ -850,14 +839,9 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         params.insert(index, value)
         if value == b"0":
             self._invalidate_indices()
-        elif value == b"39":
+        elif idx_attr := self._reset2idx.get(value):
             try:
-                delattr(self, "_fg_idx")
-            except AttributeError:
-                pass
-        elif value == b"49":
-            try:
-                delattr(self, "_bg_idx")
+                delattr(self, idx_attr)
             except AttributeError:
                 pass
         else:
@@ -877,7 +861,7 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         return super().extend(map(SgrParamBuffer, _iter_sgr(iterable)))
 
     def is_color(self):
-        return bool(self.bg or self.fg)
+        return bool(self.fg or self.bg)
 
     def is_reset(self):
         return any(p.is_reset() for p in self)

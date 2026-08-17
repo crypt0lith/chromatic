@@ -2016,14 +2016,12 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         elif isinstance(other, color_chain):
             res = object.__new__(color_chain)
             res._ansi_type = self._ansi_type
-            res._items = (
-                [(sgr.copy(), s) for xs in (self, other) for sgr, s in xs]
-                if self._ansi_type is other._ansi_type
-                else (
-                    [(sgr.copy(), s) for sgr, s in self]
-                    + [(self._handle_sgr(sgr.copy()), s) for sgr, s in other]
-                )
+            copied_self, copied_other = (
+                ((sgr.copy(), s) for sgr, s in xs) for xs in (self, other)
             )
+            if self._ansi_type is not other._ansi_type:
+                copied_other = ((self._handle_sgr(sgr), s) for sgr, s in copied_other)
+            res._items = [*copied_self, *copied_other]
             return res
         elif isinstance(other, abc.Iterable):
             return color_chain(
@@ -2055,21 +2053,21 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
             self._ansi_type = None
         if iterable is None:
             self._items = []
-            return
         elif isinstance(iterable, color_chain):
+            copied = ((sgr.copy(), s) for sgr, s in iterable)
             self._items = (
-                [(sgr.copy(), s) for sgr, s in iterable]
+                list(copied)
                 if self._ansi_type is iterable._ansi_type
-                else [(self._handle_sgr(sgr.copy()), s) for sgr, s in iterable]
+                else [(self._handle_sgr(sgr), s) for sgr, s in copied]
             )
-            return
-        elif isinstance(iterable, str):
-            iterable = [iterable]
-        self._items = [
-            (self._handle_sgr(sgr), s)
-            for item in iterable
-            for sgr, s in self._coerce(item)
-        ]
+        else:
+            if isinstance(iterable, str):
+                iterable = [iterable]
+            self._items = [
+                (self._handle_sgr(sgr), s)
+                for item in iterable
+                for sgr, s in self._coerce(item)
+            ]
 
     def __len__(self):
         return len(self._items)

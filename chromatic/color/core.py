@@ -136,8 +136,6 @@ class SgrParameter(enum.IntEnum):
             return SgrFlag(0)
 
 
-_P2F = {SgrParameter[name].value: x.value for x in SgrFlag if (name := x.name)}
-_F2P = {v: k for k, v in _P2F.items()}
 if tp.TYPE_CHECKING:
 
     class SgrFlag(enum.IntFlag):
@@ -1761,52 +1759,52 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         if copy is False:
             raise ValueError("`copy=False` isn't supported. a copy is always created")
         flags = 0
-        rgb = np.zeros((2, 4), np.uint8)
-        items: list[tuple[str, int, np.ndarray]] = []
-        resets = _P2F[0] | _P2F[39] | _P2F[49]
-        for sgr, s in self:
-            _ = sgr.rgb_dict
-            color_indices = (
-                getattr(sgr, "_fg_idx", None),
-                getattr(sgr, "_bg_idx", None),
+        rgb = np.zeros((2, 4), dtype="u1")
+        buf: list[tuple[str, int, np.ndarray]] = []
+        RESET = SgrParameter(0).flag
+        K2I = tuple(
+            (k, idx_attr, i, SgrParameter(x).flag)
+            for i, ((k, idx_attr), x) in enumerate(
+                zip(SgrSequence._key2idx.items(), (39, 49))
             )
-            for i, p in enumerate(sgr):
-                v = p._value
+        )
+        for sgr, s in self:
+            for p in sgr:
                 if p.is_color():
-                    if i not in color_indices:
-                        continue
-                    [(r, g, b)] = v.rgb_dict.values()
-                    row = color_indices.index(i)
-                    rgb[row] = (v.typecode, r, g, b)
-                    flags &= ~_P2F[39 if row == 0 else 49]
-                else:
-                    iv = int(v)
-                    if iv == 0:
-                        flags = rgb[:] = 0
-                    elif iv == 39:
-                        rgb[0] = 0
-                    elif iv == 49:
-                        rgb[1] = 0
-                    flags |= _P2F.get(iv, 0)
+                    continue
+                v = int(p._value)
+                if v == 0:
+                    flags = rgb[:] = 0
+                elif v in {39, 49}:
+                    rgb[0 if v == 39 else 1] = 0
+                flags |= SgrParameter(v).flag
+            for k, idx_attr, i, r in K2I:
+                cur_rgb = getattr(sgr, k, None)
+                if not cur_rgb:
+                    continue
+                idx = getattr(sgr, idx_attr)
+                p = sgr[idx]._value
+                rgb[i] = [p.typecode, *cur_rgb]
+                flags &= ~r
             if not s:
                 continue
-            items.append((s, flags, rgb.copy()))
-            flags &= ~resets
-        if not items:
-            return np.empty(0, dtype)
-        strs, mask_flags, mask_rgb = zip(*items)
-        lengths = np.fromiter(map(len, strs), np.intp, len(strs))
-        arr = np.empty(int(lengths.sum()), dtype)
+            buf.append((s, flags, rgb.copy()))
+            flags &= ~RESET
+        if not buf:
+            return np.empty(0, dtype=dtype)
+        strs, mask_flags, mask_rgb = zip(*buf)
+        lengths = np.fromiter(map(len, strs), dtype=np.intp, count=len(strs))
+        arr = np.empty(lengths.sum(), dtype=dtype)
         if not arr.size:
             return arr
         arr["char"] = np.frombuffer("".join(strs).encode("utf-32-le"), dtype="<U1")
-        arr["sgr"] = np.repeat(np.asarray(mask_flags, np.uint64), lengths)
+        arr["sgr"] = np.repeat(np.asarray(mask_flags, dtype="<u8"), lengths)
         arr["rgb"] = np.repeat(np.stack(mask_rgb), lengths, axis=0)
         return arr if dtype is None else arr.astype(dtype, copy=False)
 
     @classmethod
     def fromarray(cls, arr, /, *, ansi_type=None) -> tp.Self:
-        arr = np.asarray(arr, cls.dtype)
+        arr = np.asarray(arr, dtype=cls.dtype)
         if arr.ndim > 2:
             raise ValueError
         elif arr.ndim == 2:
@@ -1819,40 +1817,35 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         n = arr.size
         if not n:
             return cls(ansi_type=ansi_type)
-        change = np.empty(n, bool)
-        change[0] = True
-        change[1:] = (
+        changed = np.zeros(n, dtype=bool)
+        changed[0] = True
+        changed[1:] = (
             (arr["sgr"][1:] != arr["sgr"][:-1]) |
             (arr["rgb"][1:] != arr["rgb"][:-1]).any(axis=(1, 2))
         )   # fmt: skip
         prev_flags = 0
-        prev_rgb = np.zeros((2, 4), np.uint8)
-        resets = _P2F[0] | _P2F[39] | _P2F[49]
-        items: list[tuple[SgrSequence, str]] = []
-        chars = arr["char"]
-        k2i = {"fg": 0, "bg": 1}
-        for start, stop in pairwise([*map(int, np.flatnonzero(change)), n]):
-            emit_flags = cur_flags = int(arr["sgr"][start])
+        prev_rgb = np.zeros((2, 4), dtype="u1")
+        RESET = SgrParameter(0).flag
+        CLEAR_COLOR = RESET | SgrParameter(39).flag | SgrParameter(49).flag
+        buf: list[tuple[SgrSequence, str]] = []
+        for start, stop in pairwise(np.flatnonzero(changed).tolist() + [n]):
+            diff_flags = cur_flags = int(arr["sgr"][start])
             cur_rgb = arr["rgb"][start]
-            if prev_flags & ~cur_flags or cur_flags & _P2F[0]:
-                emit_keys = [k for k, i in k2i.items() if cur_rgb[i, 0]]
-            else:
-                emit_flags &= ~prev_flags
-                emit_keys = [
-                    k
-                    for k, i in k2i.items()
-                    if cur_rgb[i, 0] and (cur_rgb[i] != prev_rgb[i]).any()
-                ]
-            sgr = SgrSequence(_F2P[m.value] for m in SgrFlag(emit_flags))
-            for k in emit_keys:
-                i = k2i[k]
-                sgr.set_colors(
-                    {k: tuple(map(int, cur_rgb[i, 1:]))},
-                    _ANSI_FORMAT_MAP[int(cur_rgb[i, 0])],
+            diff_rgb = ((i, k) for i, k in enumerate(("fg", "bg")) if cur_rgb[i, 0])
+            # if flags have not changed and current flags do not have reset-bit set,
+            # subtract previous flags and filter rgb by delta.
+            if not ((prev_flags & ~cur_flags) or cur_flags & RESET):
+                diff_flags &= ~prev_flags
+                diff_rgb = (
+                    (i, k) for i, k in diff_rgb if (cur_rgb[i] != prev_rgb[i]).any()
                 )
-            items.append((sgr, "".join(chars[start:stop])))
-            prev_flags, prev_rgb = cur_flags & ~resets, cur_rgb
-        return cls(items, ansi_type=ansi_type)
+            sgr = SgrSequence(SgrFlag(diff_flags).parameters)
+            for i, k in diff_rgb:
+                typecode, r, g, b = cur_rgb[i].tolist()
+                sgr.set_colors({k: (r, g, b)}, _ANSI_FORMAT_MAP[typecode])
+            buf.append((sgr, "".join(arr["char"][start:stop])))
+            prev_flags, prev_rgb = cur_flags & ~CLEAR_COLOR, cur_rgb
+        return cls(buf, ansi_type=ansi_type)
 
     @staticmethod
     def _coerce(item, /) -> abc.Iterator[tuple[SgrSequence, str]]:

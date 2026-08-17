@@ -132,9 +132,9 @@ class SgrParameter(enum.IntEnum):
 SgrFlag = enum.IntFlag(
     "SgrFlag",
     [
-        x.name
-        for x in SgrParameter
-        if not any(j <= x <= j + k for i in (30, 40) for j, k in [(i, 8), (i + 60, 7)])
+        p.name
+        for p in SgrParameter
+        if not any(n <= p <= n + 8 for x in [30, 40] for n in [x, x + 60])
     ],
 )
 setattr(
@@ -152,9 +152,9 @@ _F2P = {v: k for k, v in _P2F.items()}
 # ansi 4bit {color code (int) ==> (key, RGB)}
 _ANSI16C_I2KV: dict[int, tuple[ColorDictKeys, Int3Tuple]] = {
     v: (k, ansi_4bit_to_rgb(v))
-    for i, k in enumerate(("fg", "bg"))
-    for x in (0, 60)
-    for v in (lambda n: range(n, n + 8))((30, 40)[i] + x)
+    for k, x in zip(("fg", "bg"), (30, 40))
+    for n in [x, x + 60]
+    for v in range(n, n + 8)
 }
 
 # ansi 4bit {(key, RGB) ==> color code (int)}

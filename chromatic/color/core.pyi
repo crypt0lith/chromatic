@@ -285,6 +285,7 @@ class SgrParamBuffer[_VT: (bytes, ansicolor4Bit, ansicolor8Bit, ansicolor24Bit)]
     _is_color: bool
     _is_reset: bool
 
+@tp.final
 class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
     __slots__ = ("_sgr_params", "_fg_idx", "_bg_idx")
     __match_args__ = ("_sgr_params",)

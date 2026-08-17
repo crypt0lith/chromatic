@@ -22,6 +22,7 @@ import collections.abc as abc
 import enum
 import re
 import typing as tp
+from functools import cached_property
 from types import MappingProxyType as mappingproxy
 from typing import Literal as L
 
@@ -119,6 +120,9 @@ class SgrParameter(enum.IntEnum):
     MAGENTA_BRIGHT_BG = 105
     CYAN_BRIGHT_BG = 106
     WHITE_BRIGHT_BG = 107
+
+    @cached_property
+    def flag(self) -> SgrFlag: ...
 
 class SgrFlag(enum.IntFlag):
     RESET = 0x1

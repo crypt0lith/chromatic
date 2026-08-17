@@ -128,23 +128,36 @@ class SgrParameter(enum.IntEnum):
     CYAN_BRIGHT_BG = 106
     WHITE_BRIGHT_BG = 107
 
+    @ft.cached_property
+    def flag(self) -> "SgrFlag":
+        try:
+            return SgrFlag[self.name]
+        except KeyError:
+            return SgrFlag(0)
 
-SgrFlag = enum.IntFlag(
-    "SgrFlag",
-    [
-        p.name
-        for p in SgrParameter
-        if not any(n <= p <= n + 8 for x in [30, 40] for n in [x, x + 60])
-    ],
-)
-setattr(
-    SgrFlag,
-    "parameters",
-    property(lambda self: [SgrParameter[name] for x in self if (name := x.name)]),
-)
 
 _P2F = {SgrParameter[name].value: x.value for x in SgrFlag if (name := x.name)}
 _F2P = {v: k for k, v in _P2F.items()}
+if tp.TYPE_CHECKING:
+
+    class SgrFlag(enum.IntFlag):
+        @property
+        def parameters(self) -> list[SgrParameter]: ...
+
+else:
+    SgrFlag = enum.IntFlag(
+        "SgrFlag",
+        [
+            p.name
+            for p in SgrParameter
+            if not any(n <= p <= n + 8 for x in [30, 40] for n in [x, x + 60])
+        ],
+    )
+    setattr(
+        SgrFlag,
+        "parameters",
+        property(lambda self: [SgrParameter[name] for x in self if (name := x.name)]),
+    )
 
 # ----------------
 # CONSTANT LOOKUPS

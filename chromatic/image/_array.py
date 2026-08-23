@@ -754,8 +754,8 @@ def ansi2img(
 
     Parameters
     ----------
-    ansi_array : list[list[ColorStr]]
-        A 2D list of ``ColorStr`` objects
+    arr : color_chain or 2D array-like
+        2D ANSI string array.
 
     font : FontArgType
         Font to render the ANSI strings with.

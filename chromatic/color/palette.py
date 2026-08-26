@@ -463,16 +463,6 @@ def rgb_dispatch(*names):
             has_varkwds = bool(flags & 0x8)
             total = sum([n_args, n_kwonly, has_varargs, has_varkwds])
             params = list(code.co_varnames[:total])
-            if not names:
-                names.update(
-                    name
-                    for name in params
-                    if (
-                        name in {"bg", "fg"}
-                        or name.startswith(("bg_", "fg_"))
-                        or name.endswith(("_bg", "_fg"))
-                    )
-                )
             mask_params = {name: name in names for name in params}
             positions, keywords = [], {}
             if names:
@@ -481,39 +471,35 @@ def rgb_dispatch(*names):
                     raise ValueError(f"unexpected parameter names: {unexpected}")
             elif total == 0 or not (n_pos_or_kw or n_kwonly or has_varkwds):
                 if total > 0:
-                    positions.append(slice(None))
+                    positions.extend(range(n_posonly))
+                    positions.append(slice(n_posonly, None))
                 return tuple(positions), mappingproxy(keywords)
             else:
                 raise ValueError("no parameters specified and none could be inferred")
             i = 0
             if n_posonly > 0:
-                posonly = params[:n_posonly]
-                for name in posonly:
+                for name in params[:n_posonly]:
                     if mask_params[name]:
                         positions.append(i)
                     i += 1
                 del params[:n_posonly]
             if n_pos_or_kw > 0:
-                pos_or_kw = params[:n_pos_or_kw]
-                for name in pos_or_kw:
+                for name in params[:n_pos_or_kw]:
                     if mask_params[name]:
                         positions.append(i)
                         keywords[name] = positions[-1]
                     i += 1
                 del params[:n_pos_or_kw]
             if n_kwonly > 0:
-                kwonly = params[:n_kwonly]
-                for name in kwonly:
+                for name in params[:n_kwonly]:
                     if mask_params[name]:
                         keywords[name] = None
                 del params[:n_kwonly]
             if has_varargs:
-                varargs = params.pop(0)
-                if mask_params[varargs]:
+                if mask_params[params.pop(0)]:
                     positions.append(slice(i, None))
             if has_varkwds:
-                varkwds = params.pop(0)
-                if mask_params[varkwds]:
+                if mask_params[params.pop(0)]:
                     keywords[None] = None
             return tuple(positions), mappingproxy(keywords)
 
@@ -530,25 +516,21 @@ def rgb_dispatch(*names):
                 for i, (j, x) in zip(
                     range(argcount - len(argdefs), argcount), enumerate(argdefs)
                 ):
-                    if not (i in POSITIONS and isinstance(x, str)):
-                        continue
-                    try:
-                        buf[j] = _rgb_lookup(x)
-                    except KeyError:
-                        continue
-                    else:
+                    if i in POSITIONS and isinstance(x, str):
+                        try:
+                            buf[j] = _rgb_lookup(x)
+                        except KeyError:
+                            continue
                         changed = True
                 argdefs = tuple(buf)
             if kwdefaults is not None:
                 kwdefaults = kwdefaults.copy()
                 for k, v in kwdefaults.items():
-                    if not (k in KEYWORDS and isinstance(v, str)):
-                        continue
-                    try:
-                        kwdefaults[k] = _rgb_lookup(v)
-                    except KeyError:
-                        continue
-                    else:
+                    if k in KEYWORDS and isinstance(v, str):
+                        try:
+                            kwdefaults[k] = _rgb_lookup(v)
+                        except KeyError:
+                            continue
                         changed = True
             if not changed:
                 return f
@@ -579,7 +561,7 @@ def rgb_dispatch(*names):
         def wrapper(*args, **kwargs):
             _kwargs = kwargs.copy()
             n_args = len(args)
-            mask = [False for _ in range(n_args)]
+            mask = [False] * n_args
             for idx in POSITIONS:
                 if isinstance(idx, slice):
                     for i in range(*idx.indices(n_args)):
@@ -587,29 +569,23 @@ def rgb_dispatch(*names):
                 elif idx < n_args:
                     mask[idx] = True
             for k, v in kwargs.items():
-                if not isinstance(v, str):
-                    continue
-                if not (k in KEYWORDS or HAS_VARKW):
-                    continue
-                try:
-                    v = _rgb_lookup(v)
-                except KeyError:
-                    continue
-                _kwargs[k] = v
-                if (i := KEYWORDS.get(k)) is None or i >= n_args:
-                    continue
-                mask[i] = False
+                if (k in KEYWORDS or HAS_VARKW) and isinstance(v, str):
+                    try:
+                        v = _rgb_lookup(v)
+                    except KeyError:
+                        continue
+                    _kwargs[k] = v
+                    if (i := KEYWORDS.get(k)) is None or i >= n_args:
+                        continue
+                    mask[i] = False
             _args = []
             for g, v in zip(mask, args):
-                if not (g and isinstance(v, str)):
-                    _args.append(v)
-                    continue
-                try:
-                    res = _rgb_lookup(v)
-                except KeyError:
-                    _args.append(v)
-                    continue
-                _args.append(res)
+                if g and isinstance(v, str):
+                    try:
+                        v = _rgb_lookup(v)
+                    except KeyError:
+                        pass
+                _args.append(v)
             return f(*_args, **_kwargs)
 
         return wrapper

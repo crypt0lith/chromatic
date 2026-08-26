@@ -2,20 +2,25 @@ __all__ = [
     "ANSI_4BIT_RGB",
     "ansi_4bit_to_rgb",
     "ansi_8bit_to_rgb",
-    "int2rgb",
     "hexstr2rgb",
     "hsl2rgb",
     "hsv2rgb",
+    "int2rgb",
     "is_u24",
+    "lab2lch",
     "lab2rgb",
     "lab2xyz",
+    "lch2lab",
+    "lch2rgb",
+    "lerp_lch",
     "nearest_ansi_4bit_rgb",
     "nearest_ansi_8bit_rgb",
-    "rgb2int",
     "rgb2hexstr",
     "rgb2hsl",
     "rgb2hsv",
+    "rgb2int",
     "rgb2lab",
+    "rgb2lch",
     "rgb2xyz",
     "rgb_diff",
     "rgb_to_ansi_8bit",
@@ -23,14 +28,12 @@ __all__ = [
     "xyz2rgb",
 ]
 
-import typing as tp
 from functools import lru_cache
-from types import MappingProxyType as mappingproxy
-from typing import Final, Literal as L, SupportsInt, TypeGuard
+from typing import Literal as L, SupportsInt, TypeGuard
 
 import numpy as np
 
-from .._typing import Float3Tuple, Int3Tuple, RGBPixel, RGBVectorLike, ShapedNDArray
+from .._typing import Int3Tuple, RGBVectorLike, ShapedNDArray
 
 
 @lru_cache
@@ -123,25 +126,23 @@ def rgb2xyz(rgb, /):
 def xyz2lab(xyz, /):
     arr = np.asarray(xyz, dtype=np.float64)
     shape = arr.shape
-    arr = np.atleast_2d(arr)
-    n = arr / REFWT
+    n = np.atleast_2d(arr) / REFWT
     f = np.where(n > EPS, np.cbrt(n), LIN * n + (16 / 116))
-    fx, fy, fz = f[..., 0], f[..., 1], f[..., 2]
+    fx, fy, fz = np.unstack(f, axis=-1)
     L = 116.0 * fy - 16.0
     a = 500.0 * (fx - fy)
     b = 200.0 * (fy - fz)
-    return np.stack((L, a, b), axis=-1).reshape(shape)
+    return np.stack([L, a, b], axis=-1).reshape(shape)
 
 
 def lab2xyz(lab, /):
     arr = np.asarray(lab, dtype=np.float64)
     shape = arr.shape
-    arr = np.atleast_2d(arr)
-    L, a, b = arr[..., 0], arr[..., 1], arr[..., 2]
+    L, a, b = np.unstack(np.atleast_2d(arr), axis=-1)
     fy = (L + 16.0) / 116.0
     fx = a / 500.0 + fy
     fz = fy - b / 200.0
-    f = np.stack((fx, fy, fz), axis=-1)
+    f = np.stack([fx, fy, fz], axis=-1)
     f3 = f**3
     n = np.where(f3 > EPS, f3, (f - (16 / 116)) / LIN)
     return (n * REFWT).reshape(shape)
@@ -150,8 +151,7 @@ def lab2xyz(lab, /):
 def hsl2rgb(hsl, /):
     arr = np.asarray(hsl, dtype=np.float32)
     shape = arr.shape
-    arr = np.atleast_2d(arr)
-    h, s, L = arr[..., 0], arr[..., 1], arr[..., 2]
+    h, s, L = np.unstack(np.atleast_2d(arr), axis=-1)
     C = (1.0 - np.abs(2.0 * L - 1.0)) * s
     h6 = h * 6.0
     i = np.floor(h6).astype(int)
@@ -173,8 +173,7 @@ def hsl2rgb(hsl, /):
 def rgb2hsl(rgb, /):
     arr = np.asarray(rgb, dtype=np.float32) / 255.0
     shape = arr.shape
-    arr = np.atleast_2d(arr)
-    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+    r, g, b = np.unstack(arr := np.atleast_2d(arr), axis=-1)
     m = np.min(arr, axis=-1)
     v = np.max(arr, axis=-1)
     C = v - m
@@ -192,14 +191,13 @@ def rgb2hsl(rgb, /):
     h[gmax] = ((b[gmax] - r[gmax]) / C[gmax]) + 2
     h[bmax] = ((r[bmax] - g[bmax]) / C[bmax]) + 4
     h = (h / 6.0) % 1.0
-    return np.stack((h, s, L), axis=-1).reshape(shape)
+    return np.stack([h, s, L], axis=-1).reshape(shape)
 
 
 def hsv2rgb(hsv, /):
     arr = np.asarray(hsv, dtype=np.float32)
     shape = arr.shape
-    arr = np.atleast_2d(arr)
-    h, s, v = arr[..., 0], arr[..., 1], arr[..., 2]
+    h, s, v = np.unstack(np.atleast_2d(arr), axis=-1)
     h6 = h * 6.0
     i = np.floor(h6).astype(int)
     f = h6 - i
@@ -219,8 +217,7 @@ def hsv2rgb(hsv, /):
 def rgb2hsv(rgb, /):
     arr = np.asarray(rgb, dtype=np.float32) / 255.0
     shape = arr.shape
-    arr = np.atleast_2d(arr)
-    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+    r, g, b = np.unstack(arr := np.atleast_2d(arr), axis=-1)
     m = np.min(arr, axis=-1)
     v = np.max(arr, axis=-1)
     C = v - m
@@ -236,7 +233,7 @@ def rgb2hsv(rgb, /):
     h[gmax] = ((b[gmax] - r[gmax]) / C[gmax]) + 2
     h[bmax] = ((r[bmax] - g[bmax]) / C[bmax]) + 4
     h = (h / 6.0) % 1.0
-    return np.stack((h, s, v), axis=-1).reshape(shape)
+    return np.stack([h, s, v], axis=-1).reshape(shape)
 
 
 def lab2rgb(lab, /):
@@ -245,6 +242,49 @@ def lab2rgb(lab, /):
 
 def rgb2lab(rgb, /):
     return xyz2lab(rgb2xyz(rgb))
+
+
+def lab2lch(lab, /):
+    arr = np.asarray(lab, dtype=np.float64)
+    L, a, b = np.unstack(arr, axis=-1)
+    C = np.hypot(a, b)
+    h = np.degrees(np.arctan2(b, a)) % 360
+    return np.stack([L, C, h], axis=-1)
+
+
+def lch2lab(lch, /):
+    arr = np.asarray(lch, dtype=np.float64)
+    L, C, h = np.unstack(arr, axis=-1)
+    h = np.radians(h)
+    return np.stack([L, C * np.cos(h), C * np.sin(h)], axis=-1)
+
+
+def lch2rgb(lch, /):
+    return lab2rgb(lch2lab(lch))
+
+
+def rgb2lch(rgb, /):
+    return lab2lch(rgb2lab(rgb))
+
+
+def lerp_lch(lch1, lch2, /, num=8):
+    """Return a linear interpolation of the given LCh arrays.
+
+    Where `lch1` and `lch2` have dims `([D0[,...D-1],] 3)` and `num` is `N`,
+    the returned array will have dims `([D0[,...D-1],] N, 3)`.
+    """
+    lch1 = np.asarray(lch1, dtype=np.float64)
+    lch2 = np.asarray(lch2, dtype=np.float64)
+    L1, C1, h1 = np.unstack(lch1, axis=-1)
+    L2, C2, h2 = np.unstack(lch2, axis=-1)
+    h1 = np.where(C1 < 1e-6, h2, h1)
+    h2 = np.where(C2 < 1e-6, h1, h2)
+    dh = (h2 - h1 + 180) % 360 - 180
+    t = np.linspace(0, 1, num).reshape(num, *[1] * (lch1.ndim - 1))
+    L = L1 + t * (L2 - L1)
+    C = C1 + t * (C2 - C1)
+    h = (h1 + t * dh) % 360
+    return np.moveaxis(np.stack([L, C, h], axis=0), [0, 1], [-1, -2])
 
 
 def rgb_diff(rgb1, rgb2, /):
@@ -307,7 +347,8 @@ ANSI_4BIT_RGB_LUT = _4b_lookup()
 
 def nearest_ansi_4bit_rgb(rgb, /):
     arr = np.asarray(rgb, dtype=np.uint8) >> 3
-    out = ANSI_4BIT_RGB_LUT[arr[..., 0], arr[..., 1], arr[..., 2]]
+    r, g, b = np.unstack(arr, axis=-1)
+    out = ANSI_4BIT_RGB_LUT[r, g, b]
     return tuple(out.tolist()) if arr.shape == (3,) else out
 
 
@@ -377,6 +418,6 @@ def rgb_to_ansi_8bit(rgb, /) -> int | ShapedNDArray[tuple[int, ...], np.uint8]:
     out[mid] = np.rint((c[mid] - 8) / 247 * 24) + 232
     mask &= ~grey
     rest = np.rint(arr[mask] / 255 * 5)
-    r, g, b = rest[..., 0], rest[..., 1], rest[..., 2]
+    r, g, b = np.unstack(rest, axis=-1)
     out[mask] = 16 + (36 * r) + (6 * g) + b
     return out

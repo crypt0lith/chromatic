@@ -21,9 +21,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "numpy>=1.25.2,<2.6",
+    "numpy>=2.1,<2.8",
     "pillow>=12.2.0",
-    "scipy>=1.11.4,<2.0",
+    "scipy>=1.11.4",
     "opencv-python",
     "fonttools>=4.60.2",
     "lazy_loader",

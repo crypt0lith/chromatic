@@ -22,6 +22,7 @@ import collections.abc as abc
 import enum
 import re
 import typing as tp
+from functools import cached_property
 from types import MappingProxyType as mappingproxy
 from typing import Literal as L
 
@@ -119,6 +120,9 @@ class SgrParameter(enum.IntEnum):
     MAGENTA_BRIGHT_BG = 105
     CYAN_BRIGHT_BG = 106
     WHITE_BRIGHT_BG = 107
+
+    @cached_property
+    def flag(self) -> SgrFlag: ...
 
 class SgrFlag(enum.IntFlag):
     RESET = 0x1
@@ -285,8 +289,9 @@ class SgrParamBuffer[_VT: (bytes, ansicolor4Bit, ansicolor8Bit, ansicolor24Bit)]
     _is_color: bool
     _is_reset: bool
 
+@tp.final
 class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
-    __slots__ = ("_sgr_params", "_bg_idx", "_fg_idx")
+    __slots__ = ("_sgr_params", "_fg_idx", "_bg_idx")
     __match_args__ = ("_sgr_params",)
 
     class _color_descriptor:
@@ -298,8 +303,8 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
         key: str
         idx: str
 
-    bg: _color_descriptor
     fg: _color_descriptor
+    bg: _color_descriptor
     def insert(
         self, index: tp.SupportsIndex, value: bytes | SgrParamBuffer, /
     ) -> None: ...
@@ -378,8 +383,8 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
     def rgb_dict(self) -> None: ...
 
     _sgr_params: list[SgrParamBuffer]
-    _bg_idx: int | None
     _fg_idx: int | None
+    _bg_idx: int | None
 
 class _IntFloatMixin:
     def __int__(self) -> int: ...

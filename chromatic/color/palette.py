@@ -2,6 +2,7 @@ __all__ = ["Back", "ColorNamespace", "Fore", "Style", "rgb_dispatch", "named_col
 
 import collections.abc as abc
 import functools as ft
+import sys
 import types
 import typing as tp
 from types import MappingProxyType as mappingproxy
@@ -518,6 +519,61 @@ def rgb_dispatch(*names):
 
         POSITIONS, KEYWORDS = _prepare()
         HAS_VARKW = None in KEYWORDS
+
+        def _replace_defaults():
+            argdefs = f.__defaults__
+            kwdefaults = f.__kwdefaults__
+            changed = False
+            if argdefs is not None:
+                argcount = f.__code__.co_argcount
+                buf = list(argdefs)
+                for i, (j, x) in zip(
+                    range(argcount - len(argdefs), argcount), enumerate(argdefs)
+                ):
+                    if not (i in POSITIONS and isinstance(x, str)):
+                        continue
+                    try:
+                        buf[j] = _rgb_lookup(x)
+                    except KeyError:
+                        continue
+                    else:
+                        changed = True
+                argdefs = tuple(buf)
+            if kwdefaults is not None:
+                kwdefaults = kwdefaults.copy()
+                for k, v in kwdefaults.items():
+                    if not (k in KEYWORDS and isinstance(v, str)):
+                        continue
+                    try:
+                        kwdefaults[k] = _rgb_lookup(v)
+                    except KeyError:
+                        continue
+                    else:
+                        changed = True
+            if not changed:
+                return f
+            if sys.version_info >= (3, 13):
+                f_new = types.FunctionType(
+                    f.__code__,
+                    f.__globals__,
+                    name=f.__name__,
+                    argdefs=argdefs,
+                    closure=f.__closure__,
+                    kwdefaults=kwdefaults,
+                )
+            else:
+                f_new = types.FunctionType(
+                    f.__code__,
+                    f.__globals__,
+                    name=f.__name__,
+                    argdefs=argdefs,
+                    closure=f.__closure__,
+                )
+                setattr(f_new, "__kwdefaults__", kwdefaults)
+            setattr(f_new, "__wrapped__", f)
+            return f_new
+
+        f = _replace_defaults()
 
         @ft.wraps(f)
         def wrapper(*args, **kwargs):

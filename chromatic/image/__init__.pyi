@@ -1,6 +1,4 @@
 __all__ = [
-    "ControlCharacter",
-    "alt",
     "ansi2img",
     "ansi_quantize",
     "ansify",
@@ -9,15 +7,12 @@ __all__ = [
     "backtrans_cp437",
     "contrast_stretch",
     "cp437_printable",
-    "ctrl",
     "equalize_white_point",
     "get_font_key",
     "get_font_object",
     "get_glyph_masks",
     "img2ansi",
     "img2ascii",
-    "isctrl",
-    "isprint",
     "otsu_mask",
     "read_ans",
     "render_ans",
@@ -29,7 +24,6 @@ __all__ = [
     "sort_glyphs",
     "translate_cp437",
     "ttf_extract_codepoints",
-    "unctrl",
 ]
 from ._array import (
     ansi2img,
@@ -52,15 +46,9 @@ from ._array import (
     shuffle_char_set,
 )
 from ._curses import (
-    ControlCharacter,
-    alt,
     ascii_printable,
     backtrans_cp437,
     cp437_printable,
-    ctrl,
-    isctrl,
-    isprint,
     translate_cp437,
-    unctrl,
 )
 from ._glyph import get_glyph_masks, sort_glyphs, ttf_extract_codepoints

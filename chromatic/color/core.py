@@ -154,7 +154,10 @@ else:
     setattr(
         SgrFlag,
         "parameters",
-        property(lambda self: [SgrParameter[name] for x in self if (name := x.name)]),
+        property(
+            lambda self: [SgrParameter[name] for x in self if (name := x.name)],
+            doc="Return this flag as a list of `SgrParameter`",
+        ),
     )
 
 # ----------------
@@ -188,6 +191,30 @@ else:
 
 
 class colorbytes(bytes):
+    """
+    ``colorbytes(bytes_or_buffer) -> ansicolor4Bit | ansicolor8Bit | ansicolor24Bit``
+
+    Construct an immutable array of bytes representing a valid ANSI SGR color
+    code span.
+
+    When called from the base `colorbytes` class form, if the input is already
+    an instance of a `colorbytes` subclass, the constructor returns it as-is.
+    Otherwise, the bytes will be parsed and the constructor returns an instance
+    of the appropriate subclass. The constructor will never return an instance
+    of `colorbytes`, only a covariant type.
+
+    When called from a subclass, if the input is not a `colorbytes` subclass
+    instance, it will be parsed. If the input `colorbytes` is the same type as
+    this subclass, the constructor returns it as-is. Otherwise, the input rgb
+    colors are mapped to the nearest color code in this subclass' color-space.
+
+    Note
+    ----
+    ``colorbytes`` is only to be subclassed by the internal implementation.
+    The programmer must override all constructors for it to behave properly as
+    a standalone subclass.
+    """
+
     @classmethod
     def from_rgb(cls, rgb, /):
         """Construct a `colorbytes` object from an RGB key-value pair.
@@ -239,9 +266,12 @@ class colorbytes(bytes):
         if (objtype := ansi.__class__) is cls:
             return ansi
         elif not _issubclass(objtype, (bytes, bytearray)):
-            raise TypeError(
-                f"expected bytes-like object, got {objtype.__name__!r} object instead"
-            )
+            if _issubclass(objtype, abc.Buffer):
+                ansi = (objtype := bytes)(ansi)
+            else:
+                raise TypeError(
+                    f"expected bytes-like object, got {objtype.__name__!r} object instead"
+                )
         k: ColorDictKeys
         match _unwrap_ansi_escape(ansi):
             case [color]:
@@ -293,34 +323,36 @@ class ansicolor4Bit(colorbytes):
     -----
     Supports 16 colors.
 
-    +-------+---------+
-    | index |  color  |
-    +-------+---------+
-    |     0 | black   |
-    |     1 | red     |
-    |     2 | green   |
-    |     3 | yellow  |
-    |     4 | blue    |
-    |     5 | magenta |
-    |     6 | cyan    |
-    |     7 | white   |
-    +-------+---------+
+        +-------+---------+
+        | index |  color  |
+        +-------+---------+
+        |     0 | black   |
+        |     1 | red     |
+        |     2 | green   |
+        |     3 | yellow  |
+        |     4 | blue    |
+        |     5 | magenta |
+        |     6 | cyan    |
+        |     7 | white   |
+        +-------+---------+
 
     Each color has a bright variant at ``index + 60``.
 
     Color codes use escape sequences of the form:
-        - `CSI 30–37 m` for foreground colors.
-        - `CSI 40–47 m` for background colors.
-        - `CSI 90–97 m` for foreground colors (bright).
-        - `CSI 100–107 m` for background colors (bright).
+
+    - `CSI 30–37 m` for foreground colors.
+    - `CSI 40–47 m` for background colors.
+    - `CSI 90–97 m` for foreground colors (bright).
+    - `CSI 100–107 m` for background colors (bright).
 
     Where `CSI` (Control Sequence Introducer) is `ESC[`.
 
     Examples
     --------
-    bright red fg: `ESC[91m`
-    standard green bg: `ESC[42m`
-    bright white bg, black fg: `ESC[107;30m`
+
+    - bright red fg: `ESC[91m`
+    - standard green bg: `ESC[42m`
+    - bright white bg, black fg: `ESC[107;30m`
 
     """
 
@@ -334,21 +366,24 @@ class ansicolor8Bit(colorbytes):
     Notes
     -----
     Supports 256 colors, mapped to the following value ranges:
-        - ``(0, 15)``: Corresponds to ANSI 4-bit colors.
-        - ``(16, 231)``: Represents a 6x6x6 RGB color cube.
-        - ``(232, 255)``: Greyscale colors, from black to white.
+
+    - ``(0, 15)``: Corresponds to ANSI 4-bit colors.
+    - ``(16, 231)``: Represents a 6x6x6 RGB color cube.
+    - ``(232, 255)``: Greyscale colors, from black to white.
 
     Color codes use escape sequences of the form:
-        - `CSI 38;5;(n) m` for foreground colors.
-        - `CSI 48;5;(n) m` for background colors.
+
+    - `CSI 38;5;(n) m` for foreground colors.
+    - `CSI 48;5;(n) m` for background colors.
 
     Where `CSI` (Control Sequence Introducer) is `ESC[` and `n` is an unsigned 8-bit integer.
 
     Examples
     --------
-    white bg: `ESC[48;5;255m`
-    bright red fg (ANSI 4-bit): `ESC[38;5;9m`
-    bright red fg (color cube): `ESC[38;5;196m`
+
+    - white bg: `ESC[48;5;255m`
+    - bright red fg (ANSI 4-bit): `ESC[38;5;9m`
+    - bright red fg (color cube): `ESC[38;5;196m`
 
     """
 
@@ -364,16 +399,18 @@ class ansicolor24Bit(colorbytes):
     Supports all colors in the RGB color space (16,777,216 total).
 
     Color codes use escape sequences of the form:
-        - `CSI 38;2;(r);(g);(b) m` for foreground colors.
-        - `CSI 48;2;(r);(g);(b) m` for background colors.
+
+    - `CSI 38;2;(r);(g);(b) m` for foreground colors.
+    - `CSI 48;2;(r);(g);(b) m` for background colors.
 
     Where `CSI` (Control Sequence Introducer) is `ESC[` and `r,g,b` are unsigned 8-bit integers.
 
     Examples
     --------
-    red fg: `ESC[38;2;255;85;85m`
-    black bg: `ESC[48;2;0;0;0m`
-    white fg, green bg: `ESC[38;2;255;255;255;48;2;0;170;0m`
+
+    - red fg: `ESC[38;2;255;85;85m`
+    - black bg: `ESC[48;2;0;0;0m`
+    - white fg, green bg: `ESC[38;2;255;255;255;48;2;0;170;0m`
 
     """
 
@@ -742,6 +779,7 @@ def _iter_sgr[_T: (abc.Buffer, tp.SupportsInt)](
 
 
 class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
+    """Construct a mutable sequence of SGR code bytes."""
     _idx_attrs = ("_fg_idx", "_bg_idx")
     _key2idx = mappingproxy(dict(zip(("fg", "bg"), _idx_attrs)))
     _reset2idx = mappingproxy(dict(zip((b"39", b"49"), _idx_attrs)))
@@ -890,13 +928,15 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
             return typ
 
     def shrink(self):
-        """Mutate self in-place by removing redundant codes from the sequence
+        """Mutate self in-place by removing redundant codes from the sequence.
 
         Specifically what is removed:
-            - codes that occur before a ``b"0"``
-            - fg / bg colors occurring before a respective reset code
-                and vice-versa, or a subsequent color of the same kind
-            - duplicate codes. the highest-index occurrence is kept
+
+        - codes that occur before a ``b"0"``
+        - fg / bg colors occurring before a respective reset code
+            and vice-versa, or a subsequent color of the same kind
+        - duplicate codes (the highest-index occurrence is kept)
+
         """
 
         buf = []
@@ -1018,10 +1058,18 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
     __hash__ = None
 
     def clear_colors(self):
+        """Remove all `colorbytes` values from self"""
         self._sgr_params[:] = [p for p in self._sgr_params if not p.is_color()]
         self._bg_idx = self._fg_idx = None
 
     def set_colors(self, iterable, /, ansi_type=None):
+        """Set the active colors to the given dict or dict items, and remove
+        the previous active colors from the sequence if they existed.
+
+        Values of None mean 'clear color', so
+        ``sgr.set_colors({"fg": None, "bg": None})`` is the same as
+        ``sgr.clear_colors()``.
+        """
         new_colors = dict(iterable)
         if not new_colors:
             return
@@ -1202,7 +1250,7 @@ class ColorStr(str, _IntFloatMixin):
 
         Parameters
         ----------
-        __ansi_type : {'4b', '8b', '24b'} or type[ansicolor4Bit | ansicolor8Bit | ansicolor24Bit]
+        ansi_type : {'4b', '8b', '24b'} or type[ansicolor4Bit | ansicolor8Bit | ansicolor24Bit]
             ANSI format to which all SGR parameters of type `colorbytes` will be cast.
 
         Returns
@@ -1225,13 +1273,16 @@ class ColorStr(str, _IntFloatMixin):
         """Return a copy of self with a new color spec.
 
         ``ColorStr.recolor(self, value, /, *, absolute=False) -> ColorStr``
+
         ``ColorStr.recolor(self, *, fg=None, bg=None, absolute=False) -> ColorStr``
 
         If no arguments are given, returns self unchanged.
         If 'value' is given and a `ColorStr`, return self with the colors of 'value'.
         Else, use keyword arguments ``{'fg', 'bg'}`` for colors.
+
         Any other mix of arguments will fail outright,
         since 'value' along with { fg=... | bg=... } is ambiguous which to use for colors.
+
         The 'absolute' keyword can be used with either signature.
 
         Keyword Args
@@ -1575,17 +1626,18 @@ class ColorStr(str, _IntFloatMixin):
         surprising behavior when dealing with f-strings.
 
         Consider the following example:
-        >>> from chromatic import ColorStr
-        >>> cs = ColorStr("hello", fg=0xFF0000, ansi_type="24b")
-        >>> cs._ansi_type
-        <class 'chromatic.color.core.ansicolor24Bit'>
-        >>> fstring = f"{cs:4b#<20}"
-        >>> fstring.__class__
-        <class 'chromatic.color.core.ColorStr'>
-        >>> fstring._ansi_type
-        <class 'chromatic.color.core.ansicolor4Bit'>
-        >>> fstring.base_str
-        'hello###############'
+
+            >>> from chromatic import ColorStr
+            >>> cs = ColorStr("hello", fg=0xFF0000, ansi_type="24b")
+            >>> cs._ansi_type
+            <class 'chromatic.color.core.ansicolor24Bit'>
+            >>> fstring = f"{cs:4b#<20}"
+            >>> fstring.__class__
+            <class 'chromatic.color.core.ColorStr'>
+            >>> fstring._ansi_type
+            <class 'chromatic.color.core.ansicolor4Bit'>
+            >>> fstring.base_str
+            'hello###############'
 
         In that case, the f-string eval returned a `ColorStr` object,
         because the whole f-string only consists of a single `{...}` span.
@@ -1595,16 +1647,17 @@ class ColorStr(str, _IntFloatMixin):
 
         In any case other than the single span f-string, the internals delegate
         to normal `str` concatentation, and we get a `str` result:
-        >>> from chromatic import ColorStr
-        >>> cs = ColorStr("hello", fg=0xFF0000, ansi_type="24b")
-        >>> f"foo {cs} bar".__class__
-        <class 'str'>
-        >>> cs2 = ColorStr("world", bg=0x00FFFF, ansi_type="8b")
-        >>> fstring_concat = f"{cs: >10}{cs2: <10}"
-        >>> fstring_concat
-        '\\x1b[38;2;255;0;0m     hello\\x1b[0m\\x1b[48;5;51mworld     \\x1b[0m'
-        >>> fstring_concat.__class__
-        <class 'str'>
+
+            >>> from chromatic import ColorStr
+            >>> cs = ColorStr("hello", fg=0xFF0000, ansi_type="24b")
+            >>> f"foo {cs} bar".__class__
+            <class 'str'>
+            >>> cs2 = ColorStr("world", bg=0x00FFFF, ansi_type="8b")
+            >>> fstring_concat = f"{cs: >10}{cs2: <10}"
+            >>> fstring_concat
+            '\\x1b[38;2;255;0;0m     hello\\x1b[0m\\x1b[48;5;51mworld     \\x1b[0m'
+            >>> fstring_concat.__class__
+            <class 'str'>
 
         """
         if format_spec.startswith(("24b", "8b", "4b")):

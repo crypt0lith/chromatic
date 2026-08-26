@@ -29,8 +29,16 @@ dependencies = [
     "lazy_loader",
 ]
 
+[dependency-groups]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.7",
+    "mkdocstrings[python]>=1.0.6",
+]
+
 [project.urls]
-repository = "https://github.com/crypt0lith/chromatic.git"
+Homepage = "https://github.com/crypt0lith/chromatic"
+Documentation = "https://crypt0lith.github.io/chromatic"
 
 [project.scripts]
 chromatic = "chromatic.__main__:main"

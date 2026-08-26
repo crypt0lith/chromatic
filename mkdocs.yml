@@ -1,0 +1,34 @@
+site_name: chromatic
+site_url: https://crypt0lith.github.io/chromatic/
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/white-balance-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            members_order: source
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+            show_if_no_docstring: true
+            filters: "public"
+nav:
+  - Home: index.md
+  - API reference:
+      - chromatic: api/chromatic.md
+      - color: api/color.md
+      - data: api/data.md
+      - image: api/image.md

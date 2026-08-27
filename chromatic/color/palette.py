@@ -450,6 +450,82 @@ _rgb_lookup = _DynamicNSMeta(
 
 
 def rgb_dispatch(*names, replace_defaults=True):
+    """Returns a decorator which intercepts input arguments that are color
+    name strings, and replaces those arguments with their RGB tuple
+    counterparts before passing them to the wrapped function.
+
+    In the bare form, ie. ``@rgb_dispatch``, the decorator treats all
+    positional-only and variadic positional parameters as assignable.
+
+    In the named form, ie. ``@rgb_dispatch("a", "b", "c")``, the decorator
+    will only attempt to match and replace those parameter names, regardless
+    of their parameter kind.
+
+    Parameters
+    ----------
+    *names : str
+        Parameter names to target for color name to RGB tuple replacement.
+    replace_defaults : bool, default=True
+        Whether to replace default argument values of the returned callable.
+
+    Examples
+    --------
+    >>> from chromatic.color.palette import rgb_dispatch
+    >>> @rgb_dispatch
+    ... def func(r="red", b="blue", g="green", x="not a color", /):
+    ...     return r, g, b, x
+    ...
+    >>> func()
+    ((255, 0, 0), (0, 128, 0), (0, 0, 255), 'not a color')
+    >>> func(None, None, None, "Hot Pink")
+    (None, None, None, (255, 105, 180))
+
+    >>> @rgb_dispatch
+    ... def func(a, b, c, /, *args):
+    ...     return a, b, c, *args
+    ...
+    >>> func("red", "yellow", "pink", "dark magenta", "alice blue")
+    ((255, 0, 0), (255, 255, 0), (255, 192, 203), (139, 0, 139), (240, 248, 255))
+
+    >>> @rgb_dispatch("c")
+    ... def func(a, b, c, /, *args):
+    ...     return a, b, c, *args
+    ...
+    >>> func("red", "yellow", "pink", "dark magenta", "alice blue")
+    ('red', 'yellow', (255, 192, 203), 'dark magenta', 'alice blue')
+
+    >>> @rgb_dispatch("color")
+    ... def func(**kwargs):
+    ...     return kwargs
+    ...
+    >>> func(color="red")
+    {'color': (255, 0, 0)}
+
+    >>> @rgb_dispatch("kwargs")
+    ... def func(**kwargs):
+    ...     return kwargs
+    ...
+    >>> func(color1="red", color2="yellow", color3="orange")
+    {'color1': (255, 0, 0), 'color2': (255, 255, 0), 'color3': (255, 165, 0)}
+
+    >>> @rgb_dispatch("kwargs")
+    ... def func(a=None, /, **kwargs):
+    ...     return a, kwargs
+    ...
+    >>> func(a="green")
+    (None, {'a': (0, 128, 0)})
+
+    >>> @rgb_dispatch(replace_defaults=False)
+    ... def func(fruit_or_color="orange", /):
+    ...     res = "fruit" if isinstance(fruit_or_color, str) else "color"
+    ...     return f"{fruit_or_color} is a {res}"
+    ...     
+    >>> func()
+    'orange is a fruit'
+    >>> func("orange")
+    '(255, 165, 0) is a color'
+    """
+
     def decorator(f: types.FunctionType, /):
         def _prepare():
             assert isinstance(names, set)

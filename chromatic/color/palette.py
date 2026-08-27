@@ -449,7 +449,7 @@ _rgb_lookup = _DynamicNSMeta(
 )._getmember
 
 
-def rgb_dispatch(*names):
+def rgb_dispatch(*names, replace_defaults=True):
     def decorator(f: types.FunctionType, /):
         def _prepare():
             assert isinstance(names, set)
@@ -555,7 +555,8 @@ def rgb_dispatch(*names):
             setattr(f_new, "__wrapped__", f)
             return f_new
 
-        f = _replace_defaults()
+        if replace_defaults:
+            f = _replace_defaults()
 
         @ft.wraps(f)
         def wrapper(*args, **kwargs):

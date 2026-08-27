@@ -265,10 +265,12 @@ class AnsiFore(ColorNamespace[_frozen_color_chain]):
     def __call__(self, fg: _ColorLike) -> color_chain: ...
 
 @tp.overload
-def rgb_dispatch[_F: abc.Callable[..., tp.Any]](f: _F, /, *names: str) -> _F: ...
+def rgb_dispatch[_F: abc.Callable[..., tp.Any]](
+    f: _F, /, *names: str, replace_defaults: bool = True
+) -> _F: ...
 @tp.overload
 def rgb_dispatch[_F: abc.Callable[..., tp.Any]](
-    *names: str,
+    *names: str, replace_defaults: bool = True
 ) -> abc.Callable[[_F], _F]: ...
 
 named_color: MappingProxyType[str | tuple[str, tp.Literal["4b", "24b"]], Color]

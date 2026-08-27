@@ -780,6 +780,7 @@ def _iter_sgr[_T: (abc.Buffer, tp.SupportsInt)](
 
 class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
     """Construct a mutable sequence of SGR code bytes."""
+
     _idx_attrs = ("_fg_idx", "_bg_idx")
     _key2idx = mappingproxy(dict(zip(("fg", "bg"), _idx_attrs)))
     _reset2idx = mappingproxy(dict(zip((b"39", b"49"), _idx_attrs)))
@@ -939,37 +940,25 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
 
         """
 
+        K2I = {
+            k: i for i, ks in enumerate(zip((b"39", b"49"), ("fg", "bg"))) for k in ks
+        }
         buf = []
         seen = set()
-        seen_fg = seen_bg = False
+        seen_colors = [False] * 2
         for x in reversed(self):
             if x in seen:
                 continue
             seen.add(x)
-            if x == b"0":
+            v = x._value
+            if v == b"0":
                 buf.append(x)
                 break
-            elif x == b"39":
-                if not seen_fg:
-                    buf.append(x)
-                    seen_fg = True
-                continue
-            elif x == b"49":
-                if not seen_bg:
-                    buf.append(x)
-                    seen_bg = True
-                continue
-            elif not x.is_color():
-                buf.append(x)
-                continue
-            elif x._value.kind() == "fg":
-                if seen_fg:
+            elif v in K2I or x.is_color():
+                idx = K2I[getattr(v, "kind", lambda: v)()]
+                if seen_colors[idx]:
                     continue
-                seen_fg = True
-            elif seen_bg:
-                continue
-            else:
-                seen_bg = True
+                seen_colors[idx] = True
             buf.append(x)
         self[:] = buf[::-1]
 

@@ -501,6 +501,7 @@ def rgb_dispatch(*names, replace_defaults=True):
             if has_varkwds:
                 if mask_params[params.pop(0)]:
                     keywords[None] = None
+                keywords |= dict.fromkeys(names.difference(code.co_varnames[:total]))
             return tuple(positions), mappingproxy(keywords)
 
         POSITIONS, KEYWORDS = _prepare()

@@ -33,10 +33,11 @@ GlyphBitmask: tp.TypeAlias = GlyphArray[np.bool_]
 Bitmask: tp.TypeAlias = MatrixLike[np.bool_]
 GreyscaleGlyphArray: tp.TypeAlias = GlyphArray[np.float64]
 GreyscaleArray: tp.TypeAlias = MatrixLike[np.float64]
-RGBArray: tp.TypeAlias = ShapedNDArray[tuple[int, int, L[3]], np.uint8]
 RGBPixel: tp.TypeAlias = ShapedNDArray[tuple[L[3]], np.uint8]
+RGBArray: tp.TypeAlias = ShapedNDArray[tuple[int, int, L[3]], np.uint8]
+RGBArray3d: tp.TypeAlias = ShapedNDArray[tuple[int, int, int, L[3]], np.uint8]
 
-RGBImageLike: tp.TypeAlias = Image | RGBArray
+RGBImageLike: tp.TypeAlias = Image | RGBArray | RGBArray3d
 RGBVectorLike: tp.TypeAlias = IntSequence | RGBPixel
 ColorDictKeys = L["fg", "bg"]
 Ansi4BitAlias = L["4b", 1]

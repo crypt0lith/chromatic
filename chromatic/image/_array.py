@@ -32,9 +32,7 @@ from shutil import get_terminal_size
 
 import cv2 as cv
 import numpy as np
-import PIL.Image
-import PIL.ImageDraw
-import PIL.ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
 from .. import _typing as _tp
 from ..color import core
@@ -43,7 +41,7 @@ from ..color.palette import rgb_dispatch
 from ..data import userfont as uf
 
 
-def get_font_key(font: PIL.ImageFont.FreeTypeFont):
+def get_font_key(font: ImageFont.FreeTypeFont):
     """Obtain a unique tuple pair from a FreeTypeFont object.
 
     Parameters
@@ -80,7 +78,7 @@ def get_font_key(font: PIL.ImageFont.FreeTypeFont):
 @tp.overload
 def get_font_object(
     font: _tp.FontArgType, *, retpath: tp.Literal[False] = False
-) -> PIL.ImageFont.FreeTypeFont: ...
+) -> ImageFont.FreeTypeFont: ...
 
 
 @tp.overload
@@ -90,13 +88,13 @@ def get_font_object(font: _tp.FontArgType, *, retpath: tp.Literal[True]) -> str:
 @tp.overload
 def get_font_object(
     font: _tp.FontArgType, *, retpath: bool
-) -> PIL.ImageFont.FreeTypeFont | str: ...
+) -> ImageFont.FreeTypeFont | str: ...
 
 
 @lru_cache
 def get_font_object(
     font: _tp.FontArgType, *, retpath: bool = False
-) -> PIL.ImageFont.FreeTypeFont | str:
+) -> ImageFont.FreeTypeFont | str:
     """Return a FreeTypeFont object or its filepath.
 
     The result is cached to prevent FreeType from consuming excessive resources.
@@ -123,21 +121,21 @@ def get_font_object(
     if retpath:
         return (
             getattr(font.path, "name", os.fspath(font.path))
-            if isinstance(font, PIL.ImageFont.FreeTypeFont)
+            if isinstance(font, ImageFont.FreeTypeFont)
             else get_font_object(get_font_object(font), retpath=True)
         )
     else:
         match font:
-            case PIL.ImageFont.FreeTypeFont():
+            case ImageFont.FreeTypeFont():
                 return font
             case uf.UserFont():
                 return font.to_truetype()
             case str() if font in uf.userfonts:
                 return get_font_object(uf.userfonts[font])
             case str() | os.PathLike():
-                return PIL.ImageFont.truetype(font, 24)
+                return ImageFont.truetype(font, 24)
     raise TypeError(
-        f"Expected {PIL.ImageFont.FreeTypeFont.__name__!r} or pathlike object, "
+        f"Expected {ImageFont.FreeTypeFont.__name__!r} or pathlike object, "
         f"got {type(font).__name__!r} object instead"
     )
 
@@ -201,7 +199,7 @@ def render_font_str(s: str, /, font: _tp.FontArgType):
                 for line in map(lambda x: f"{x:<{maxlen}}", lines)
             ]
         )
-        return PIL.Image.fromarray(stacked)
+        return Image.fromarray(stacked)
     return render_font_char(s, font)
 
 
@@ -239,58 +237,14 @@ def render_font_char(
     """
     if len(c) > 1:
         raise ValueError(f"expected a character, but string of length {len(c)} found")
-    img = PIL.Image.new("RGB", size=size)
-    draw = PIL.ImageDraw.Draw(img)
+    img = Image.new("RGB", size=size)
+    draw = ImageDraw.Draw(img)
     font_obj = get_font_object(font)
     bbox = draw.textbbox((0, 0), c, font=font_obj)
     x_offset, y_offset = (
         (size[i] - (bbox[i + 2] - bbox[i])) // 2 - bbox[i] for i in range(2)
     )
     draw.text((x_offset, y_offset), c, font=font_obj, fill=fill)
-    return img
-
-
-def get_rgb_array(img: str | os.PathLike[str] | _tp.RGBImageLike, /):
-    """Convert an input image into an RGB array.
-
-    Parameters
-    ----------
-    img : str | PathLike[str] | RGBImageLike
-        Input image or path to the image.
-
-    Returns
-    -------
-    RGBArray
-
-    Raises
-    ------
-    ValueError
-        If the image format is invalid.
-
-    TypeError
-        If the input is not a valid image or path.
-    """
-    if isinstance(img, (str, os.PathLike)):
-        x = cv.imread(fp := os.fspath(img))
-        if x is None:
-            raise FileNotFoundError(fp)
-        img = cv.cvtColor(x, cv.COLOR_BGR2RGB)
-    if not _is_rgb_array(img):
-        if _is_image(img):
-            img = img.convert("RGB")
-        elif _is_array(img):
-            if img.ndim == 2:
-                img = cv.cvtColor(img[:, :, 0], cv.COLOR_GRAY2RGB)
-            elif img.ndim == 4:
-                img = cv.cvtColor(img, cv.COLOR_RGBA2RGB)
-            else:
-                raise ValueError(f"unexpected array shape: {img.shape!r}")
-        else:
-            err = TypeError(
-                _tp.type_error_msg(img, os.PathLike, PIL.Image.Image, np.ndarray)
-            )
-            raise err
-        img = np.asarray(img, dtype=np.uint8)
     return img
 
 
@@ -397,27 +351,158 @@ def scale_saturation(
     return img
 
 
-def _get_asciidraw_vars(
-    img: str | os.PathLike[str] | _tp.RGBImageLike, font: _tp.FontArgType, /
-):
-    return get_rgb_array(img), get_font_object(font)
-
-
-def _get_bbox_shape(font: PIL.ImageFont.FreeTypeFont, /):
+def _get_bbox_shape(font: ImageFont.FreeTypeFont, /):
     return font.getbbox(" ")[2:]
 
 
-@tp.overload
-def img2ascii(
-    img: str | os.PathLike[str] | _tp.RGBImageLike,
-    /,
-    font: _tp.FontArgType = ...,
-    factor: int = ...,
-    char_set: tp.Optional[str] = ...,
-    sort_glyphs: bool | tp.Literal[-1] = ...,
-    *,
-    ret_img: tp.Literal[False] = False,
-) -> str: ...
+class _ConversionHandler:
+    def _close_owned(self):
+        if "owned" in self._ns:
+            self._ns.pop("owned").close()
+
+    def _swap_owned(self, im: Image.Image, /):
+        self._close_owned()
+        self._ns["owned"] = im
+
+    def _chars(self):
+        char_set = self.char_set
+        sort = self.sort_glyphs
+        if char_set is None:
+            if self.font.path is uf.VGA437:
+                from ._curses import cp437_printable as printable
+            else:
+                from ._curses import ascii_printable as printable
+            char_set = printable()
+            if not sort:
+                char_set = shuffle_char_set(char_set)
+        if sort:
+            from ._glyph import sort_glyphs
+
+            char_set = sort_glyphs(char_set, self.font, reverse=sort == -1)
+        chars = np.frombuffer(char_set.encode("utf-32-le"), dtype="<U1")
+        if not chars.size:
+            raise ValueError("empty charset")
+        return chars
+
+    def _push_image(self, im, /):
+        if isinstance(im, (str, os.PathLike)):
+            im = Image.open(im)
+            self._swap_owned(im)
+        if _is_image(im):
+            if getattr(im, "is_animated", False):
+                arr = np.stack(
+                    ImageSequence.all_frames(
+                        im, lambda x: x.convert("RGB")  # type: ignore
+                    ),
+                    dtype=np.uint8,
+                )
+            else:
+                arr = np.asarray(im.convert("RGB"), dtype=np.uint8)
+        elif _is_array(im):
+            arr = np.asarray(im, dtype=np.uint8)
+        else:
+            raise TypeError
+        if not arr.size:
+            raise ValueError
+        if arr.ndim == 2:
+            arr = cv.cvtColor(arr[:, :, 0], cv.COLOR_GRAY2RGB)
+        elif arr.shape[-1] == 4:
+            arr = cv.cvtColor(arr, cv.COLOR_RGBA2RGB)
+        if arr.ndim not in {3, 4}:
+            raise ValueError
+        self._ns["rgb"] = arr
+        return arr
+
+    def __init__(
+        self,
+        font: _tp.FontArgType = uf.VGA437,
+        *,
+        factor=200,
+        char_set=None,
+        sort_glyphs=True,
+        ansi_type=None,
+        equalize=False,
+        bg=None,
+    ):
+        self.font = get_font_object(font)
+        self.factor = factor
+        self.char_set = char_set
+        self.sort_glyphs = sort_glyphs
+        self.ansi_type = core.get_ansi_type(ansi_type)
+        self.equalize = equalize
+        self.bg = bg
+        self._ns = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        self._close_owned()
+        self._ns.clear()
+
+    def to_ascii(self, im, /):
+        rgb = self._push_image(im)
+        if is_single := rgb.ndim == 3:
+            rgb = rgb[None, :]
+        chars = self._chars()
+        ch, cw = _get_bbox_shape(self.font)
+        char_aspect = ceil(cw / ch)
+        img_aspect = rgb.shape[2] / rgb.shape[1]
+        out_w = self.factor
+        out_h = int(self.factor / img_aspect / char_aspect)
+        interp = np.empty((rgb.shape[0], out_h, out_w), dtype="<U1")
+        for i in range(rgb.shape[0]):
+            grey = cv.cvtColor(rgb[i], cv.COLOR_RGB2GRAY)
+            blur = grey.astype(np.float64) / 255.0
+            if (sy := (grey.shape[0] / out_h - 1) / 2) > 0:
+                blur = cv.filter2D(
+                    blur,
+                    -1,
+                    cv.getGaussianKernel(2 * int(4.0 * sy + 0.5) + 1, sy),
+                    borderType=cv.BORDER_REFLECT_101,
+                )
+            if (sx := (grey.shape[1] / out_w - 1) / 2) > 0:
+                blur = cv.filter2D(
+                    blur,
+                    -1,
+                    cv.getGaussianKernel(2 * int(4.0 * sx + 0.5) + 1, sx).T,
+                    borderType=cv.BORDER_REFLECT_101,
+                )
+            grey = (
+                cv.resize(blur, (out_w, out_h), interpolation=cv.INTER_LINEAR) * 255.0
+            ).astype(np.uint8)
+            interp[i] = chars[np.rint(grey / 255 * (chars.size - 1)).astype(np.intp)]
+        return interp[0] if is_single else interp
+
+    def to_ansi(self, im, /):
+        interp = self.to_ascii(im)
+        rgb = self._ns["rgb"]
+        assert interp.ndim == rgb.ndim - 1
+        if is_single := rgb.ndim == 3:
+            interp = interp[None, :]
+            rgb = rgb[None, :]
+        assert interp.shape[0] == rgb.shape[0]
+        if self.equalize is True:
+            rgb[:] = [contrast_stretch(x) for x in rgb]
+        elif self.equalize == "white_point":
+            rgb[:] = [equalize_white_point(x) for x in rgb]
+        rgb[:] = ansi_quantize(rgb, ansi_type=self.ansi_type)
+        newshape = interp.shape[-2:]
+        n_frames = interp.shape[0]
+        out = np.empty((n_frames, *newshape), dtype=core.color_chain.dtype)
+        for i in range(n_frames):
+            with (
+                Image.fromarray(rgb[i], mode="RGB") as x,
+                x.resize(newshape[::-1], resample=Image.Resampling.LANCZOS) as xr,
+            ):
+                out["char"][i] = interp[i]
+                out["rgb"][i, ..., 0, 0] = self.ansi_type.typecode
+                out["rgb"][i, ..., 0, 1:] = np.asarray(xr, dtype=np.uint8)
+                if self.bg is None:
+                    continue
+                out["rgb"][i, ..., 1, 0] = self.ansi_type.typecode
+                out["rgb"][i, ..., 1, 1:] = self.bg
+        return out[0] if is_single else out
 
 
 @tp.overload
@@ -429,10 +514,49 @@ def img2ascii(
     char_set: tp.Optional[str] = ...,
     sort_glyphs: bool | tp.Literal[-1] = ...,
     *,
-    ret_img: tp.Literal[True],
-) -> tuple[
+    outarray: tp.Literal[False] = False,
+) -> str | list[str]: ...
+
+
+@tp.overload
+def img2ascii(
+    img: _tp.RGBArray,
+    /,
+    font: _tp.FontArgType = ...,
+    factor: int = ...,
+    char_set: tp.Optional[str] = ...,
+    sort_glyphs: bool | tp.Literal[-1] = ...,
+    *,
+    outarray: tp.Literal[True],
+) -> _tp.ShapedNDArray[tuple[int, int], np.str_]: ...
+
+
+@tp.overload
+def img2ascii(
+    img: _tp.RGBArray3d,
+    /,
+    font: _tp.FontArgType = ...,
+    factor: int = ...,
+    char_set: tp.Optional[str] = ...,
+    sort_glyphs: bool | tp.Literal[-1] = ...,
+    *,
+    outarray: tp.Literal[True],
+) -> _tp.ShapedNDArray[tuple[int, int, int], np.str_]: ...
+
+
+@tp.overload
+def img2ascii(
+    img: str | os.PathLike[str] | Image.Image,
+    /,
+    font: _tp.FontArgType = ...,
+    factor: int = ...,
+    char_set: tp.Optional[str] = ...,
+    sort_glyphs: bool | tp.Literal[-1] = ...,
+    *,
+    outarray: tp.Literal[True],
+) -> tp.Union[
     _tp.ShapedNDArray[tuple[int, int], np.str_],
-    _tp.ShapedNDArray[tuple[int, int, tp.Literal[3]], np.uint8],
+    _tp.ShapedNDArray[tuple[int, int, int], np.str_],
 ]: ...
 
 
@@ -444,7 +568,7 @@ def img2ascii(  # type: ignore
     char_set=None,
     sort_glyphs=True,
     *,
-    ret_img=False,
+    outarray=False,
 ):
     """Convert an image to a multiline ASCII string.
 
@@ -462,17 +586,15 @@ def img2ascii(  # type: ignore
     char_set : Iterable[str], optional
         Characters to be mapped to greyscale values of 'img'.
 
-    sort_glyphs : {True, False, ``-1``}
+    sort_glyphs : {True, False, -1}
         Specifies to sort `char_set` or leave it unsorted before mapping to greyscale.
 
         Glyph bitmasks obtained from 'font' are compared when sorting the string.
 
-        ``-1`` specifies reverse sorting order.
+        `-1` specifies reverse sorting order.
 
-    ret_img : bool, default=False
-        Specifies to return both the output string and original RGB array.
-
-        Used by ``img2ansi`` to lazily obtain the base ASCII chars and original RGB array.
+    outarray : bool, default=False
+        If True, returns the raw chararray. Otherwise, returns a string or list of strings.
 
     Returns
     -------
@@ -488,58 +610,19 @@ def img2ascii(  # type: ignore
     --------
     ascii2img : Render an ASCII string as an image.
     """
-    rgb, font = _get_asciidraw_vars(img, font)
-    assert isinstance(rgb, np.ndarray)
-    grey: _tp.MatrixLike[np.uint8] = cv.cvtColor(rgb, cv.COLOR_RGB2GRAY)
-    shape = grey.shape
-    img_aspect = shape[-1] / shape[0]
-    ch, cw = _get_bbox_shape(font)
-    char_aspect = ceil(cw / ch)
-    out_h = int(factor / img_aspect / char_aspect)
-    out_w = factor
-    blur = grey.astype(np.float64) / 255.0
-    if (sy := (shape[0] / out_h - 1) / 2) > 0:
-        blur = cv.filter2D(
-            blur,
-            -1,
-            cv.getGaussianKernel(2 * int(4.0 * sy + 0.5) + 1, sy),
-            borderType=cv.BORDER_REFLECT_101,
-        )
-    if (sx := (shape[1] / out_w - 1) / 2) > 0:
-        blur = cv.filter2D(
-            blur,
-            -1,
-            cv.getGaussianKernel(2 * int(4.0 * sx + 0.5) + 1, sx).T,
-            borderType=cv.BORDER_REFLECT_101,
-        )
-    grey = (
-        cv.resize(blur, (out_w, out_h), interpolation=cv.INTER_LINEAR) * 255.0
-    ).astype(np.uint8)
-    if char_set is None:
-        if font.path is uf.VGA437:
-            from ._curses import cp437_printable
-
-            char_set = cp437_printable()
-        else:
-            from ._curses import ascii_printable
-
-            char_set = ascii_printable()
-        if not sort_glyphs:
-            char_set = shuffle_char_set(char_set)
-    if sort_glyphs:
-        from ._glyph import sort_glyphs as glyph_sort
-
-        char_set = glyph_sort(char_set, font, reverse=not ~int(sort_glyphs))
-    chars = np.frombuffer(char_set.encode("utf-32-le"), dtype="<U1")
-    if not chars.size:
-        raise ValueError("empty charset")
-    interp = chars[np.rint(grey / 255 * (chars.size - 1)).astype(np.intp)]
-    if ret_img is True:
-        return interp, rgb
-    newlines = np.zeros((interp.shape[0], 1), dtype="<U1")
+    with _ConversionHandler(
+        font, factor=factor, char_set=char_set, sort_glyphs=sort_glyphs
+    ) as h:
+        out = h.to_ascii(img)
+    if outarray is True:
+        return out
+    newlines = np.zeros((*out.shape[:-1], 1), dtype="<U1")
     newlines[:-1] = "\n"
-    interp = np.concatenate((interp, newlines), axis=1)
-    return "".join(interp.flat)
+    out = np.concatenate((out, newlines), axis=-1)
+    if out.ndim == 3:
+        return "".join(out.flat)
+    else:
+        return ["".join(x.flat) for x in out]
 
 
 @tp.overload
@@ -555,12 +638,12 @@ def img2ansi(
     bg: tp.Optional[_tp.Int3Tuple | str] = ...,
     *,
     outarray: tp.Literal[False] = False,
-) -> core.color_chain: ...
+) -> core.color_chain | list[core.color_chain]: ...
 
 
 @tp.overload
 def img2ansi(
-    img: str | os.PathLike[str] | _tp.RGBImageLike,
+    img: _tp.RGBArray,
     /,
     font: _tp.FontArgType = ...,
     factor: int = ...,
@@ -574,17 +657,52 @@ def img2ansi(
 ) -> _tp.ShapedNDArray[tuple[int, int], np.void]: ...
 
 
-@rgb_dispatch("bg")
+@tp.overload
 def img2ansi(
-    img: str | os.PathLike[str] | _tp.RGBImageLike,
+    img: _tp.RGBArray3d,
     /,
-    font: _tp.FontArgType = uf.VGA437,
-    factor: int = 200,
-    char_set: tp.Optional[str] = None,
-    sort_glyphs: bool | tp.Literal[-1] = True,
-    ansi_type: tp.Optional[core.AnsiColorParam] = None,
-    equalize: bool | tp.Literal["white_point"] = False,
-    bg: tp.Optional[_tp.Int3Tuple | str] = None,
+    font: _tp.FontArgType = ...,
+    factor: int = ...,
+    char_set: tp.Optional[str] = ...,
+    sort_glyphs: bool | tp.Literal[-1] = ...,
+    ansi_type: tp.Optional[core.AnsiColorParam] = ...,
+    equalize: bool | tp.Literal["white_point"] = ...,
+    bg: tp.Optional[_tp.Int3Tuple | str] = ...,
+    *,
+    outarray: tp.Literal[True],
+) -> _tp.ShapedNDArray[tuple[int, int, int], np.void]: ...
+
+
+@tp.overload
+def img2ansi(
+    img: str | os.PathLike[str] | Image.Image,
+    /,
+    font: _tp.FontArgType = ...,
+    factor: int = ...,
+    char_set: tp.Optional[str] = ...,
+    sort_glyphs: bool | tp.Literal[-1] = ...,
+    ansi_type: tp.Optional[core.AnsiColorParam] = ...,
+    equalize: bool | tp.Literal["white_point"] = ...,
+    bg: tp.Optional[_tp.Int3Tuple | str] = ...,
+    *,
+    outarray: tp.Literal[True],
+) -> tp.Union[
+    _tp.ShapedNDArray[tuple[int, int], np.void],
+    _tp.ShapedNDArray[tuple[int, int, int], np.void],
+]: ...
+
+
+@rgb_dispatch("bg")
+def img2ansi(  # type: ignore
+    img,
+    /,
+    font=uf.VGA437,
+    factor=200,
+    char_set=None,
+    sort_glyphs=True,
+    ansi_type=None,
+    equalize=False,
+    bg=None,
     *,
     outarray=False,
 ):
@@ -607,12 +725,12 @@ def img2ansi(
 
         If None (default), the character set will be determined based on the 'font' parameter.
 
-    sort_glyphs : {True, False, ``-1``}
+    sort_glyphs : {True, False, -1}
         Specifies to sort `char_set` or leave it unsorted before mapping to greyscale.
 
         Glyph bitmasks obtained from 'font' are compared when sorting the string.
 
-        ``-1`` specifies reverse sorting order.
+        `-1` specifies reverse sorting order.
 
     ansi_type : AnsiColorParam
         ANSI color format to map the RGB values to.
@@ -656,30 +774,22 @@ def img2ansi(
     ansi2img : Render an ANSI array as an image.
     img2ascii : Used to obtain the base ASCII characters.
     """
-    if bg is None:
-        pass
-    elif not (isinstance(bg, tuple) and len(bg) == 3):
-        raise TypeError
-    s, rgb = img2ascii(img, font, factor, char_set, sort_glyphs, ret_img=True)
-    h, w = s.shape
-    if equalize is True:
-        rgb = contrast_stretch(rgb)
-    elif equalize == "white_point":
-        rgb = equalize_white_point(rgb)
-    ansi_type = core.get_ansi_type(ansi_type)
-    rgb = ansi_quantize(rgb, ansi_type=ansi_type)
-    with (
-        PIL.Image.fromarray(rgb, mode="RGB") as img,
-        img.resize((w, h), resample=PIL.Image.Resampling.LANCZOS) as resized,
-    ):
-        out = np.zeros(s.shape, dtype=core.color_chain.dtype)
-        out["char"] = s
-        out["rgb"][..., 0, 0] = ansi_type.typecode
-        out["rgb"][..., 0, 1:] = np.asarray(resized, dtype=np.uint8)
-        if bg is not None:
-            out["rgb"][..., 1, 0] = ansi_type.typecode
-            out["rgb"][..., 1, 1:] = bg
-        return out if outarray is True else core.color_chain.fromarray(out)
+    with _ConversionHandler(
+        font,
+        factor=factor,
+        char_set=char_set,
+        sort_glyphs=sort_glyphs,
+        ansi_type=ansi_type,
+        equalize=equalize,
+        bg=bg,
+    ) as h:
+        out = h.to_ansi(img)
+    if outarray is True:
+        return out
+    elif out.ndim == 2:
+        return core.color_chain.fromarray(out)
+    else:
+        return [core.color_chain.fromarray(x) for x in out]
 
 
 @rgb_dispatch("fg", "bg")
@@ -714,20 +824,20 @@ def ascii2img(
     Returns
     -------
     ascii_img : Image
-        A `PIL.Image.Image` object of the rendered ASCII string.
+        A `Image.Image` object of the rendered ASCII string.
 
     See Also
     --------
     img2ascii : Convert an image into an ASCII string.
     """
-    font = PIL.ImageFont.truetype(get_font_object(font, retpath=True), font_size)
+    font = ImageFont.truetype(get_font_object(font, retpath=True), font_size)
     lines = s.split("\n")
     n_rows, n_cols = map(len, (lines, lines[0]))
     cw, ch = _get_bbox_shape(font)
     iw, ih = (int(i * j) for i, j in zip((cw, ch), (n_cols, n_rows)))
     r, g, b = tuple(map(int, bg))
-    img = PIL.Image.new("RGB", (iw, ih), (r, g, b))
-    draw = PIL.ImageDraw.Draw(img)
+    img = Image.new("RGB", (iw, ih), (r, g, b))
+    draw = ImageDraw.Draw(img)
     y_offset = 0
     for line in lines:
         draw.text((0, y_offset), line, font=font, fill=fg)
@@ -740,7 +850,6 @@ def ansi2img(
     arr: (
         _tp.ShapedNDArray[tuple[int, int], np.void]
         | core.color_chain
-        | list[core.color_chain]
         | list[list[core.ColorStr]]
     ),
     /,
@@ -772,7 +881,7 @@ def ansi2img(
     Returns
     -------
     ansi_img : Image
-        The rendered ANSI array as an `PIL.Image.Image` object.
+        The rendered ANSI array as an `Image.Image` object.
 
     Raises
     ------
@@ -792,7 +901,7 @@ def ansi2img(
     if not arr.size:
         raise ValueError("input array is empty")
 
-    font = PIL.ImageFont.truetype(get_font_object(font, retpath=True), font_size)
+    font = ImageFont.truetype(get_font_object(font, retpath=True), font_size)
     bbox_h = _get_bbox_shape(font)[-1]
     widths = np.asarray(
         [[font.getbbox(c)[2] for c in x["char"]] for x in arr], dtype=np.uint32
@@ -813,10 +922,8 @@ def ansi2img(
     if rgba:
         mode = "RGBA"
         rgba_descr = arr.dtype.descr.copy()
-        rgb_field = rgba_descr[-1]
-        subarr_shape = rgb_field[-1]
-        subarr_shape = subarr_shape[:-1] + (subarr_shape[-1] + 1,)
-        rgba_descr[-1] = rgb_field[:-1] + (subarr_shape,)
+        *rgb_args, (subd1, subd2) = rgba_descr[-1]
+        rgba_descr[-1] = (*rgb_args, (subd1, subd2 + 1))
         arr = arr.astype(rgba_descr)
         arr["rgb"][..., 0, -1] = 0xFF
     else:
@@ -827,8 +934,8 @@ def ansi2img(
         arr["rgb"][mask, i, 0] = 1
         arr["rgb"][mask, i, 1 : len(fill) + 1] = fill
 
-    img = PIL.Image.new(mode, (iw, ih), bg_default)
-    draw = PIL.ImageDraw.Draw(img)
+    img = Image.new(mode, (iw, ih), bg_default)
+    draw = ImageDraw.Draw(img)
     y_offset = 0
     for y in range(arr.shape[0]):
         x_offset = 0
@@ -860,36 +967,41 @@ def ansify(
     fg: _tp.Int3Tuple | str = (170, 170, 170),
     bg: _tp.Int3Tuple | str = (0, 0, 0),
 ):
-    ansi_type = core.get_ansi_type(ansi_type)
-    return ansi2img(
-        img2ansi(
-            img,
-            font,
-            factor=factor,
-            char_set=char_set,
-            ansi_type=ansi_type,
-            sort_glyphs=sort_glyphs,
-            equalize=equalize,
-            bg=bg,
-            outarray=True,
-        ),
+    arr = img2ansi(
+        img,
         font,
-        font_size=font_size,
-        fg_default=fg,
-        bg_default=bg,
+        factor=factor,
+        char_set=char_set,
+        ansi_type=ansi_type,
+        sort_glyphs=sort_glyphs,
+        equalize=equalize,
+        bg=bg,
+        outarray=True,
     )
+    if arr.ndim == 4:
+        arr = arr[0]
+    assert _is_cc_array2d(arr)
+    return ansi2img(arr, font, font_size=font_size, fg_default=fg, bg_default=bg)
 
 
 def _is_array(obj: tp.Any, /) -> tp.TypeGuard[np.ndarray]:
     return isinstance(obj, np.ndarray)
 
 
-def _is_rgb_array(obj: tp.Any, /) -> tp.TypeGuard[_tp.RGBArray]:
-    return _is_array(obj) and obj.ndim == 3 and np.issubdtype(obj.dtype, np.uint8)
+def _is_cc_array(
+    obj: tp.Any, /
+) -> tp.TypeGuard[_tp.ShapedNDArray[tuple[int, ...], np.void]]:
+    return _is_array(obj) and np.issubdtype(obj.dtype, core.color_chain.dtype)
 
 
-def _is_image(obj: tp.Any, /) -> tp.TypeGuard[PIL.Image.Image]:
-    return isinstance(obj, PIL.Image.Image)
+def _is_cc_array2d(
+    obj: tp.Any, /
+) -> tp.TypeGuard[_tp.ShapedNDArray[tuple[int, int], np.void]]:
+    return _is_cc_array(obj) and obj.ndim == 2
+
+
+def _is_image(obj: tp.Any, /) -> tp.TypeGuard[Image.Image]:
+    return isinstance(obj, Image.Image)
 
 
 @lru_cache(maxsize=1)
@@ -1235,7 +1347,7 @@ def render_ans(
     font_size: int = 16,
     *,
     bg_default: _tp.Int3Tuple | _tp.TupleOf4[int] | str = (0, 0, 0),
-) -> PIL.Image.Image:
+) -> Image.Image:
     """Return an image render of an ANS file.
 
     Parameters
@@ -1278,7 +1390,7 @@ def render_ans(
 
 
 def otsu_mask(
-    img: _tp.MatrixLike[np.uint8] | cv.typing.MatLike | PIL.Image.Image,
+    img: _tp.MatrixLike[np.uint8] | cv.typing.MatLike | Image.Image,
 ) -> _tp.MatrixLike[np.uint8]:
     img = np.asarray(img, dtype=np.uint8)
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))

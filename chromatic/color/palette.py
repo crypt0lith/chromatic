@@ -519,7 +519,7 @@ def rgb_dispatch(*names, replace_defaults=True):
     ... def func(fruit_or_color="orange", /):
     ...     res = "fruit" if isinstance(fruit_or_color, str) else "color"
     ...     return f"{fruit_or_color} is a {res}"
-    ...     
+    ...
     >>> func()
     'orange is a fruit'
     >>> func("orange")

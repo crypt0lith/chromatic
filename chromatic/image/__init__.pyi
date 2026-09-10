@@ -45,10 +45,5 @@ from ._array import (
     scale_saturation,
     shuffle_char_set,
 )
-from ._curses import (
-    ascii_printable,
-    backtrans_cp437,
-    cp437_printable,
-    translate_cp437,
-)
+from ._curses import ascii_printable, backtrans_cp437, cp437_printable, translate_cp437
 from ._glyph import get_glyph_masks, sort_glyphs, ttf_extract_codepoints

@@ -399,7 +399,7 @@ class _ConversionHandler:
             else:
                 arr = np.asarray(im.convert("RGB"), dtype=np.uint8)
         elif _is_array(im):
-            arr = np.asarray(im, dtype=np.uint8)
+            arr = im.astype(np.uint8)
         else:
             raise TypeError
         if not arr.size:

@@ -446,30 +446,23 @@ class _ConversionHandler:
             rgb = rgb[None, :]
         chars = self._chars()
         ch, cw = _get_bbox_shape(self.font)
-        char_aspect = ceil(cw / ch)
-        img_aspect = rgb.shape[2] / rgb.shape[1]
-        out_w = self.factor
-        out_h = int(self.factor / img_aspect / char_aspect)
-        interp = np.empty((rgb.shape[0], out_h, out_w), dtype="<U1")
+        out_shape = (
+            int(self.factor / (rgb.shape[2] / rgb.shape[1]) / ceil(cw / ch)),
+            self.factor,
+        )
+        interp = np.empty((rgb.shape[0], *out_shape), dtype="<U1")
         for i in range(rgb.shape[0]):
             grey = cv.cvtColor(rgb[i], cv.COLOR_RGB2GRAY)
             blur = grey.astype(np.float64) / 255.0
-            if (sy := (grey.shape[0] / out_h - 1) / 2) > 0:
-                blur = cv.filter2D(
-                    blur,
-                    -1,
-                    cv.getGaussianKernel(2 * int(4.0 * sy + 0.5) + 1, sy),
-                    borderType=cv.BORDER_REFLECT_101,
-                )
-            if (sx := (grey.shape[1] / out_w - 1) / 2) > 0:
-                blur = cv.filter2D(
-                    blur,
-                    -1,
-                    cv.getGaussianKernel(2 * int(4.0 * sx + 0.5) + 1, sx).T,
-                    borderType=cv.BORDER_REFLECT_101,
-                )
+            for t, (ax_in, ax_out) in enumerate(zip(grey.shape, out_shape)):
+                if (s := (ax_in / ax_out - 1) / 2) <= 0:
+                    continue
+                k = cv.getGaussianKernel(2 * int(4.0 * s + 0.5) + 1, s)
+                if t:
+                    k = k.T
+                blur = cv.filter2D(blur, -1, k, borderType=cv.BORDER_REFLECT_101)
             grey = (
-                cv.resize(blur, (out_w, out_h), interpolation=cv.INTER_LINEAR) * 255.0
+                cv.resize(blur, out_shape[::-1], interpolation=cv.INTER_LINEAR) * 255.0
             ).astype(np.uint8)
             interp[i] = chars[np.rint(grey / 255 * (chars.size - 1)).astype(np.intp)]
         return interp[0] if is_single else interp

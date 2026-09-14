@@ -29,6 +29,7 @@ import typing as tp
 from functools import lru_cache
 from math import ceil
 from shutil import get_terminal_size
+from typing import Literal as L
 
 import cv2 as cv
 import numpy as np
@@ -77,12 +78,12 @@ def get_font_key(font: ImageFont.FreeTypeFont):
 
 @tp.overload
 def get_font_object(
-    font: _tp.FontArgType, *, retpath: tp.Literal[False] = False
+    font: _tp.FontArgType, *, retpath: L[False] = False
 ) -> ImageFont.FreeTypeFont: ...
 
 
 @tp.overload
-def get_font_object(font: _tp.FontArgType, *, retpath: tp.Literal[True]) -> str: ...
+def get_font_object(font: _tp.FontArgType, *, retpath: L[True]) -> str: ...
 
 
 @tp.overload
@@ -505,9 +506,9 @@ def img2ascii(
     font: _tp.FontArgType = ...,
     factor: int = ...,
     char_set: tp.Optional[str] = ...,
-    sort_glyphs: bool | tp.Literal[-1] = ...,
+    sort_glyphs: bool | L[-1] = ...,
     *,
-    outarray: tp.Literal[False] = False,
+    outarray: L[False] = False,
 ) -> str | list[str]: ...
 
 
@@ -518,9 +519,9 @@ def img2ascii(
     font: _tp.FontArgType = ...,
     factor: int = ...,
     char_set: tp.Optional[str] = ...,
-    sort_glyphs: bool | tp.Literal[-1] = ...,
+    sort_glyphs: bool | L[-1] = ...,
     *,
-    outarray: tp.Literal[True],
+    outarray: L[True],
 ) -> _tp.ShapedNDArray[tuple[int, int], np.str_]: ...
 
 
@@ -531,9 +532,9 @@ def img2ascii(
     font: _tp.FontArgType = ...,
     factor: int = ...,
     char_set: tp.Optional[str] = ...,
-    sort_glyphs: bool | tp.Literal[-1] = ...,
+    sort_glyphs: bool | L[-1] = ...,
     *,
-    outarray: tp.Literal[True],
+    outarray: L[True],
 ) -> _tp.ShapedNDArray[tuple[int, int, int], np.str_]: ...
 
 
@@ -544,9 +545,9 @@ def img2ascii(
     font: _tp.FontArgType = ...,
     factor: int = ...,
     char_set: tp.Optional[str] = ...,
-    sort_glyphs: bool | tp.Literal[-1] = ...,
+    sort_glyphs: bool | L[-1] = ...,
     *,
-    outarray: tp.Literal[True],
+    outarray: L[True],
 ) -> tp.Union[
     _tp.ShapedNDArray[tuple[int, int], np.str_],
     _tp.ShapedNDArray[tuple[int, int, int], np.str_],
@@ -625,12 +626,12 @@ def img2ansi(
     font: _tp.FontArgType = ...,
     factor: int = ...,
     char_set: tp.Optional[str] = ...,
-    sort_glyphs: bool | tp.Literal[-1] = ...,
+    sort_glyphs: bool | L[-1] = ...,
     ansi_type: tp.Optional[core.AnsiColorParam] = ...,
-    equalize: bool | tp.Literal["white_point"] = ...,
+    equalize: bool | L["white_point"] = ...,
     bg: tp.Optional[_tp.Int3Tuple | str] = ...,
     *,
-    outarray: tp.Literal[False] = False,
+    outarray: L[False] = False,
 ) -> core.color_chain | list[core.color_chain]: ...
 
 
@@ -641,12 +642,12 @@ def img2ansi(
     font: _tp.FontArgType = ...,
     factor: int = ...,
     char_set: tp.Optional[str] = ...,
-    sort_glyphs: bool | tp.Literal[-1] = ...,
+    sort_glyphs: bool | L[-1] = ...,
     ansi_type: tp.Optional[core.AnsiColorParam] = ...,
-    equalize: bool | tp.Literal["white_point"] = ...,
+    equalize: bool | L["white_point"] = ...,
     bg: tp.Optional[_tp.Int3Tuple | str] = ...,
     *,
-    outarray: tp.Literal[True],
+    outarray: L[True],
 ) -> _tp.ShapedNDArray[tuple[int, int], np.void]: ...
 
 
@@ -657,12 +658,12 @@ def img2ansi(
     font: _tp.FontArgType = ...,
     factor: int = ...,
     char_set: tp.Optional[str] = ...,
-    sort_glyphs: bool | tp.Literal[-1] = ...,
+    sort_glyphs: bool | L[-1] = ...,
     ansi_type: tp.Optional[core.AnsiColorParam] = ...,
-    equalize: bool | tp.Literal["white_point"] = ...,
+    equalize: bool | L["white_point"] = ...,
     bg: tp.Optional[_tp.Int3Tuple | str] = ...,
     *,
-    outarray: tp.Literal[True],
+    outarray: L[True],
 ) -> _tp.ShapedNDArray[tuple[int, int, int], np.void]: ...
 
 
@@ -673,12 +674,12 @@ def img2ansi(
     font: _tp.FontArgType = ...,
     factor: int = ...,
     char_set: tp.Optional[str] = ...,
-    sort_glyphs: bool | tp.Literal[-1] = ...,
+    sort_glyphs: bool | L[-1] = ...,
     ansi_type: tp.Optional[core.AnsiColorParam] = ...,
-    equalize: bool | tp.Literal["white_point"] = ...,
+    equalize: bool | L["white_point"] = ...,
     bg: tp.Optional[_tp.Int3Tuple | str] = ...,
     *,
-    outarray: tp.Literal[True],
+    outarray: L[True],
 ) -> tp.Union[
     _tp.ShapedNDArray[tuple[int, int], np.void],
     _tp.ShapedNDArray[tuple[int, int, int], np.void],
@@ -954,9 +955,9 @@ def ansify(
     *,
     factor: int = 200,
     char_set: tp.Optional[str] = None,
-    sort_glyphs: bool | tp.Literal[-1] = True,
+    sort_glyphs: bool | L[-1] = True,
     ansi_type: tp.Optional[core.AnsiColorParam] = None,
-    equalize: bool | tp.Literal["white_point"] = False,
+    equalize: bool | L["white_point"] = False,
     fg: _tp.Int3Tuple | str = (170, 170, 170),
     bg: _tp.Int3Tuple | str = (0, 0, 0),
 ):

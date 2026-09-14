@@ -517,7 +517,7 @@ def set_default_ansi(typ, /):
         DEFAULT_ANSI = valid_typ
 
 
-@ft.lru_cache(maxsize=1)
+@ft.cache
 def sgr_pattern():
     uint8_re = r"(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)"
     truecolor_re = f"(?:2;(?:{uint8_re}?;){{2}}(?:{uint8_re}|;))"

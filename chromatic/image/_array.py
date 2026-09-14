@@ -21,12 +21,12 @@ __all__ = [
 
 import collections.abc as abc
 import enum
+import functools as ft
 import os
 import random
 import re
 import time
 import typing as tp
-from functools import lru_cache
 from math import ceil
 from shutil import get_terminal_size
 from typing import Literal as L
@@ -92,7 +92,7 @@ def get_font_object(
 ) -> ImageFont.FreeTypeFont | str: ...
 
 
-@lru_cache
+@ft.lru_cache
 def get_font_object(
     font: _tp.FontArgType, *, retpath: bool = False
 ) -> ImageFont.FreeTypeFont | str:
@@ -996,7 +996,7 @@ def _is_image(obj: tp.Any, /) -> tp.TypeGuard[Image.Image]:
     return isinstance(obj, Image.Image)
 
 
-@lru_cache(maxsize=1)
+@ft.cache
 def cursor_or_sgr_pattern():
     sgr_re = core.sgr_pattern().pattern.removeprefix(r"\x1b\[")
     return re.compile(

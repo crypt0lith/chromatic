@@ -15,7 +15,7 @@ import os
 import sys
 import typing as tp
 from dataclasses import asdict, dataclass, field
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from types import MappingProxyType as mappingproxy
 
@@ -76,7 +76,7 @@ class _UserfontDict(tp.TypedDict, total=False):
 _userfont_dict_matcher = TypedDictMatcher(_UserfontDict)
 
 
-@lru_cache(maxsize=1)
+@cache
 def _userfont_dict_struct():
     required = _userfont_dict_matcher.required
     optional = _userfont_dict_matcher.optional

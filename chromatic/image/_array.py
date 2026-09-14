@@ -610,13 +610,11 @@ def img2ascii(  # type: ignore
         out = h.to_ascii(img)
     if outarray is True:
         return out
-    newlines = np.zeros((*out.shape[:-1], 1), dtype="<U1")
-    newlines[..., :-1, :] = "\n"
-    out = np.concatenate((out, newlines), axis=-1)
+    out = np.insert(out, out.shape[-1], "\n", axis=-1)
     if out.ndim == 2:
-        return "".join(out.flat)
+        return "".join(out.flat)[:-1]
     else:
-        return ["".join(x.flat) for x in out]
+        return ["".join(x.flat)[:-1] for x in out]
 
 
 @tp.overload

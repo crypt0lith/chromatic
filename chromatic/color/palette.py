@@ -449,7 +449,7 @@ _rgb_lookup = _DynamicNSMeta(
 )._getmember
 
 
-def rgb_dispatch(*names, replace_defaults=True):
+def rgb_dispatch(*names, replace_defaults=True, strict=True):
     """Returns a decorator which intercepts input arguments that are color
     name strings, and replaces those arguments with their RGB tuple
     counterparts before passing them to the wrapped function.
@@ -467,6 +467,9 @@ def rgb_dispatch(*names, replace_defaults=True):
         Parameter names to target for color name to RGB tuple replacement.
     replace_defaults : bool, default=True
         Whether to replace default argument values of the returned callable.
+    strict : bool, default=True
+        Whether to raise KeyError when a matched string parameter is an invalid
+        color name.
 
     Examples
     --------
@@ -597,6 +600,7 @@ def rgb_dispatch(*names, replace_defaults=True):
                         try:
                             buf[j] = _rgb_lookup(x)
                         except KeyError:
+                            if strict: raise    # fmt: skip
                             continue
                         changed = True
                 argdefs = tuple(buf)
@@ -607,6 +611,7 @@ def rgb_dispatch(*names, replace_defaults=True):
                         try:
                             kwdefaults[k] = _rgb_lookup(v)
                         except KeyError:
+                            if strict: raise    # fmt: skip
                             continue
                         changed = True
             if not changed:
@@ -642,8 +647,7 @@ def rgb_dispatch(*names, replace_defaults=True):
             mask = [False] * n_args
             for idx in POSITIONS:
                 if isinstance(idx, slice):
-                    for i in range(*idx.indices(n_args)):
-                        mask[i] = True
+                    mask[idx] = [True] * len(range(*idx.indices(n_args)))
                 elif idx < n_args:
                     mask[idx] = True
             for k, v in kwargs.items():
@@ -651,6 +655,7 @@ def rgb_dispatch(*names, replace_defaults=True):
                     try:
                         v = _rgb_lookup(v)
                     except KeyError:
+                        if strict: raise    # fmt: skip
                         continue
                     _kwargs[k] = v
                     if (i := KEYWORDS.get(k)) is None or i >= n_args:
@@ -662,7 +667,7 @@ def rgb_dispatch(*names, replace_defaults=True):
                     try:
                         v = _rgb_lookup(v)
                     except KeyError:
-                        pass
+                        if strict: raise    # fmt: skip
                 _args.append(v)
             return f(*_args, **_kwargs)
 

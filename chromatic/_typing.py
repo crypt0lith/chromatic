@@ -15,36 +15,52 @@ if tp.TYPE_CHECKING:
 type ArrayReducerFunc[_SCT: np.generic, **_P] = abc.Callable[
     tp.Concatenate[_ArrayLike[_SCT], _P], NDArray[_SCT]
 ]
+
 type ShapedNDArray[_Shape: tuple[int, ...], _SCT: np.generic] = np.ndarray[
     _Shape, np.dtype[_SCT]
 ]
-type MatrixLike[_SCT: np.generic] = ShapedNDArray[TupleOf2[int], _SCT]
-type SquareMatrix[_I: int, _SCT: np.generic] = ShapedNDArray[TupleOf2[_I], _SCT]
-type GlyphArray[_SCT: np.generic] = SquareMatrix[L[24], _SCT]
+
 type TupleOf2[_T] = tuple[_T, _T]
 type TupleOf3[_T] = tuple[_T, _T, _T]
 type TupleOf4[_T] = tuple[_T, _T, _T, _T]
 
-Float3Tuple: tp.TypeAlias = TupleOf3[float]
+Int2Tuple: tp.TypeAlias = TupleOf2[int]
 Int3Tuple: tp.TypeAlias = TupleOf3[int]
-FloatSequence: tp.TypeAlias = abc.Sequence[float]
+Int4Tuple: tp.TypeAlias = TupleOf4[int]
 IntSequence: tp.TypeAlias = abc.Sequence[int]
+Float3Tuple: tp.TypeAlias = TupleOf3[float]
+FloatSequence: tp.TypeAlias = abc.Sequence[float]
+
+type MatrixLike[_SCT: np.generic] = ShapedNDArray[Int2Tuple, _SCT]
+type SquareMatrix[_I: int, _SCT: np.generic] = ShapedNDArray[TupleOf2[_I], _SCT]
+type GlyphArray[_SCT: np.generic] = SquareMatrix[L[24], _SCT]
+
 GlyphBitmask: tp.TypeAlias = GlyphArray[np.bool_]
 Bitmask: tp.TypeAlias = MatrixLike[np.bool_]
 GreyscaleGlyphArray: tp.TypeAlias = GlyphArray[np.float64]
 GreyscaleArray: tp.TypeAlias = MatrixLike[np.float64]
-RGBPixel: tp.TypeAlias = ShapedNDArray[tuple[L[3]], np.uint8]
-RGBArray: tp.TypeAlias = ShapedNDArray[tuple[int, int, L[3]], np.uint8]
-RGBArray3d: tp.TypeAlias = ShapedNDArray[tuple[int, int, int, L[3]], np.uint8]
 
-RGBImageLike: tp.TypeAlias = Image | RGBArray | RGBArray3d
-RGBVectorLike: tp.TypeAlias = IntSequence | RGBPixel
+type RGBArrayBase[_Shape: tuple[int, ...]] = ShapedNDArray[
+    tuple[*_Shape, L[3]], np.uint8
+]
+
+RGBScalar: tp.TypeAlias = RGBArrayBase[tuple[()]]
+RGBScalarLike = IntSequence | RGBScalar
+RGBArray2d: tp.TypeAlias = RGBArrayBase[Int2Tuple]
+RGBArray3d: tp.TypeAlias = RGBArrayBase[Int3Tuple]
+RGBArray = RGBArray2d | RGBArray3d
+RGBImageLike = Image | RGBArray
+
 ColorDictKeys = L["fg", "bg"]
+
 Ansi4BitAlias = L["4b", 1]
 Ansi8BitAlias = L["8b", 2]
 Ansi24BitAlias = L["24b", 3]
 AnsiColorAlias = Ansi4BitAlias | Ansi8BitAlias | Ansi24BitAlias
-FontArgType: tp.TypeAlias = tp.Union[FreeTypeFont, "UserFont", str]
+
+FontArgType = tp.Union[FreeTypeFont, "UserFont", str]
+
+ColorDispatchType = Int3Tuple | Int4Tuple | str
 
 
 def type_error_msg(err_obj, *expected, context: str = "", obj_repr=False):

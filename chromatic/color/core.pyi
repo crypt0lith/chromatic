@@ -36,7 +36,7 @@ from .._typing import (
     AnsiColorAlias,
     ColorDictKeys,
     Int3Tuple,
-    RGBVectorLike,
+    RGBScalarLike,
     ShapedNDArray,
     TupleOf3,
 )
@@ -179,12 +179,12 @@ _ANSI256_KEY2I: tp.Final[dict[ColorDictKeys, int]]
 class colorbytes(bytes):
     @classmethod
     @tp.overload
-    def from_rgb[_T, _KT: (L["bg"], L["fg"]), _VT: (tp.SupportsInt, RGBVectorLike)](
+    def from_rgb[_T, _KT: (L["bg"], L["fg"]), _VT: (tp.SupportsInt, RGBScalarLike)](
         cls: type[_T], rgb: tuple[ColorDictKeys, _VT] | abc.Mapping[_KT, _VT], /
     ) -> _T: ...
     @classmethod
     @tp.overload
-    def from_rgb[_T, _VT: (tp.SupportsInt, RGBVectorLike)](
+    def from_rgb[_T, _VT: (tp.SupportsInt, RGBScalarLike)](
         cls: type[_T], rgb: tuple[str, _VT] | abc.Mapping[str, _VT], /
     ) -> _T: ...
 
@@ -249,7 +249,7 @@ class Color(int):
 
     def __invert__(self) -> Color: ...
     @classmethod
-    def from_rgb(cls, rgb: RGBVectorLike, /) -> tp.Self: ...
+    def from_rgb(cls, rgb: RGBScalarLike, /) -> tp.Self: ...
     @property
     def rgb(self) -> Int3Tuple: ...
 
@@ -545,23 +545,23 @@ class ColorStr(str, _IntFloatMixin):
     __rmul__ = __mul__
 
     @tp.overload
-    def __new__[_RGBVectorLike: RGBVectorLike](
+    def __new__[_SCT: RGBScalarLike](
         cls,
         obj: object = ...,
         /,
-        fg: tp.SupportsInt | _RGBVectorLike | None = None,
-        bg: tp.SupportsInt | _RGBVectorLike | None = None,
+        fg: tp.SupportsInt | _SCT | None = None,
+        bg: tp.SupportsInt | _SCT | None = None,
         *,
         ansi_type: AnsiColorParam = ...,
         reset: bool = ...,
     ) -> tp.Self: ...
     @tp.overload
-    def __new__[_RGBVectorLike: RGBVectorLike](
+    def __new__[_SCT: RGBScalarLike](
         cls,
         obj: abc.Buffer,
         /,
-        fg: tp.SupportsInt | _RGBVectorLike | None = None,
-        bg: tp.SupportsInt | _RGBVectorLike | None = None,
+        fg: tp.SupportsInt | _SCT | None = None,
+        bg: tp.SupportsInt | _SCT | None = None,
         *,
         encoding: str = ...,
         errors: str = ...,

@@ -33,7 +33,7 @@ from typing import Literal as L, SupportsInt, TypeGuard
 
 import numpy as np
 
-from .._typing import Int3Tuple, RGBVectorLike, ShapedNDArray
+from .._typing import Int3Tuple, RGBScalarLike, ShapedNDArray
 
 
 @lru_cache
@@ -78,11 +78,11 @@ def hexstr2rgb(s: str, /) -> Int3Tuple:
     return int2rgb(x)
 
 
-def rgb2hexstr(rgb: RGBVectorLike, /) -> str:
+def rgb2hexstr(rgb: RGBScalarLike, /) -> str:
     return "%02x%02x%02x" % tuple(rgb)
 
 
-def rgb2int(rgb: RGBVectorLike, /) -> int:
+def rgb2int(rgb: RGBScalarLike, /) -> int:
     r, g, b = map(int, rgb)
     return r << 16 | g << 8 | b
 

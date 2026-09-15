@@ -1840,8 +1840,8 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         if not arr.size:
             return arr
         arr["char"] = np.frombuffer("".join(strs).encode("utf-32-le"), dtype="<U1")
-        arr["sgr"] = np.repeat(np.asarray(mask_flags, dtype="<u8"), lengths)
-        arr["rgb"] = np.repeat(np.stack(mask_rgb), lengths, axis=0)
+        arr["sgr"] = np.repeat(mask_flags, lengths)
+        arr["rgb"] = np.repeat(mask_rgb, lengths, axis=0)
         return arr if dtype is None else arr.astype(dtype, copy=False)
 
     @classmethod

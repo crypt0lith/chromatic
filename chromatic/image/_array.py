@@ -933,7 +933,7 @@ def ansi2img(
     return img
 
 
-@rgb_dispatch("fg", "bg")
+@rgb_dispatch("bg", "fg_default", "bg_default")
 def ansify(
     img: str | os.PathLike[str] | _tp.RGBImageLike,
     /,
@@ -945,8 +945,9 @@ def ansify(
     sort_glyphs: bool | L[-1] = True,
     ansi_type: tp.Optional[core.AnsiColorParam] = None,
     equalize: bool | L["white_point"] = False,
-    fg: _tp.ColorDispatchType = (170, 170, 170),
-    bg: _tp.ColorDispatchType = (0, 0, 0),
+    bg: tp.Optional[_tp.ColorDispatchType] = None,
+    fg_default: _tp.ColorDispatchType = (170, 170, 170),
+    bg_default: _tp.ColorDispatchType = (0, 0, 0),
     **kwargs,
 ):
     with _ConversionHandler(
@@ -961,7 +962,9 @@ def ansify(
         arr = h.to_ansi(img)
         info = h._ns.get("info", {})
         fmt = h._ns.get("format")
-    f = ft.partial(ansi2img, font_size=font_size, fg_default=fg, bg_default=bg)
+    f = ft.partial(
+        ansi2img, font_size=font_size, fg_default=fg_default, bg_default=bg_default
+    )
     if arr.ndim == 2:
         return f(arr, font)
     if kwargs:

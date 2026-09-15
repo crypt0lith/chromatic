@@ -537,14 +537,17 @@ def parse_args():
 
 
 def _call_from_ns[R](f: abc.Callable[..., R], /, ns, **kwargs) -> R:
-    params = signature(f).parameters
     kwargs = ChainMap(kwargs, vars(ns))
     f_args, f_kwargs = [], {}
-    for k, p in params.items():
+    for k, p in signature(f).parameters.items():
         if k not in kwargs:
             continue
-        if p.kind == 0:
+        elif p.kind == p.POSITIONAL_ONLY:
             f_args.append(kwargs[k])
+        elif p.kind == p.VAR_POSITIONAL:
+            f_args.extend(kwargs[k])
+        elif p.kind == p.VAR_KEYWORD:
+            f_kwargs.update(kwargs[k])
         else:
             f_kwargs[k] = kwargs[k]
     return f(*f_args, **f_kwargs)

@@ -407,6 +407,8 @@ class _ConversionHandler:
                 )
             else:
                 arr = np.asarray(im.convert("RGB"), dtype=np.uint8)
+            self._ns["info"] = im.info.copy()
+            self._ns["format"] = im.format
         elif _is_array(im):
             arr = im.astype(np.uint8)
         else:
@@ -960,6 +962,7 @@ def ansi2img(
     return img
 
 
+@rgb_dispatch("fg", "bg")
 def ansify(
     img: str | os.PathLike[str] | _tp.RGBImageLike,
     /,
@@ -971,24 +974,41 @@ def ansify(
     sort_glyphs: bool | L[-1] = True,
     ansi_type: tp.Optional[core.AnsiColorParam] = None,
     equalize: bool | L["white_point"] = False,
-    fg: _tp.Int3Tuple | str = (170, 170, 170),
-    bg: _tp.Int3Tuple | str = (0, 0, 0),
+    fg: _tp.Int3Tuple | _tp.TupleOf4[int] | str = (170, 170, 170),
+    bg: _tp.Int3Tuple | _tp.TupleOf4[int] | str = (0, 0, 0),
+    **kwargs,
 ):
-    arr = img2ansi(
-        img,
+    with _ConversionHandler(
         font,
         factor=factor,
         char_set=char_set,
-        ansi_type=ansi_type,
         sort_glyphs=sort_glyphs,
+        ansi_type=ansi_type,
         equalize=equalize,
         bg=bg,
-        outarray=True,
+    ) as h:
+        arr = h.to_ansi(img)
+        info = h._ns.get("info", {})
+        fmt = h._ns.get("format")
+    f = ft.partial(ansi2img, font_size=font_size, fg_default=fg, bg_default=bg)
+    if arr.ndim == 2:
+        return f(arr, font)
+    if kwargs:
+        from collections import ChainMap
+
+        info = ChainMap(kwargs, info)
+
+    from io import BytesIO
+
+    [first, *rest] = (f(x, font) for x in arr)
+    first.save(
+        buf := BytesIO(),
+        fmt or "GIF",
+        append_images=rest,
+        loop=info.get("loop", 0),
+        duration=info.get("duration", 100),
     )
-    if arr.ndim == 4:
-        arr = arr[0]
-    assert _is_cc_array2d(arr)
-    return ansi2img(arr, font, font_size=font_size, fg_default=fg, bg_default=bg)
+    return Image.open(buf)
 
 
 def _is_array(obj: tp.Any, /) -> tp.TypeGuard[np.ndarray]:

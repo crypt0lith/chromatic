@@ -356,6 +356,14 @@ def _get_bbox_shape(font: ImageFont.FreeTypeFont, /):
     return font.getbbox(" ")[2:]
 
 
+@ft.cache
+def _cc_rgba_dtype() -> np.dtype[np.void]:
+    [*fields, rgb_field] = core.color_chain.dtype.descr
+    assert len(rgb_field) == 3
+    rgb_name, rgb_dt, (sub1, sub2) = rgb_field
+    return np.dtype([*fields, (rgb_name, rgb_dt, (sub1, sub2 + 1))])
+
+
 class _ConversionHandler:
     def _close_owned(self):
         if "owned" in self._ns:
@@ -481,12 +489,19 @@ class _ConversionHandler:
         elif self.equalize == "white_point":
             rgb[:] = [equalize_white_point(x) for x in rgb]
         rgb[:] = ansi_quantize(rgb, ansi_type=self.ansi_type)
-        newshape = interp.shape[-2:]
         n_frames = interp.shape[0]
-        out = np.empty((n_frames, *newshape), dtype=core.color_chain.dtype)
+        newshape = interp.shape[-2:]
+        if self.bg and len(self.bg) == 4:
+            rgb = np.insert(rgb, rgb.shape[-1], 0xFF, axis=-1)
+            dtype = _cc_rgba_dtype()
+            mode = "RGBA"
+        else:
+            dtype = core.color_chain.dtype
+            mode = "RGB"
+        out = np.empty((n_frames, *newshape), dtype=dtype)
         for i in range(n_frames):
             with (
-                Image.fromarray(rgb[i], mode="RGB") as x,
+                Image.fromarray(rgb[i], mode=mode) as x,
                 x.resize(newshape[::-1], resample=Image.Resampling.LANCZOS) as xr,
             ):
                 out["char"][i] = interp[i]
@@ -750,7 +765,7 @@ def img2ansi(  # type: ignore
 
     Returns
     -------
-    ansi_array : `color_chain` or ``ndarray[tuple[int, int], dtype[void]]``
+    ansi_array : color_chain or ndarray[tuple[int, int], dtype[void]]
         The ANSI-converted image.
 
     Raises
@@ -913,10 +928,7 @@ def ansi2img(
             raise ValueError
     if rgba:
         mode = "RGBA"
-        rgba_descr = arr.dtype.descr.copy()
-        *rgb_args, (subd1, subd2) = rgba_descr[-1]
-        rgba_descr[-1] = (*rgb_args, (subd1, subd2 + 1))
-        arr = arr.astype(rgba_descr)
+        arr = arr.astype(_cc_rgba_dtype())
         arr["rgb"][..., 0, -1] = 0xFF
     else:
         mode = "RGB"
@@ -934,7 +946,10 @@ def ansi2img(
         for x in range(arr.shape[1]):
             width = widths[y, x]
             item = arr[y, x]
-            fg, bg = (tuple(ch) if ans else None for [ans, *ch] in item["rgb"].tolist())
+            fg, bg = (
+                tuple(ch) if typecode else None
+                for [typecode, *ch] in item["rgb"].tolist()
+            )
             if bg is not None:
                 draw.rectangle(
                     (x_offset, y_offset, x_offset + width, y_offset + bbox_h), fill=bg

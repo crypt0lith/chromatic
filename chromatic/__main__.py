@@ -449,7 +449,7 @@ def parse_args():
             "--reverse",
             dest="sort_glyphs",
             action="store_const",
-            const=reversed,
+            const=-1,
             help="""\
             sort glyphs in reverse order.
             flips the luminance mapping to (light -> dark)""",

@@ -1015,18 +1015,6 @@ def _is_array(obj: tp.Any, /) -> tp.TypeGuard[np.ndarray]:
     return isinstance(obj, np.ndarray)
 
 
-def _is_cc_array(
-    obj: tp.Any, /
-) -> tp.TypeGuard[_tp.ShapedNDArray[tuple[int, ...], np.void]]:
-    return _is_array(obj) and np.issubdtype(obj.dtype, core.color_chain.dtype)
-
-
-def _is_cc_array2d(
-    obj: tp.Any, /
-) -> tp.TypeGuard[_tp.ShapedNDArray[tuple[int, int], np.void]]:
-    return _is_cc_array(obj) and obj.ndim == 2
-
-
 def _is_image(obj: tp.Any, /) -> tp.TypeGuard[Image.Image]:
     return isinstance(obj, Image.Image)
 

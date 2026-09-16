@@ -410,7 +410,7 @@ class _ConversionHandler:
             self._ns["info"] = im.info.copy()
             self._ns["format"] = im.format
         elif _is_array(im):
-            arr = im.astype(np.uint8)
+            arr = np.asarray(im, dtype=np.uint8)
         else:
             raise TypeError
         if not arr.size:
@@ -480,7 +480,7 @@ class _ConversionHandler:
 
     def to_ansi(self, im, /):
         interp = self.to_ascii(im)
-        rgb = self._ns["rgb"]
+        rgb = self._ns["rgb"].copy()
         assert interp.ndim == rgb.ndim - 1
         if is_single := rgb.ndim == 3:
             interp = interp[None, :]

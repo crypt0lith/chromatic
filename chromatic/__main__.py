@@ -13,12 +13,11 @@ def parse_args():
     from . import __version__
 
     class SetEnvAction(ap.Action):
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args, env: str, **kwargs):
             if kwargs.get("nargs") not in ("?", None):
                 raise ValueError(
                     "ambiguous 'nargs' for env setter: {nargs!r}".format_map(kwargs)
                 )
-            env = kwargs.pop("env")
             if not isinstance(env, str):
                 raise TypeError
             self.env = env
@@ -43,6 +42,16 @@ def parse_args():
                     action.env, os.environ.get(action.env, "")
                 )
             return out
+
+    class KeywordAction(ap.Action):
+        def __init__(self, *args, key: str, **kwargs):
+            if not isinstance(key, str):
+                raise TypeError
+            self.key = key
+            super().__init__(*args, **kwargs)
+
+        def __call__(self, parser, namespace, values, option_string=None):
+            vars(namespace).setdefault(self.dest, {})[self.key] = values
 
     new_base_parser = lambda *args, **kwargs: ap.ArgumentParser(
         *args,
@@ -325,24 +334,29 @@ def parse_args():
         # animation options {{{
         anim_opts.add_argument(
             "--format",
-            dest="fmt",
-            choices=["WEBP", "GIF"],
+            dest="kwargs",
+            choices=("WEBP", "GIF"),
+            type=str.upper,
+            action=KeywordAction,
+            key="fmt",
             help="animated image fallback format",
         )
         anim_opts.add_argument(
             "--duration",
             dest="kwargs",
             metavar="N",
-            type=lambda v: {"duration": float(v)},
-            action="append",
+            type=float,
+            action=KeywordAction,
+            key="duration",
             help="animation per-frame duration, in milliseconds",
         )
         anim_opts.add_argument(
             "--loop",
             dest="kwargs",
             metavar="N",
-            type=lambda v: {"loop": int(v)},
-            action="append",
+            type=int,
+            action=KeywordAction,
+            key="loop",
             help="""\
             number of times to loop the animation.
             a value of 0 means loop indefinitely""",
@@ -586,20 +600,15 @@ def _call_from_ns[R](f: abc.Callable[..., R], /, ns, **kwargs) -> R:
 
 
 def handle_image(ns):
-    import functools as ft
-
     import numpy as np
 
-    kwargs = ft.reduce(lambda a, b: a | b, getattr(ns, "kwargs", [{}]))
-    if hasattr(ns, "fmt"):
-        kwargs["fmt"] = vars(ns).pop("fmt")
-    setattr(ns, "kwargs", kwargs)
     if getattr(ns, "alpha", False):
         for i, k in enumerate(("bg_default", "fg_default")):
             v = getattr(ns, k, ())
             v += (0xFF * i,) * (4 - len(v))
             setattr(ns, k, v)
         delattr(ns, "alpha")
+    kwargs = getattr(ns, "kwargs", {})
     match ns.subcmd:
         case "ansify":
             from .image import ansify
@@ -613,10 +622,12 @@ def handle_image(ns):
             ):
                 img = None
             else:
+                from functools import partial
+
                 from .image import ansi2img
 
                 param_names = signature(ansi2img).parameters.keys()
-                f = ft.partial(
+                f = partial(
                     ansi2img, **{k: v for k, v in vars(ns).items() if k in param_names}
                 )
                 if arr.ndim == 2:

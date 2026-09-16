@@ -966,23 +966,26 @@ def ansify(
         ansi2img, font_size=font_size, fg_default=fg_default, bg_default=bg_default
     )
     if arr.ndim == 2:
-        return f(arr, font)
-    if kwargs:
-        from collections import ChainMap
+        out = f(arr, font)
+    else:
+        if kwargs:
+            from collections import ChainMap
 
-        info = ChainMap(kwargs, info)
+            info = ChainMap(kwargs, info)
 
-    from io import BytesIO
+        from io import BytesIO
 
-    [first, *rest] = (f(x, font) for x in arr)
-    first.save(
-        buf := BytesIO(),
-        fmt or "GIF",
-        append_images=rest,
-        loop=info.get("loop", 0),
-        duration=info.get("duration", 100),
-    )
-    return Image.open(buf)
+        [first, *rest] = (f(x, font) for x in arr)
+        first.save(
+            buf := BytesIO(),
+            fmt or "GIF",
+            append_images=rest,
+            loop=info.get("loop", 0),
+            duration=info.get("duration", 100),
+        )
+        out = Image.open(buf)
+    out.info["ansi_array"] = arr
+    return out
 
 
 def _is_array(obj: tp.Any, /) -> tp.TypeGuard[np.ndarray]:

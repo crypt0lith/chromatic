@@ -514,6 +514,30 @@ def parse_args():
         subcmd_p_ansify.add_argument(
             dest="img", metavar="IMAGEFILE", help="input image"
         )
+
+        anim_opts = subcmd_p_ansify.add_argument_group(
+            "animation options", argument_default=ap.SUPPRESS
+        )
+        # animation options {{{
+        anim_opts.add_argument(
+            "--duration",
+            dest="kwargs",
+            metavar="N",
+            type=lambda v: {"duration": float(v)},
+            action="append",
+            help="animation per-frame duration, in milliseconds",
+        )
+        anim_opts.add_argument(
+            "--loop",
+            dest="kwargs",
+            metavar="N",
+            type=lambda v: {"loop": int(v)},
+            action="append",
+            help="""\
+            number of times to loop the animation.
+            a value of 0 means loop indefinitely""",
+        )
+        # }}}
         # }}}
 
     if os.path.isfile(sys.argv[0]) and os.path.samefile(sys.argv[0], __file__):
@@ -554,35 +578,67 @@ def _call_from_ns[R](f: abc.Callable[..., R], /, ns, **kwargs) -> R:
 
 
 def handle_image(ns):
-    vars(ns).setdefault("outfile_callback", ns._outfile_callback)
     if getattr(ns, "alpha", False):
-        for k, x in [("bg_default", 0), ("fg_default", 0xFF)]:
-            v = getattr(ns, k, None) or (x,) * 4
-            if len(v) == 3:
-                v = *v, x
+        for i, k in enumerate(("bg_default", "fg_default")):
+            v = getattr(ns, k, ())
+            v += (0xFF * i,) * (4 - len(v))
             setattr(ns, k, v)
         delattr(ns, "alpha")
     match ns.subcmd:
         case "ansify":
-            from .image import ansi2img, img2ansi
+            from functools import reduce
 
-            ansi_array = _call_from_ns(img2ansi, ns)
-            if hasattr(ns, "dumpfile"):
-                ns.dumpfile.writelines(
-                    f"{s}\n".encode() for s in ansi_array.splitlines()
-                )
-                ns.dumpfile.write(b"\x1b[0m")
-            img = _call_from_ns(ansi2img, ns, arr=ansi_array)
-            try:
-                outpath = ns.outfile_callback(ns, img)
-            except Exception as e:
-                print(f"[-] error: {e}", file=sys.stderr)
-                return -1
-            if outpath is not None:
-                print(f"{outpath}")
-            return
+            from .image import ansify
+
+            kwargs = reduce(lambda a, b: a | b, getattr(ns, "kwargs", [{}]))
+            setattr(ns, "kwargs", kwargs)
+            img = _call_from_ns(ansify, ns)
+            arr = img.info["ansi_array"]
         case _:
             raise ValueError(f"invalid subcommand: {ns.subcmd!r}")
+    if hasattr(ns, "dumpfile"):
+        from .color.core import color_chain
+
+        if arr.ndim == 3 and ns.dumpfile.isatty():
+
+            def anim_loop(n: int | None, duration: int | float):
+                from time import sleep
+
+                n = n or None
+                frames = [str(color_chain.fromarray(x)).encode() for x in arr]
+                try:
+                    yield b"\x1b[?25l\x1b7\x1b[J"
+                    while n is None or n > 0:
+                        for frame in frames:
+                            yield b"\x1b8" + frame
+                            sleep(duration)
+                        if n is None:
+                            continue
+                        n -= 1
+                finally:
+                    ns.dumpfile.write(b"\x1b[?25h")
+
+            it = anim_loop(
+                img.info.get("loop", 0), img.info.get("duration", 100) * 1e-3
+            )
+            try:
+                for out in it:
+                    ns.dumpfile.write(out)
+            except KeyboardInterrupt:
+                it.close()
+        else:
+            if arr.ndim == 3:
+                arr = arr[0]
+            cc = color_chain.fromarray(arr)
+            ns.dumpfile.write(f"{cc}\x1b[0m\n".encode())
+    vars(ns).setdefault("outfile_callback", ns._outfile_callback)
+    try:
+        outpath = ns.outfile_callback(ns, img)
+    except Exception as e:
+        print(f"[-] error: {e}", file=sys.stderr)
+        return -1
+    if outpath is not None:
+        print(f"{outpath}")
 
 
 def font_list(ns):

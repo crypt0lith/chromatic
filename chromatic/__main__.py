@@ -273,15 +273,7 @@ def parse_args():
                 ):
                     img.show()
 
-            cb_type = type(
-                "callback",
-                (),
-                dict(
-                    __call__=staticmethod(callback),
-                    __repr__=staticmethod(path.__repr__),
-                ),
-            )
-            return cb_type()
+            return callback
 
         subcmds = parser.add_subparsers(dest="subcmd", required=True)
 
@@ -331,6 +323,12 @@ def parse_args():
             "animation options", argument_default=ap.SUPPRESS
         )
         # animation options {{{
+        anim_opts.add_argument(
+            "--format",
+            dest="fmt",
+            choices=["WEBP", "GIF"],
+            help="animated image fallback format",
+        )
         anim_opts.add_argument(
             "--duration",
             dest="kwargs",
@@ -491,8 +489,14 @@ def parse_args():
             metavar="FILE",
             dest="outfile_callback",
             type=save_img_callback,
-            default=save_img_callback(),
             help="save the image to %(metavar)s",
+        )
+        output_opts.add_argument(
+            "--dump-npy",
+            metavar="FILE",
+            dest="dump_npy",
+            type=ap.FileType("wb"),
+            help="save the ansi array to %(metavar)s as a NumPy file",
         )
         dumpfile_opts = output_opts.add_mutually_exclusive_group()
         dumpfile_opts.add_argument(
@@ -522,11 +526,25 @@ def parse_args():
             parents=[font_dir_env_base, ansify_base, from_img_base, output_opts_base],
             formatter_class=EnvHelpFormatter,
         )
+        subcmd_p_fromnpy = subcmds.add_parser(
+            "npy",
+            parents=[font_dir_env_base, ansify_base, output_opts_base],
+            formatter_class=EnvHelpFormatter,
+        )
         # }}}
 
         # image ansify {{{
         subcmd_p_ansify.add_argument(
             dest="img", metavar="IMAGEFILE", help="input image"
+        )
+        # }}}
+
+        # image npy {{{
+        subcmd_p_fromnpy.add_argument(
+            dest="arr_file",
+            metavar="NPYFILE",
+            type=ap.FileType("rb"),
+            help="path to ansi array NumPy file",
         )
         # }}}
 
@@ -568,9 +586,13 @@ def _call_from_ns[R](f: abc.Callable[..., R], /, ns, **kwargs) -> R:
 
 
 def handle_image(ns):
-    from functools import reduce
+    import functools as ft
 
-    kwargs = reduce(lambda a, b: a | b, getattr(ns, "kwargs", [{}]))
+    import numpy as np
+
+    kwargs = ft.reduce(lambda a, b: a | b, getattr(ns, "kwargs", [{}]))
+    if hasattr(ns, "fmt"):
+        kwargs["fmt"] = vars(ns).pop("fmt")
     setattr(ns, "kwargs", kwargs)
     if getattr(ns, "alpha", False):
         for i, k in enumerate(("bg_default", "fg_default")):
@@ -584,8 +606,39 @@ def handle_image(ns):
 
             img = _call_from_ns(ansify, ns)
             arr = img.info["ansi_array"]
+        case "npy":
+            arr = np.load(vars(ns).pop("arr_file"))
+            if hasattr(ns, "dumpfile") and not any(
+                getattr(ns, attr, None) for attr in ["outfile_callback", "show"]
+            ):
+                img = None
+            else:
+                from .image import ansi2img
+
+                param_names = signature(ansi2img).parameters.keys()
+                f = ft.partial(
+                    ansi2img, **{k: v for k, v in vars(ns).items() if k in param_names}
+                )
+                if arr.ndim == 2:
+                    img = f(arr)
+                else:
+                    from io import BytesIO
+
+                    from PIL import Image
+
+                    [first, *rest] = map(f, arr)
+                    first.save(
+                        buf := BytesIO(),
+                        kwargs.get("fmt", "GIF"),
+                        append_images=rest,
+                        loop=kwargs.get("loop", 0),
+                        duration=kwargs.get("duration", 100),
+                    )
+                    img = Image.open(buf)
         case _:
             raise ValueError(f"invalid subcommand: {ns.subcmd!r}")
+    if hasattr(ns, "dump_npy"):
+        np.save(ns.dump_npy, arr)
     params = {}
     if is_anim := arr.ndim == 3:
         params.update(save_all=True)
@@ -611,9 +664,8 @@ def handle_image(ns):
                 finally:
                     ns.dumpfile.write(b"\x1b[?25h")
 
-            it = anim_loop(
-                img.info.get("loop", 0), img.info.get("duration", 100) * 1e-3
-            )
+            info = kwargs if img is None else img.info
+            it = anim_loop(info.get("loop", 0), info.get("duration", 100) * 1e-3)
             try:
                 for out in it:
                     ns.dumpfile.write(out)
@@ -624,6 +676,8 @@ def handle_image(ns):
                 arr = arr[0]
             cc = color_chain.fromarray(arr)
             ns.dumpfile.write(f"{cc}\x1b[0m\n".encode())
+    if img is None:
+        return
     try:
         outpath = ns.outfile_callback(ns, img, **params)
     except Exception as e:

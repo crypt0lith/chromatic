@@ -258,10 +258,10 @@ def parse_args():
             import PIL.Image
 
             @defer_exc
-            def callback(ns: ap.Namespace, img: PIL.Image.Image):
+            def callback(ns: ap.Namespace, img: PIL.Image.Image, **params):
                 if path is not None:
                     try:
-                        img.save(path)
+                        img.save(path, **params)
                     except Exception as e:
                         yield e
                     else:
@@ -269,8 +269,11 @@ def parse_args():
                             with PIL.Image.open(path) as f:
                                 f.show()
                         return path
-                dump_stdout = hasattr(ns, "dumpfile") and ns.dumpfile.fileno() == 1
-                if getattr(ns, "show", not dump_stdout):
+                if (
+                    ns.show
+                    if hasattr(ns, "show")
+                    else not (hasattr(ns, "dumpfile") and ns.dumpfile.isatty())
+                ):
                     img.show()
 
             return callback
@@ -596,10 +599,13 @@ def handle_image(ns):
             arr = img.info["ansi_array"]
         case _:
             raise ValueError(f"invalid subcommand: {ns.subcmd!r}")
+    params = {}
+    if is_anim := arr.ndim == 3:
+        params.update(save_all=True)
     if hasattr(ns, "dumpfile"):
         from .color.core import color_chain
 
-        if arr.ndim == 3 and ns.dumpfile.isatty():
+        if is_anim and ns.dumpfile.isatty():
 
             def anim_loop(n: int | None, duration: int | float):
                 from time import sleep
@@ -627,13 +633,13 @@ def handle_image(ns):
             except KeyboardInterrupt:
                 it.close()
         else:
-            if arr.ndim == 3:
+            if is_anim:
                 arr = arr[0]
             cc = color_chain.fromarray(arr)
             ns.dumpfile.write(f"{cc}\x1b[0m\n".encode())
     vars(ns).setdefault("outfile_callback", ns._outfile_callback)
     try:
-        outpath = ns.outfile_callback(ns, img)
+        outpath = ns.outfile_callback(ns, img, **params)
     except Exception as e:
         print(f"[-] error: {e}", file=sys.stderr)
         return -1

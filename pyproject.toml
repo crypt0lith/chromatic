@@ -51,7 +51,7 @@ where = ["."]
 include = ["chromatic*"]
 
 [tool.setuptools.package-data]
-chromatic = ["data/fonts/*", "data/images/*"]
+chromatic = ["data/fonts/*"]
 
 [tool.black]
 preview = true

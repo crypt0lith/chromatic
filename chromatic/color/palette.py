@@ -2,7 +2,6 @@ __all__ = ["Back", "ColorNamespace", "Fore", "Style", "rgb_dispatch", "named_col
 
 import collections.abc as abc
 import functools as ft
-import sys
 import types
 import typing as tp
 from types import MappingProxyType as mappingproxy
@@ -449,7 +448,7 @@ _rgb_lookup = _DynamicNSMeta(
 )._getmember
 
 
-def rgb_dispatch(*names, replace_defaults=True):
+def rgb_dispatch(*names, replace_defaults=True, strict=True):
     """Returns a decorator which intercepts input arguments that are color
     name strings, and replaces those arguments with their RGB tuple
     counterparts before passing them to the wrapped function.
@@ -467,6 +466,9 @@ def rgb_dispatch(*names, replace_defaults=True):
         Parameter names to target for color name to RGB tuple replacement.
     replace_defaults : bool, default=True
         Whether to replace default argument values of the returned callable.
+    strict : bool, default=True
+        Whether to raise KeyError when a matched string parameter is an invalid
+        color name.
 
     Examples
     --------
@@ -584,6 +586,7 @@ def rgb_dispatch(*names, replace_defaults=True):
         HAS_VARKW = None in KEYWORDS
 
         def _replace_defaults():
+            nonlocal f
             argdefs = f.__defaults__
             kwdefaults = f.__kwdefaults__
             changed = False
@@ -597,6 +600,7 @@ def rgb_dispatch(*names, replace_defaults=True):
                         try:
                             buf[j] = _rgb_lookup(x)
                         except KeyError:
+                            if strict: raise    # fmt: skip
                             continue
                         changed = True
                 argdefs = tuple(buf)
@@ -607,33 +611,24 @@ def rgb_dispatch(*names, replace_defaults=True):
                         try:
                             kwdefaults[k] = _rgb_lookup(v)
                         except KeyError:
+                            if strict: raise    # fmt: skip
                             continue
                         changed = True
             if not changed:
-                return f
-            if sys.version_info >= (3, 13):
-                f_new = types.FunctionType(
-                    f.__code__,
-                    f.__globals__,
-                    name=f.__name__,
-                    argdefs=argdefs,
-                    closure=f.__closure__,
-                    kwdefaults=kwdefaults,
-                )
-            else:
-                f_new = types.FunctionType(
-                    f.__code__,
-                    f.__globals__,
-                    name=f.__name__,
-                    argdefs=argdefs,
-                    closure=f.__closure__,
-                )
-                setattr(f_new, "__kwdefaults__", kwdefaults)
+                return
+            f_new = types.FunctionType(
+                f.__code__,
+                f.__globals__,
+                name=f.__name__,
+                argdefs=argdefs,
+                closure=f.__closure__,
+            )
+            setattr(f_new, "__kwdefaults__", kwdefaults)
             setattr(f_new, "__wrapped__", f)
-            return f_new
+            f = f_new
 
         if replace_defaults:
-            f = _replace_defaults()
+            _replace_defaults()
 
         @ft.wraps(f)
         def wrapper(*args, **kwargs):
@@ -642,8 +637,7 @@ def rgb_dispatch(*names, replace_defaults=True):
             mask = [False] * n_args
             for idx in POSITIONS:
                 if isinstance(idx, slice):
-                    for i in range(*idx.indices(n_args)):
-                        mask[i] = True
+                    mask[idx] = [True] * len(range(*idx.indices(n_args)))
                 elif idx < n_args:
                     mask[idx] = True
             for k, v in kwargs.items():
@@ -651,6 +645,7 @@ def rgb_dispatch(*names, replace_defaults=True):
                     try:
                         v = _rgb_lookup(v)
                     except KeyError:
+                        if strict: raise    # fmt: skip
                         continue
                     _kwargs[k] = v
                     if (i := KEYWORDS.get(k)) is None or i >= n_args:
@@ -662,7 +657,7 @@ def rgb_dispatch(*names, replace_defaults=True):
                     try:
                         v = _rgb_lookup(v)
                     except KeyError:
-                        pass
+                        if strict: raise    # fmt: skip
                 _args.append(v)
             return f(*_args, **_kwargs)
 

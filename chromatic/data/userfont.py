@@ -15,7 +15,7 @@ import os
 import sys
 import typing as tp
 from dataclasses import asdict, dataclass, field
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from types import MappingProxyType as mappingproxy
 
@@ -76,7 +76,7 @@ class _UserfontDict(tp.TypedDict, total=False):
 _userfont_dict_matcher = TypedDictMatcher(_UserfontDict)
 
 
-@lru_cache(maxsize=1)
+@cache
 def _userfont_dict_struct():
     required = _userfont_dict_matcher.required
     optional = _userfont_dict_matcher.optional
@@ -367,26 +367,50 @@ def set_default_userfont(name: str, /):
 
 
 def _fetch_default_font():
-    from ._fetchers import _fetch_remote
+    def fetch_remote():
+        import re
+        import urllib.request
 
-    name = _ROOT_FONT_KEY
-    fname = f"{name}.ttf"
-    out_path = str(_ROOT_FONT_DIR / fname)
+        from .. import __version__
+
+        fname = f"{_ROOT_FONT_KEY}.ttf"
+        version = re.sub(r"\.dev\d+\+.+$", "", __version__)
+        url = (
+            "https://github.com"
+            f"/crypt0lith/chromatic/raw/v{version}/chromatic/data"
+            f"/{_ROOT_FONT_DIR.name}/{fname}"
+        )
+        print(f"fetching {url!r}...", file=sys.stderr)
+        return urllib.request.urlretrieve(url, f"{_ROOT_FONT_DIR / fname}")[0]
+
     _ROOT_FONT_DIR.mkdir(exist_ok=True)
-    out_file = _fetch_remote(f"{_ROOT_FONT_DIR.name}/{fname}", out_path)
-    register_userfont(out_file, _ROOT_FONT_DIR, name=name, is_default=True)
+    register_userfont(
+        fetch_remote(), _ROOT_FONT_DIR, name=_ROOT_FONT_KEY, is_default=True
+    )
 
 
 def _validate_default_font():
-    from ._fetchers import filehash
+    def filehash(fp: str | os.PathLike[str]):
+        import hashlib
 
-    name = _ROOT_FONT_KEY
-    if name in userfonts and (
-        filehash(userfonts[name])
-        == "a8c767fa925624d28d9879c3a03a86204f78bce4decda0a206fd152bdd906c94"
-    ):
-        return
-    return _fetch_default_font()
+        alg = "sha256"
+        assert alg in hashlib.algorithms_available
+        hasher = hashlib.new(alg)
+        with open(fp, mode="rb") as f:
+            chunksize = 0xFFFF + 1
+            while chunk := f.read(chunksize):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
+    try:
+        if (
+            filehash(userfonts[_ROOT_FONT_KEY])
+            == "a8c767fa925624d28d9879c3a03a86204f78bce4decda0a206fd152bdd906c94"
+        ):
+            return
+    except KeyError:
+        pass
+    _fetch_default_font()
 
 
 def _init_default_font():

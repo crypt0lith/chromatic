@@ -230,16 +230,11 @@ def parse_args():
 
     def init_image_subcmds(parser: ap.ArgumentParser):
         def save_img_callback(path: str | os.PathLike[str] | None = None, /):
-
-            # deferred exception handler
-            # on write error, fall-through to Image.show()
-            # then re-raise after in-memory image is opened
-
-            from functools import wraps
-
             def defer_exc[**P, R](
                 f: abc.Callable[P, abc.Generator[Exception, tp.Any, R]], /
             ):
+                from functools import wraps
+
                 @wraps(f)
                 def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                     err = None
@@ -255,33 +250,30 @@ def parse_args():
 
                 return wrapper
 
-            import PIL.Image
-
             @defer_exc
-            def callback(ns: ap.Namespace, img: PIL.Image.Image):
+            # fall-through to Image.show() on write error,
+            # then re-raise after in-memory image is opened
+            def callback(ns, img, **params):
                 if path is not None:
                     try:
-                        img.save(path)
+                        img.save(path, **params)
                     except Exception as e:
                         yield e
                     else:
                         if getattr(ns, "show", False):
-                            with PIL.Image.open(path) as f:
-                                f.show()
+                            from PIL import Image
+
+                            with Image.open(path) as im_f:
+                                im_f.show()
                         return path
-                dump_stdout = hasattr(ns, "dumpfile") and ns.dumpfile.fileno() == 1
-                if getattr(ns, "show", not dump_stdout):
+                if (
+                    ns.show
+                    if hasattr(ns, "show")
+                    else not (hasattr(ns, "dumpfile") and ns.dumpfile.isatty())
+                ):
                     img.show()
 
             return callback
-
-        def save_img_to_dir(dirname: str, /):
-            from datetime import datetime
-            from pathlib import Path
-
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            outfile = Path(dirname, f"{__package__}_{timestamp}.png")
-            return save_img_callback(outfile)
 
         subcmds = parser.add_subparsers(dest="subcmd", required=True)
 
@@ -324,6 +316,36 @@ def parse_args():
             dest="alpha",
             action="store_true",
             help="use alpha channel with defaults: bg=0, fg=0xFF",
+        )
+        # }}}
+
+        anim_opts = ansify_base.add_argument_group(
+            "animation options", argument_default=ap.SUPPRESS
+        )
+        # animation options {{{
+        anim_opts.add_argument(
+            "--format",
+            dest="fmt",
+            choices=["WEBP", "GIF"],
+            help="animated image fallback format",
+        )
+        anim_opts.add_argument(
+            "--duration",
+            dest="kwargs",
+            metavar="N",
+            type=lambda v: {"duration": float(v)},
+            action="append",
+            help="animation per-frame duration, in milliseconds",
+        )
+        anim_opts.add_argument(
+            "--loop",
+            dest="kwargs",
+            metavar="N",
+            type=lambda v: {"loop": int(v)},
+            action="append",
+            help="""\
+            number of times to loop the animation.
+            a value of 0 means loop indefinitely""",
         )
         # }}}
 
@@ -449,7 +471,7 @@ def parse_args():
             "--reverse",
             dest="sort_glyphs",
             action="store_const",
-            const=reversed,
+            const=-1,
             help="""\
             sort glyphs in reverse order.
             flips the luminance mapping to (light -> dark)""",
@@ -461,31 +483,23 @@ def parse_args():
 
         output_opts = output_opts_base.add_argument_group("output options")
         # output options {{{
-        outfile_opts = output_opts.add_mutually_exclusive_group()
-        outfile_opts.add_argument(
-            "-O",
+        output_opts.add_argument(
+            "-o",
             "--outfile",
             metavar="FILE",
             dest="outfile_callback",
             type=save_img_callback,
             help="save the image to %(metavar)s",
         )
-        outfile_opts.add_argument(
-            "-o",
-            "--output-dir",
-            metavar="DIRECTORY",
-            dest="outfile_callback",
-            type=save_img_to_dir,
-            help="save the image as a png file in %(metavar)s",
-        )
         output_opts.add_argument(
-            "--show",
-            action=ap.BooleanOptionalAction,
-            help="whether to show the image in the system's image viewer",
+            "--dump-npy",
+            metavar="FILE",
+            dest="dump_npy",
+            type=ap.FileType("wb"),
+            help="save the ansi array to %(metavar)s as a NumPy file",
         )
         dumpfile_opts = output_opts.add_mutually_exclusive_group()
         dumpfile_opts.add_argument(
-            "-d",
             "--dump-text",
             metavar="FILE",
             dest="dumpfile",
@@ -499,7 +513,11 @@ def parse_args():
             const=sys.stdout.buffer,
             help="write the ansified image text to stdout",
         )
-        output_opts_base.set_defaults(_outfile_callback=save_img_callback())
+        output_opts.add_argument(
+            "--show",
+            action=ap.BooleanOptionalAction,
+            help="whether to show the image in the system's image viewer",
+        )
         # }}}
 
         # subcommands: image {{{
@@ -508,11 +526,25 @@ def parse_args():
             parents=[font_dir_env_base, ansify_base, from_img_base, output_opts_base],
             formatter_class=EnvHelpFormatter,
         )
+        subcmd_p_fromnpy = subcmds.add_parser(
+            "npy",
+            parents=[font_dir_env_base, ansify_base, output_opts_base],
+            formatter_class=EnvHelpFormatter,
+        )
         # }}}
 
         # image ansify {{{
         subcmd_p_ansify.add_argument(
             dest="img", metavar="IMAGEFILE", help="input image"
+        )
+        # }}}
+
+        # image npy {{{
+        subcmd_p_fromnpy.add_argument(
+            dest="arr_file",
+            metavar="NPYFILE",
+            type=ap.FileType("rb"),
+            help="path to ansi array NumPy file",
         )
         # }}}
 
@@ -537,49 +569,122 @@ def parse_args():
 
 
 def _call_from_ns[R](f: abc.Callable[..., R], /, ns, **kwargs) -> R:
-    params = signature(f).parameters
     kwargs = ChainMap(kwargs, vars(ns))
     f_args, f_kwargs = [], {}
-    for k, p in params.items():
+    for k, p in signature(f).parameters.items():
         if k not in kwargs:
             continue
-        if p.kind == 0:
+        elif p.kind == p.POSITIONAL_ONLY:
             f_args.append(kwargs[k])
+        elif p.kind == p.VAR_POSITIONAL:
+            f_args.extend(kwargs[k])
+        elif p.kind == p.VAR_KEYWORD:
+            f_kwargs.update(kwargs[k])
         else:
             f_kwargs[k] = kwargs[k]
     return f(*f_args, **f_kwargs)
 
 
 def handle_image(ns):
-    vars(ns).setdefault("outfile_callback", ns._outfile_callback)
+    import functools as ft
+
+    import numpy as np
+
+    kwargs = ft.reduce(lambda a, b: a | b, getattr(ns, "kwargs", [{}]))
+    if hasattr(ns, "fmt"):
+        kwargs["fmt"] = vars(ns).pop("fmt")
+    setattr(ns, "kwargs", kwargs)
     if getattr(ns, "alpha", False):
-        for k, x in [("bg_default", 0), ("fg_default", 0xFF)]:
-            v = getattr(ns, k, None) or (x,) * 4
-            if len(v) == 3:
-                v = *v, x
+        for i, k in enumerate(("bg_default", "fg_default")):
+            v = getattr(ns, k, ())
+            v += (0xFF * i,) * (4 - len(v))
             setattr(ns, k, v)
         delattr(ns, "alpha")
     match ns.subcmd:
         case "ansify":
-            from .image import ansi2img, img2ansi
+            from .image import ansify
 
-            ansi_array = _call_from_ns(img2ansi, ns)
-            if hasattr(ns, "dumpfile"):
-                ns.dumpfile.writelines(
-                    f"{s}\n".encode() for s in ansi_array.splitlines()
+            img = _call_from_ns(ansify, ns)
+            arr = img.info["ansi_array"]
+        case "npy":
+            arr = np.load(vars(ns).pop("arr_file"))
+            if hasattr(ns, "dumpfile") and not any(
+                getattr(ns, attr, None) for attr in ["outfile_callback", "show"]
+            ):
+                img = None
+            else:
+                from .image import ansi2img
+
+                param_names = signature(ansi2img).parameters.keys()
+                f = ft.partial(
+                    ansi2img, **{k: v for k, v in vars(ns).items() if k in param_names}
                 )
-                ns.dumpfile.write(b"\x1b[0m")
-            img = _call_from_ns(ansi2img, ns, arr=ansi_array)
-            try:
-                outpath = ns.outfile_callback(ns, img)
-            except Exception as e:
-                print(f"[-] error: {e}", file=sys.stderr)
-                return -1
-            if outpath is not None:
-                print(f"{outpath}")
-            return
+                if arr.ndim == 2:
+                    img = f(arr)
+                else:
+                    from io import BytesIO
+
+                    from PIL import Image
+
+                    [first, *rest] = map(f, arr)
+                    first.save(
+                        buf := BytesIO(),
+                        kwargs.get("fmt", "GIF"),
+                        append_images=rest,
+                        loop=kwargs.get("loop", 0),
+                        duration=kwargs.get("duration", 100),
+                    )
+                    img = Image.open(buf)
         case _:
             raise ValueError(f"invalid subcommand: {ns.subcmd!r}")
+    if hasattr(ns, "dump_npy"):
+        np.save(ns.dump_npy, arr)
+    params = {}
+    if is_anim := arr.ndim == 3:
+        params.update(save_all=True)
+    if hasattr(ns, "dumpfile"):
+        from .color.core import color_chain
+
+        if is_anim and ns.dumpfile.isatty():
+
+            def anim_loop(n: int | None, duration: int | float):
+                from time import sleep
+
+                n = n or None
+                frames = [str(color_chain.fromarray(x)).encode() for x in arr]
+                try:
+                    yield b"\x1b[?25l\x1b7\x1b[J"
+                    while n is None or n > 0:
+                        for frame in frames:
+                            yield b"\x1b8" + frame
+                            sleep(duration)
+                        if n is None:
+                            continue
+                        n -= 1
+                finally:
+                    ns.dumpfile.write(b"\x1b[?25h")
+
+            info = kwargs if img is None else img.info
+            it = anim_loop(info.get("loop", 0), info.get("duration", 100) * 1e-3)
+            try:
+                for out in it:
+                    ns.dumpfile.write(out)
+            except KeyboardInterrupt:
+                it.close()
+        else:
+            if is_anim:
+                arr = arr[0]
+            cc = color_chain.fromarray(arr)
+            ns.dumpfile.write(f"{cc}\x1b[0m\n".encode())
+    if img is None:
+        return
+    try:
+        outpath = ns.outfile_callback(ns, img, **params)
+    except Exception as e:
+        print(f"[-] error: {e}", file=sys.stderr)
+        return -1
+    if outpath is not None:
+        print(f"{outpath}")
 
 
 def font_list(ns):

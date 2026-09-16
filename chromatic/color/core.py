@@ -517,7 +517,7 @@ def set_default_ansi(typ, /):
         DEFAULT_ANSI = valid_typ
 
 
-@ft.lru_cache(maxsize=1)
+@ft.cache
 def sgr_pattern():
     uint8_re = r"(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)"
     truecolor_re = f"(?:2;(?:{uint8_re}?;){{2}}(?:{uint8_re}|;))"
@@ -1840,8 +1840,8 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         if not arr.size:
             return arr
         arr["char"] = np.frombuffer("".join(strs).encode("utf-32-le"), dtype="<U1")
-        arr["sgr"] = np.repeat(np.asarray(mask_flags, dtype="<u8"), lengths)
-        arr["rgb"] = np.repeat(np.stack(mask_rgb), lengths, axis=0)
+        arr["sgr"] = np.repeat(mask_flags, lengths)
+        arr["rgb"] = np.repeat(mask_rgb, lengths, axis=0)
         return arr if dtype is None else arr.astype(dtype, copy=False)
 
     @classmethod
@@ -1850,21 +1850,18 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
         if arr.ndim > 2:
             raise ValueError
         elif arr.ndim == 2:
-            newlines = np.zeros((arr.shape[0], 1), dtype=cls.dtype)
-            newlines["char"][:-1] = "\n"
-            if arr.shape[1]:
-                newlines["rgb"] = arr["rgb"][:, -1:]
-            arr = np.concatenate((arr, newlines), axis=1)
-        arr = arr.reshape(-1)
+            if (arr["char"][:-1, -1] == "\n").all():
+                arr = arr.reshape(-1)
+            else:
+                eol = arr[:, -1, None].copy()
+                eol[["char", "sgr"]] = "\n", 0
+                arr = np.concatenate((arr, eol), axis=-1).ravel()[:-1]
         n = arr.size
         if not n:
             return cls(ansi_type=ansi_type)
-        changed = np.zeros(n, dtype=bool)
+        changed = np.empty(n, dtype=bool)
         changed[0] = True
-        changed[1:] = (
-            (arr["sgr"][1:] != arr["sgr"][:-1]) |
-            (arr["rgb"][1:] != arr["rgb"][:-1]).any(axis=(1, 2))
-        )   # fmt: skip
+        changed[1:] = arr[["sgr", "rgb"]][1:] != arr[["sgr", "rgb"]][:-1]
         prev_flags = 0
         prev_rgb = np.zeros((2, 4), dtype="u1")
         RESET = SgrParameter(0).flag

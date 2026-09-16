@@ -330,6 +330,30 @@ def parse_args():
         )
         # }}}
 
+        anim_opts = ansify_base.add_argument_group(
+            "animation options", argument_default=ap.SUPPRESS
+        )
+        # animation options {{{
+        anim_opts.add_argument(
+            "--duration",
+            dest="kwargs",
+            metavar="N",
+            type=lambda v: {"duration": float(v)},
+            action="append",
+            help="animation per-frame duration, in milliseconds",
+        )
+        anim_opts.add_argument(
+            "--loop",
+            dest="kwargs",
+            metavar="N",
+            type=lambda v: {"loop": int(v)},
+            action="append",
+            help="""\
+            number of times to loop the animation.
+            a value of 0 means loop indefinitely""",
+        )
+        # }}}
+
         from_img_base = new_base_parser()
 
         colorize_opts = from_img_base.add_argument_group("colorization options")
@@ -517,30 +541,6 @@ def parse_args():
         subcmd_p_ansify.add_argument(
             dest="img", metavar="IMAGEFILE", help="input image"
         )
-
-        anim_opts = subcmd_p_ansify.add_argument_group(
-            "animation options", argument_default=ap.SUPPRESS
-        )
-        # animation options {{{
-        anim_opts.add_argument(
-            "--duration",
-            dest="kwargs",
-            metavar="N",
-            type=lambda v: {"duration": float(v)},
-            action="append",
-            help="animation per-frame duration, in milliseconds",
-        )
-        anim_opts.add_argument(
-            "--loop",
-            dest="kwargs",
-            metavar="N",
-            type=lambda v: {"loop": int(v)},
-            action="append",
-            help="""\
-            number of times to loop the animation.
-            a value of 0 means loop indefinitely""",
-        )
-        # }}}
         # }}}
 
     if os.path.isfile(sys.argv[0]) and os.path.samefile(sys.argv[0], __file__):
@@ -581,6 +581,10 @@ def _call_from_ns[R](f: abc.Callable[..., R], /, ns, **kwargs) -> R:
 
 
 def handle_image(ns):
+    from functools import reduce
+
+    kwargs = reduce(lambda a, b: a | b, getattr(ns, "kwargs", [{}]))
+    setattr(ns, "kwargs", kwargs)
     if getattr(ns, "alpha", False):
         for i, k in enumerate(("bg_default", "fg_default")):
             v = getattr(ns, k, ())
@@ -589,12 +593,8 @@ def handle_image(ns):
         delattr(ns, "alpha")
     match ns.subcmd:
         case "ansify":
-            from functools import reduce
-
             from .image import ansify
 
-            kwargs = reduce(lambda a, b: a | b, getattr(ns, "kwargs", [{}]))
-            setattr(ns, "kwargs", kwargs)
             img = _call_from_ns(ansify, ns)
             arr = img.info["ansi_array"]
         case _:

@@ -230,16 +230,11 @@ def parse_args():
 
     def init_image_subcmds(parser: ap.ArgumentParser):
         def save_img_callback(path: str | os.PathLike[str] | None = None, /):
-
-            # deferred exception handler
-            # on write error, fall-through to Image.show()
-            # then re-raise after in-memory image is opened
-
-            from functools import wraps
-
             def defer_exc[**P, R](
                 f: abc.Callable[P, abc.Generator[Exception, tp.Any, R]], /
             ):
+                from functools import wraps
+
                 @wraps(f)
                 def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                     err = None
@@ -255,10 +250,10 @@ def parse_args():
 
                 return wrapper
 
-            import PIL.Image
-
             @defer_exc
-            def callback(ns: ap.Namespace, img: PIL.Image.Image, **params):
+            # fall-through to Image.show() on write error,
+            # then re-raise after in-memory image is opened
+            def callback(ns, img, **params):
                 if path is not None:
                     try:
                         img.save(path, **params)
@@ -266,8 +261,10 @@ def parse_args():
                         yield e
                     else:
                         if getattr(ns, "show", False):
-                            with PIL.Image.open(path) as f:
-                                f.show()
+                            from PIL import Image
+
+                            with Image.open(path) as im_f:
+                                im_f.show()
                         return path
                 if (
                     ns.show
@@ -276,15 +273,15 @@ def parse_args():
                 ):
                     img.show()
 
-            return callback
-
-        def save_img_to_dir(dirname: str, /):
-            from datetime import datetime
-            from pathlib import Path
-
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            outfile = Path(dirname, f"{__package__}_{timestamp}.png")
-            return save_img_callback(outfile)
+            cb_type = type(
+                "callback",
+                (),
+                dict(
+                    __call__=staticmethod(callback),
+                    __repr__=staticmethod(path.__repr__),
+                ),
+            )
+            return cb_type()
 
         subcmds = parser.add_subparsers(dest="subcmd", required=True)
 
@@ -488,31 +485,17 @@ def parse_args():
 
         output_opts = output_opts_base.add_argument_group("output options")
         # output options {{{
-        outfile_opts = output_opts.add_mutually_exclusive_group()
-        outfile_opts.add_argument(
-            "-O",
+        output_opts.add_argument(
+            "-o",
             "--outfile",
             metavar="FILE",
             dest="outfile_callback",
             type=save_img_callback,
+            default=save_img_callback(),
             help="save the image to %(metavar)s",
-        )
-        outfile_opts.add_argument(
-            "-o",
-            "--output-dir",
-            metavar="DIRECTORY",
-            dest="outfile_callback",
-            type=save_img_to_dir,
-            help="save the image as a png file in %(metavar)s",
-        )
-        output_opts.add_argument(
-            "--show",
-            action=ap.BooleanOptionalAction,
-            help="whether to show the image in the system's image viewer",
         )
         dumpfile_opts = output_opts.add_mutually_exclusive_group()
         dumpfile_opts.add_argument(
-            "-d",
             "--dump-text",
             metavar="FILE",
             dest="dumpfile",
@@ -526,7 +509,11 @@ def parse_args():
             const=sys.stdout.buffer,
             help="write the ansified image text to stdout",
         )
-        output_opts_base.set_defaults(_outfile_callback=save_img_callback())
+        output_opts.add_argument(
+            "--show",
+            action=ap.BooleanOptionalAction,
+            help="whether to show the image in the system's image viewer",
+        )
         # }}}
 
         # subcommands: image {{{
@@ -637,7 +624,6 @@ def handle_image(ns):
                 arr = arr[0]
             cc = color_chain.fromarray(arr)
             ns.dumpfile.write(f"{cc}\x1b[0m\n".encode())
-    vars(ns).setdefault("outfile_callback", ns._outfile_callback)
     try:
         outpath = ns.outfile_callback(ns, img, **params)
     except Exception as e:

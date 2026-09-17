@@ -7,7 +7,7 @@ from collections import ChainMap
 from inspect import signature
 
 
-def parse_args():
+def Parser(prog=None):
     import argparse as ap
 
     from . import __version__
@@ -562,11 +562,9 @@ def parse_args():
         )
         # }}}
 
-    if os.path.isfile(sys.argv[0]) and os.path.samefile(sys.argv[0], __file__):
-        top_parser = ap.ArgumentParser(prog=__package__)
-    else:
-        top_parser = ap.ArgumentParser()
-
+    if prog is not None and os.path.isfile(prog) and os.path.samefile(prog, __file__):
+        prog = __package__
+    top_parser = ap.ArgumentParser(prog=prog)
     top_parser.add_argument(
         "-V", "--version", action="version", version=f"%(prog)s {__version__}"
     )
@@ -579,7 +577,11 @@ def parse_args():
     init_font_subcmds(font_cmd_subparser)
     init_image_subcmds(image_cmd_subparser)
 
-    return top_parser.parse_args()
+    return top_parser
+
+
+def parse_args(argv=None):
+    return Parser(os.path.basename((argv or sys.argv)[0])).parse_args(argv)
 
 
 def _call_from_ns[R](f: abc.Callable[..., R], /, ns, **kwargs) -> R:

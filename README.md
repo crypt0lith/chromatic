@@ -5,9 +5,9 @@
 [![image](https://static.pepy.tech/badge/chromatic-python)](https://pepy.tech/projects/chromatic-python)
 [![image](https://mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
 
-Chromatic is a library for processing and transforming ANSI escape sequences (colored terminal text).
+Chromatic is a library for ANSI art image processing and colored terminal text.
 
-It offers a collection of algorithms and types for a variety of use cases:	
+It offers a collection of algorithms and types for a variety of use cases:
 
 - Image-to-ASCII / Image-to-ANSI conversions.
 - ANSI art rendering, with support for user-defined fonts.
@@ -18,107 +18,125 @@ It offers a collection of algorithms and types for a variety of use cases:
 
 ### Usage
 
-#### Image-to-ANSI conversion
+#### `color_chain`
 
-Convert an image into a 2d ANSI string array, and render the ANSI array as image:
+A `color_chain` is a printable sequence of colored text that round-trips with a NumPy array:
 
 ```python
-from chromatic.color import ansicolor4Bit
-from chromatic.image import ansi2img, img2ansi
-from chromatic.data import userfonts, butterfly
+from chromatic import color_chain, ColorStr
 
-input_img = butterfly()
-font = userfonts['vga437']
-
-# `char_set` is used to translate luminance to characters 
-#            | <- index 0 is the 'darkest'
-char_set = r"'·,•-_→+<>ⁿ*%⌂7√Iï∞πbz£9yîU{}1αHSw♥æ?GX╕╒éà⌡MF╝╩ΘûÇƒQ½☻Å¶┤▄╪║▒█"
-#                                           index -1 is the 'brightest' -> |
-
-# returns list[list[ColorStr]]
-ansi_array = img2ansi(
-	input_img,
-	font,
-	sort_glyphs=False,	# map `char_set` as-is
-	char_set=char_set,
-	ansi_type=ansicolor4Bit,
-	factor=200,
+cc = color_chain(
+    [ColorStr("hello", fg=0xFF0000), ColorStr(" world", fg=0x00FF00)], ansi_type="8b"
 )
 
-# print your image to stdout
-print(*map(''.join, ansi_array), sep="\x1b[0m\n")
+# parsed from a raw SGR string — no ansi_type needed
+cc2 = color_chain("\x1b[38;5;196mhello\x1b[38;5;46m world")
 
-# returns a PIL.Image.Image object
-ansi_img = ansi2img(ansi_array, font, font_size=16)
-ansi_img.show()
+assert cc == cc2
+
+# red "hello", green " world"
+print(cc)
+
+# a structured ndarray of dtype [('char', '<U1'), ('sgr', '<u8'), ('rgb', 'u1', (2, 4))]
+arr = cc.term_array()
+
+assert str(color_chain.fromarray(arr)) == str(cc)
 ```
 
-#### ColorStr
+#### `img2ansi`
+
+`img2ansi` reads an image and returns a `color_chain`:
+
+```python
+from chromatic import img2ansi
+from chromatic.data import userfonts
+
+font = userfonts["vga437"]
+
+# the image, as ANSI art
+cc = img2ansi("input.png", font, factor=200)
+print(cc)
+
+# or the raw ndarray
+arr = img2ansi("input.png", font, factor=200, outarray=True)
+```
+
+#### `ansi2img`
+
+`ansi2img` renders a `color_chain` (or array) back to an image:
+
+```python
+from chromatic import img2ansi, ansi2img
+from chromatic.data import userfonts
+
+font = userfonts["vga437"]
+
+cc = img2ansi("input.png", font, factor=200)
+
+# a PIL.Image.Image
+img = ansi2img(cc, font, font_size=16)
+img.show()
+```
+
+#### `ansify`
+
+`ansify` runs both steps at once, returning the rendered image with its array on `Image.info`:
+
+```python
+from chromatic import ansify
+from chromatic.data import userfonts
+
+font = userfonts["vga437"]
+
+img = ansify("input.png", font, font_size=16, factor=200)
+img.show()
+
+# the ndarray it rendered from
+arr = img.info["ansi_array"]
+```
+
+#### Animated images
+
+An animated image becomes a list of `color_chain` frames, one per frame — so a GIF plays straight to the terminal:
+
+```python
+import sys
+import time
+
+from chromatic import img2ansi
+from chromatic.data import userfonts
+
+font = userfonts["vga437"]
+
+# list[color_chain], one per frame
+frames = img2ansi("input.gif", font, factor=200)
+
+for cc in frames:
+    # redraw each frame in place
+    sys.stdout.write(f"\x1b[H{cc}")
+    time.sleep(0.1)
+```
+
+`ansify` renders the same GIF back to an animated image, and `chromatic image ansify input.gif --stdout` plays it in the terminal for you.
+
+#### `ColorStr`
+
+`ColorStr` is a `str` subclass that carries its SGR color as metadata; the escape codes only surface when you render it:
 
 ```python
 from chromatic import ColorStr
 
-base_str = 'hello world'
+cs = ColorStr("hello world", fg=0xFF0000, ansi_type="8b")
 
-red_fg = ColorStr(base_str, 0xFF0000, ansi_type='8b')
+assert isinstance(cs, str)
 
-assert red_fg.base_str == base_str
-assert red_fg.rgb_dict == {'fg': (0xFF, 0, 0)}
-assert red_fg.ansi == b'\x1b[38;5;196m'
-```
+# the codes aren't part of the string itself
+assert cs.base_str == "hello world"
+assert len(cs) == len("hello world")
 
-`ColorStr` will parse raw SGR sequences, and accepts different types for `fg` and `bg`:
-
-```python
-from chromatic import ColorStr
-
-red_fg = ColorStr('[*]', 0xFF0000, ansi_type='8b')
-
-assert red_fg == ColorStr(b"\x1b[38;5;196m[*]")
-assert red_fg == ColorStr('[*]', fg=(0xFF, 0, 0), ansi_type='8b')
-```
-
-ANSI color format can be specified with `ColorStr(ansi_type=...)`, or as a new object via `ColorStr.as_ansi_type()`:
-
-```python
-from chromatic import ColorStr, ansicolor4Bit, ansicolor24Bit, ansicolor8Bit
-
-# each colorbytes type has an alias that you can use 
-assert all(
-	ansi_type.alias == alias
-	for ansi_type, alias in [
-		(ansicolor4Bit, '4b'),
-		(ansicolor8Bit, '8b'),
-		(ansicolor24Bit, '24b'),
-	]
-)
-
-truecolor = ColorStr('*', 0xFF0000, ansi_type=ansicolor24Bit)
-a_16color = truecolor.as_ansi_type(ansicolor4Bit)
-
-assert a_16color == truecolor.as_ansi_type('4b')
-assert truecolor.ansi_format is ansicolor24Bit and truecolor.ansi == b'\x1b[38;2;255;0;0m'
-assert a_16color.ansi_format is ansicolor4Bit and a_16color.ansi == b'\x1b[31m'
-```
-
-Adding and removing SGR parameters from a `ColorStr`:
-
-```python
-import chromatic as cm
-
-regular_str = cm.ColorStr('hello world')
-
-assert regular_str.ansi == b''
-
-bold_str = regular_str.bold()
-
-assert bold_str.ansi == b'\x1b[1m'
-
-# use ColorStr.update_sgr() to remove and add SGR values
-unbold_str = bold_str.update_sgr(cm.SgrParameter.BOLD)
-
-assert unbold_str == regular_str
-assert bold_str == unbold_str + cm.SgrParameter.BOLD	# __add__ can also be used
+# they surface when you print / str() it
+assert str(cs) == "\x1b[38;5;196mhello world\x1b[0m"
+assert cs.ansi == b"\x1b[38;5;196m"
 ```
 
 ### Installation

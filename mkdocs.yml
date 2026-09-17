@@ -13,6 +13,8 @@ theme:
       toggle:
         icon: material/weather-night
         name: Switch to light mode
+hooks:
+  - mkdocs_hooks.py
 plugins:
   - search
   - mkdocstrings:
@@ -27,6 +29,10 @@ plugins:
             filters: "public"
 nav:
   - Home: index.md
+  - CLI:
+      - Overview: cli/index.md
+      - image: cli/image.md
+      - font: cli/font.md
   - API reference:
       - chromatic: api/chromatic.md
       - color: api/color.md

@@ -1,15 +1,6 @@
-import cProfile
-import functools
-import io
-import pstats
 import random
-import sys
-import time
 import unittest
-from inspect import isbuiltin, signature
 from string import ascii_letters
-from types import FunctionType
-from typing import Callable, Optional
 
 from chromatic import (
     Color,
@@ -29,74 +20,6 @@ from chromatic.color.colorconv import (
 from chromatic.color.core import randcolor
 from chromatic.color.palette import ColorNamespace
 
-
-def coerce_argspec[**P, R](
-    f: Callable[P, R] | FunctionType | type,
-    args: P.args = None,
-    kwargs: P.kwargs = None,
-    *,
-    retfunc: bool = False,
-) -> Callable[[], R] | tuple[P.args, P.kwargs]:
-    if args is None:
-        args = tuple()
-    if kwargs is None:
-        kwargs = dict()
-    if isbuiltin(f) or getattr(f, "__module__", "") == "builtins":
-        if not isinstance(args, tuple):
-            args = tuple([args])
-    else:
-        try:
-            sig = signature(f)
-            bound_args = sig.bind(*args, **kwargs)
-            bound_args.apply_defaults()
-            args, kwargs = bound_args.args, bound_args.kwargs
-        except (TypeError, ValueError):
-            if not isinstance(args, tuple):
-                args = tuple([args])
-    if retfunc is True:
-        return lambda: f(*args, **kwargs)
-    return args, kwargs
-
-
-class cprofile_wrapper[**P, R]:
-
-    def __init__(
-        self,
-        func: Callable[P, R] | FunctionType | type = None,
-        *,
-        number=10000,
-        use_perf_counter=False,
-    ):
-        self.func = func
-        self.number = number
-        self.use_perf_counter = use_perf_counter
-
-        if self.func is not None:
-            functools.update_wrapper(self, self.func)
-
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        if self.func is not None:
-            profiler_kwargs = {}
-            if self.use_perf_counter:
-                profiler_kwargs["timer"] = time.perf_counter
-            profiler = cProfile.Profile(**profiler_kwargs)
-            result = None
-            profiler.enable()
-            for _ in range(max(self.number, 0)):
-                result = self.func(*args, **kwargs)
-            profiler.disable()
-            out_stream = io.StringIO()
-            p = pstats.Stats(profiler, stream=out_stream).sort_stats("cumulative")
-            p.print_stats()
-            print(out_stream.getvalue())
-            out_stream.close()
-            return result
-        else:
-            self.func = args[0]
-            functools.update_wrapper(self, self.func)
-            return self
-
-
 ANSI_4BIT_RGB: list[tuple[int, int, int]] = [
     (0, 0, 0),  # black
     (170, 0, 0),  # red
@@ -115,48 +38,6 @@ ANSI_4BIT_RGB: list[tuple[int, int, int]] = [
     (85, 255, 255),  # bright cyan
     (255, 255, 255),  # bright white
 ]
-
-
-def _rand_color_str_array(n_rows=10, n_cols=10):
-    size = n_rows * n_cols
-    bit_str = ""
-    while "1" not in set(bit_str):
-        rand_bits = random.getrandbits(size)
-        bit_str = f"{rand_bits:0{size}b}"
-    rand_bin = list(map(lambda x: bool(int(x)), bit_str))
-    random.shuffle(rand_bin)
-    rand_bin_iter = iter(rand_bin)
-    printable_chars = list(ascii_letters)
-    output = []
-    for row in range(n_rows):
-        current = []
-        for col in range(n_cols):
-            char = random.choice(printable_chars) if next(rand_bin_iter) else None
-            current.append(
-                ColorStr(char, randcolor(), ansi_type=ansicolor24Bit) if char else " "
-            )
-        output.append(
-            "{}{}{}{}".format(
-                *map(
-                    "".join,
-                    (
-                        current,
-                        *(
-                            [
-                                c.as_ansi_type(t) if isinstance(c, ColorStr) else c
-                                for c in current
-                            ]
-                            for t in (ansicolor4Bit, ansicolor8Bit, ansicolor24Bit)
-                        ),
-                    ),
-                )
-            )
-        )
-    return "\n".join(output)
-
-
-def test_performance_benchmark():
-    return cprofile_wrapper(_rand_color_str_array, number=1000)()
 
 
 # noinspection PyTypeChecker
@@ -293,46 +174,5 @@ class TestColorStr(unittest.TestCase):
         self.assertEqual(red_fg.base_str, "iadd")
 
 
-def main():
-    mode_groups = {
-        (xs[0], xs[1].__name__.lstrip("_")): xs[1]
-        for xs in enumerate(
-            [unittest.main, test_performance_benchmark, _rand_color_str_array]
-        )
-    }
-    modes = {k: v for xs, v in mode_groups.items() for k in xs}
-    if len(sys.argv[1:]) == 1:
-        inp_ = sys.argv[1].strip()
-        if inp_.isdigit():
-            inp_ = int(inp_)
-        if inp_ not in modes:
-            print(f"invalid option: {inp_!r}", file=sys.stderr)
-            return -1
-    elif len(sys.argv[1:]) > 1:
-        raise ValueError("too many arguments, expected only 1")
-    else:
-        inp_ = None
-        print(
-            *(f"{i}\t{x}" for i, x in mode_groups),
-            sep="\n",
-            end="\nselect testing mode",
-        )
-        while inp_ not in modes:
-            try:
-                inp_ = input("> ").strip()
-                if inp_.isdigit():
-                    inp_ = int(inp_)
-            except KeyboardInterrupt:
-                print("\nGoodbye!")
-                exit()
-    selected = modes[inp_]
-    if selected is unittest.main:
-        sys.argv[1:] = []
-    print(f"Running {selected.__qualname__!r}...")
-    out = selected()
-    if out is not None:
-        print(out)
-
-
 if __name__ == "__main__":
-    sys.exit(main())
+    unittest.main()

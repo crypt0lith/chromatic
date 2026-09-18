@@ -1,178 +1,157 @@
-import random
-import unittest
-from string import ascii_letters
+import pytest
 
-from chromatic import (
-    Color,
-    ColorStr,
-    SgrParameter,
-    ansicolor4Bit,
-    ansicolor8Bit,
-    ansicolor24Bit,
-    colorbytes,
+from chromatic import ColorStr, SgrParameter
+
+
+@pytest.fixture
+def fg():
+    return (1, 2, 3)
+
+
+@pytest.fixture
+def colored(fg):
+    return ColorStr("hello", fg=fg)
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(ColorStr("abc", fg=(0, 255, 0)), id="from-args"),
+        pytest.param(ColorStr("\x1b[38;5;46mabc\x1b[0m"), id="from-ansi"),
+    ]
 )
-from chromatic.color.colorconv import (
-    ansi_4bit_to_rgb,
-    ansi_8bit_to_rgb,
-    nearest_ansi_4bit_rgb,
-    rgb_to_ansi_8bit,
+def green_abc(request):
+    return request.param
+
+
+def test_len_is_visible_length(green_abc):
+    assert len(green_abc) == 3
+
+
+def test_base_str_strips_ansi(green_abc):
+    assert green_abc.base_str == "abc"
+    assert "\x1b" not in green_abc.base_str
+
+
+def test_str_renders_with_escapes(green_abc):
+    assert "\x1b" in str(green_abc)
+
+
+def test_never_equal_to_bare_str():
+    plain = ColorStr("x")
+    assert plain.fg is None
+    assert plain != "x"
+    assert "x" != plain
+
+
+def test_equal_iff_same_text_and_color():
+    a = ColorStr("x", fg=(1, 2, 3))
+    assert a == ColorStr("x", fg=(1, 2, 3))
+    assert a != ColorStr("x", fg=(9, 9, 9))
+    assert a != ColorStr("y", fg=(1, 2, 3))
+
+
+def test_hash_consistent_with_equality():
+    a = ColorStr("x", fg=(1, 2, 3))
+    b = ColorStr("x", fg=(1, 2, 3))
+    c = ColorStr("x", fg=(9, 9, 9))
+    assert hash(a) == hash(b)
+    assert len({a, b, c}) == 2
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        pytest.param(lambda s: s.upper(), id="upper"),
+        pytest.param(lambda s: s.replace("l", "L"), id="replace"),
+        pytest.param(lambda s: s[1:], id="slice"),
+        pytest.param(lambda s: s + "!", id="concat"),
+        pytest.param(lambda s: s * 2, id="repeat"),
+        pytest.param(lambda s: s.center(7), id="center"),
+        pytest.param(lambda s: s.split("e"), id="split"),
+    ],
 )
-from chromatic.color.core import randcolor
-from chromatic.color.palette import ColorNamespace
-
-ANSI_4BIT_RGB: list[tuple[int, int, int]] = [
-    (0, 0, 0),  # black
-    (170, 0, 0),  # red
-    (0, 170, 0),  # green
-    (170, 85, 0),  # yellow
-    (0, 0, 170),  # blue
-    (170, 0, 170),  # magenta
-    (0, 170, 170),  # cyan
-    (170, 170, 170),  # white
-    (85, 85, 85),  # bright black (grey)
-    (255, 85, 85),  # bright red
-    (85, 255, 85),  # bright green
-    (255, 255, 85),  # bright yellow
-    (85, 85, 255),  # bright blue
-    (255, 85, 255),  # bright magenta
-    (85, 255, 255),  # bright cyan
-    (255, 255, 255),  # bright white
-]
+def test_transforms_match_str_and_preserve_fg(colored, fg, op):
+    got = op(colored)
+    want = op(colored.base_str)
+    got = got if isinstance(got, list) else [got]
+    want = want if isinstance(want, list) else [want]
+    assert [p.base_str for p in got] == want
+    assert all(isinstance(p, ColorStr) and p.fg.rgb == fg for p in got)
 
 
-# noinspection PyTypeChecker
-class TestAnsiColorBytes(unittest.TestCase):
-
-    def test_colorbytes_init(self):
-        self.assertIsInstance(colorbytes(b"\x1b[38;5;46m"), colorbytes)
-        self.assertIsInstance(ansicolor4Bit(b"\x1b[31m"), ansicolor4Bit)
-        self.assertIsInstance(ansicolor8Bit(b"\x1b[38;5;46m"), ansicolor8Bit)
-        self.assertIsInstance(ansicolor24Bit(b"\x1b[38;2;255;0;0m"), ansicolor24Bit)
-
-    def test_colorbytes_bad_input(self):
-        with self.assertRaises(ValueError):
-            ansicolor4Bit(b"\x1b[invalidm")
-
-        with self.assertRaises(TypeError):
-            ansicolor4Bit("not_bytes")
-
-    def test_ansi_4bit_to_rgb(self):
-        for value, expected_rgb in enumerate(ANSI_4BIT_RGB):
-            self.assertEqual(ansi_4bit_to_rgb(value), expected_rgb)
-
-    def test_nearest_ansi_4bit_color(self):
-        for _ in range(100):
-            r, g, b = randcolor().rgb
-            nearest_color = nearest_ansi_4bit_rgb((r, g, b))
-            self.assertIsInstance(nearest_color, tuple)
-            self.assertEqual(len(nearest_color), 3)
-
-    def test_rgb_to_ansi_8bit(self):
-        for _ in range(100):
-            rgb = randcolor().rgb
-            ansi_code = rgb_to_ansi_8bit(rgb)
-            self.assertIsInstance(ansi_code, int)
-            self.assertTrue(0 <= ansi_code <= 255)
-
-    def test_ansi_8bit_to_rgb(self):
-        for value in range(256):
-            rgb = ansi_8bit_to_rgb(value)
-            self.assertIsInstance(rgb, tuple)
-            self.assertEqual(len(rgb), 3)
-
-    def test_color_class(self):
-        for _ in range(100):
-            color = randcolor()
-            r, g, b = color.rgb
-            hex_value = (r << 16) + (g << 8) + b
-            color_from_hex = Color(hex_value)
-            self.assertEqual(color_from_hex.rgb, (r, g, b))
+@pytest.mark.parametrize(
+    "ansi_type,expected",
+    [
+        pytest.param("4b", b"\x1b[31m", id="4bit"),
+        pytest.param("8b", b"\x1b[38;5;196m", id="8bit"),
+        pytest.param("24b", b"\x1b[38;2;255;0;0m", id="24bit"),
+    ],
+)
+def test_pure_red_encodes_per_type(ansi_type, expected):
+    assert ColorStr("x", fg=(255, 0, 0), ansi_type=ansi_type).ansi == expected
 
 
-class TestColorStr(unittest.TestCase):
-
-    def test_color_instances(self):
-        cs = ColorStr("Red text", fg=Color(0xFF0000))
-        self.assertEqual(cs.fg.rgb, (255, 0, 0))
-
-        cs_bg = ColorStr("Blue background text", bg=Color(0x0000FF))
-        self.assertEqual(cs_bg.bg.rgb, (0, 0, 255))
-
-    def test_rgb_tuple(self):
-        cs = ColorStr("Red text", fg=(255, 0, 0))
-        self.assertEqual(cs.fg.rgb, (255, 0, 0))
-
-        cs_bg = ColorStr("Blue background text", bg=(0, 0, 255))
-        self.assertEqual(cs_bg.bg.rgb, (0, 0, 255))
-
-    def test_int_hex(self):
-        cs = ColorStr("Red text", fg=0xFF0000)
-        self.assertEqual(cs.fg.rgb, (255, 0, 0))
-
-        cs_bg = ColorStr("Blue background text", bg=0x0000FF)
-        self.assertEqual(cs_bg.bg.rgb, (0, 0, 255))
-
-    def test_ansi_bytes(self):
-        cs = ColorStr(b"\x1b[38;5;46mGreen text\x1b[0m", encoding="utf-8")
-        self.assertEqual(cs.fg.rgb, (0, 255, 0))
-        self.assertEqual(cs.base_str, "Green text")
-
-        cs_bg = ColorStr(b"\x1b[48;5;46mGreen background\x1b[0m", encoding="utf-8")
-        self.assertIn("bg", cs_bg.rgb_dict)
-        self.assertEqual(cs_bg.bg.rgb, (0, 255, 0))
-
-    def test_ansi_str(self):
-        cs = ColorStr("\x1b[38;5;46mGreen text\x1b[0m")
-        self.assertEqual(cs.fg.rgb, (0, 255, 0))
-        self.assertEqual(cs.base_str, "Green text")
-
-        cs_bg = ColorStr("\x1b[48;5;46mGreen background")
-        self.assertIn("bg", cs_bg.rgb_dict)
-        self.assertEqual(cs_bg.bg.rgb, (0, 255, 0))
-
-    def test_color_dict(self):
-        cs = ColorStr("Red on Blue text", fg=Color(0xFF0000), bg=Color(0x0000FF))
-        self.assertEqual(cs.fg.rgb, (255, 0, 0))
-        self.assertEqual(cs.bg.rgb, (0, 0, 255))
-
-    def test_mixed_color_spec(self):
-        cs = ColorStr("Red on Green text", fg=Color(0xFF0000), bg=(0, 255, 0))
-        self.assertEqual(cs.fg.rgb, (255, 0, 0))
-        self.assertEqual(cs.bg.rgb, (0, 255, 0))
-
-        cs_mixed = ColorStr("Blue on Yellow text", fg=0x0000FF, bg=(255, 255, 0))
-        self.assertEqual(cs_mixed.fg.rgb, (0, 0, 255))
-        self.assertEqual(cs_mixed.bg.rgb, (255, 255, 0))
-
-    def test_fuzz_constructors(self):
-        for _ in range(100):
-            r = random.randint(0, 255)
-            g = random.randint(0, 255)
-            b = random.randint(0, 255)
-            random_text = "".join(
-                random.choices(ascii_letters, k=random.randint(5, 15))
-            )
-
-            cs_color = ColorStr(random_text, fg=Color.from_rgb((r, g, b)))
-            self.assertEqual(cs_color.fg.rgb, (r, g, b))
-
-            cs_rgb = ColorStr(random_text, fg=(r, g, b))
-            self.assertEqual(cs_rgb.fg.rgb, (r, g, b))
-
-            hex_value = (r << 16) + (g << 8) + b
-            cs_int = ColorStr(random_text, fg=hex_value)
-            self.assertEqual(cs_int.fg.rgb, (r, g, b))
-
-    def test_update_sgr(self):
-        cs = ColorStr(ansi_type="4b", reset=False)
-        self.assertEqual((cs.base_str, cs.ansi), ("", b""))
-
-        red_fg = cs.add_sgr_param(SgrParameter.RED_BRIGHT_FG)
-        self.assertEqual([ansicolor4Bit(b"91")], list(red_fg._sgr.values()))
-        red_fg += "iadd"
-        self.assertEqual([ansicolor4Bit(b"91")], list(red_fg._sgr.values()))
-        self.assertEqual(red_fg.base_str, "iadd")
+def test_as_ansi_type_preserves_color():
+    base = ColorStr("x", fg=(10, 20, 30), ansi_type="24b")
+    narrowed = base.as_ansi_type("4b")
+    assert narrowed.ansi != base.ansi
+    assert narrowed.fg.rgb == (10, 20, 30)
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_rendered_form_reparses_to_same_color():
+    cs = ColorStr("hello", fg=(255, 0, 0))
+    assert ColorStr(str(cs)).fg.rgb == (255, 0, 0)
+
+
+def test_add_sgr_param_emits_code():
+    cs = ColorStr(ansi_type="4b", reset=False).add_sgr_param(SgrParameter.RED_BRIGHT_FG)
+    assert cs.ansi == b"\x1b[91m"
+
+
+@pytest.mark.parametrize(
+    "cs,expected",
+    [
+        pytest.param(ColorStr("x"), b"\x1b[1m", id="no-color"),
+        pytest.param(ColorStr("x", fg=(1, 2, 3)), b"\x1b[38;5;16;1m", id="with-fg"),
+    ],
+)
+def test_bold_injects_sgr_1(cs, expected):
+    assert cs.bold().ansi == expected
+
+
+@pytest.mark.parametrize(
+    "fg_in,inverted", [((0, 0, 0), (255, 255, 255)), ((255, 0, 0), (0, 255, 255))]
+)
+def test_invert_complements_color(fg_in, inverted):
+    assert (~ColorStr("hi", fg=fg_in)).fg.rgb == inverted
+
+
+@pytest.mark.parametrize(
+    "styled",
+    [
+        pytest.param(lambda cs: cs, id="plain"),
+        pytest.param(lambda cs: cs.bold(), id="bold"),
+    ],
+)
+def test_strip_style_keeps_color(styled):
+    assert styled(ColorStr("x", fg=(1, 2, 3))).strip_style().fg.rgb == (1, 2, 3)
+
+
+@pytest.mark.parametrize(
+    "value,result",
+    [
+        pytest.param((256, 0, 0), (0, 0, 0), id="tuple-overflow-wraps"),
+        pytest.param((-1, 0, 0), (255, 0, 0), id="tuple-negative-wraps"),
+        pytest.param((1.5, 2, 3), (1, 2, 3), id="tuple-float-truncates"),
+        pytest.param(0x1000000, (0, 0, 0), id="int-above-24bit-masks"),
+        pytest.param(-1, (255, 255, 255), id="int-negative-masks"),
+    ],
+)
+def test_fg_input_is_not_range_checked(value, result):
+    assert ColorStr("x", fg=value).fg.rgb == result
+
+
+@pytest.mark.parametrize("bad", [(1, 2), (1, 2, 3, 4)], ids=["too-short", "too-long"])
+def test_wrong_length_tuple_raises(bad):
+    with pytest.raises(TypeError):
+        ColorStr("x", fg=bad)

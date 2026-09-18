@@ -29,17 +29,9 @@ class UserFont:
     def __fspath__(self) -> str: ...
     def to_truetype(self) -> FreeTypeFont: ...
 
-class _TypedDictStruct(tp.NamedTuple):
-    required: frozenset[str]
-    optional: frozenset[str]
-    all_keys: frozenset[str]
-    annotations: MappingProxyType[str, type[tp.Any]]
-
-    @classmethod
-    def from_typeddict(cls, typ: type[tp.TypedDict], /) -> tp.Self: ...
-    def match(self, obj: dict, /) -> bool: ...
-
-def _userfont_dict_struct() -> _TypedDictStruct: ...
+def _userfont_dict_struct() -> (
+    tuple[frozenset[str], frozenset[str], frozenset[str], MappingProxyType[str, tp.Any]]
+): ...
 
 userfonts: tp.Final[MappingProxyType[str, UserFont]]
 

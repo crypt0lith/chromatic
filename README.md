@@ -18,126 +18,126 @@ It offers a collection of algorithms and types for a variety of use cases:
 
 ### Usage
 
-#### `color_chain`
-
-A `color_chain` is a printable sequence of colored text that round-trips with a NumPy array:
-
-```python
-from chromatic import color_chain, ColorStr
-
-cc = color_chain(
-    [ColorStr("hello", fg=0xFF0000), ColorStr(" world", fg=0x00FF00)], ansi_type="8b"
-)
-
-# parsed from a raw SGR string — no ansi_type needed
-cc2 = color_chain("\x1b[38;5;196mhello\x1b[38;5;46m world")
-
-assert cc == cc2
-
-# red "hello", green " world"
-print(cc)
-
-# a structured ndarray of dtype [('char', '<U1'), ('sgr', '<u8'), ('rgb', 'u1', (2, 4))]
-arr = cc.term_array()
-
-assert str(color_chain.fromarray(arr)) == str(cc)
-```
-
-#### `img2ansi`
-
-`img2ansi` reads an image and returns a `color_chain`:
-
-```python
-from chromatic import img2ansi
-from chromatic.data import userfonts
-
-font = userfonts["vga437"]
-
-# the image, as ANSI art
-cc = img2ansi("input.png", font, factor=200)
-print(cc)
-
-# or the raw ndarray
-arr = img2ansi("input.png", font, factor=200, outarray=True)
-```
-
-#### `ansi2img`
-
-`ansi2img` renders a `color_chain` (or array) back to an image:
-
-```python
-from chromatic import img2ansi, ansi2img
-from chromatic.data import userfonts
-
-font = userfonts["vga437"]
-
-cc = img2ansi("input.png", font, factor=200)
-
-# a PIL.Image.Image
-img = ansi2img(cc, font, font_size=16)
-img.show()
-```
-
-#### `ansify`
-
-`ansify` runs both steps at once, returning the rendered image with its array on `Image.info`:
-
-```python
-from chromatic import ansify
-from chromatic.data import userfonts
-
-font = userfonts["vga437"]
-
-img = ansify("input.png", font, font_size=16, factor=200)
-img.show()
-
-# the ndarray it rendered from
-arr = img.info["ansi_array"]
-```
-
-#### Animated images
-
-An animated image becomes a list of `color_chain` frames, one per frame — so a GIF plays straight to the terminal:
-
-```python
-import sys
-import time
-
-from chromatic import img2ansi
-from chromatic.data import userfonts
-
-font = userfonts["vga437"]
-
-# list[color_chain], one per frame
-frames = img2ansi("input.gif", font, factor=200)
-
-for cc in frames:
-    # redraw each frame in place
-    sys.stdout.write(f"\x1b[H{cc}")
-    time.sleep(0.1)
-```
-
-`ansify` renders the same GIF back to an animated image, and `chromatic image ansify input.gif --stdout` plays it in the terminal for you.
-
 #### `ColorStr`
-
-`ColorStr` is a `str` subclass that carries its SGR color as metadata; the escape codes only surface when you render it:
 
 ```python
 from chromatic import ColorStr
 
 cs = ColorStr("hello world", fg=0xFF0000, ansi_type="8b")
 
-assert isinstance(cs, str)
-
-# the codes aren't part of the string itself
 assert cs.base_str == "hello world"
 assert len(cs) == len("hello world")
 
-# they surface when you print / str() it
+head, tail = cs.split()
+
+assert head.fg == tail.fg == cs.fg
+assert all(c.fg == cs.fg for c in cs)
+```
+
+`ColorStr` is a `str` subclass that carries SGR state as metadata.
+Its `str` methods delegate to the base string and return `ColorStr` instances that retain the SGR state.
+
+```python
 assert str(cs) == "\x1b[38;5;196mhello world\x1b[0m"
 assert cs.ansi == b"\x1b[38;5;196m"
 ```
+
+The SGR sequence materializes when the `ColorStr` is converted back to a Python `str`.
+
+#### `color_chain`
+
+```python
+from chromatic import color_chain
+
+cc = color_chain(
+    [ColorStr("hello", fg=0xFF0000), ColorStr(" world", fg=0x00FF00)], ansi_type="8b"
+)
+
+sgr, s = cc[0]
+
+assert sgr.fg == (0xFF, 0, 0)
+assert s == "hello"
+```
+
+A `color_chain` is a sequence of colored-text fragments that round-trips with a structured NumPy array.
+Each fragment is an `(sgr, text)` pair of the SGR state and the run of text it applies to.
+
+```python
+cc2 = color_chain("\x1b[38;5;196mhello\x1b[38;5;46m world")
+
+assert cc == cc2
+```
+
+The constructor also parses a raw SGR string.
+It infers the color depth from the sequence, so `cc2` needs no `ansi_type`.
+
+```python
+arr = cc.term_array()
+
+assert arr.dtype == [("char", "<U1"), ("sgr", "<u8"), ("rgb", "u1", (2, 4))]
+assert str(color_chain.fromarray(arr)) == str(cc)
+```
+
+`term_array` exposes the structured `ndarray` behind the chain, and `fromarray` reverses it.
+`fromarray` accepts any `ndarray` of that dtype, so an array built by other means converts to a printable `color_chain`.
+
+#### `img2ansi`
+
+```python
+from chromatic import img2ansi
+
+cc = img2ansi("input.png")
+```
+
+`img2ansi` reads an image and returns a `color_chain`.
+
+```python
+arr = img2ansi("input.png", outarray=True)
+
+assert color_chain.fromarray(arr) == cc
+```
+
+`outarray=True` returns the underlying `ndarray` instead.
+
+#### `ansi2img`
+
+```python
+from chromatic import ansi2img
+
+img = ansi2img(cc)
+img.show()
+```
+
+`ansi2img` renders a `color_chain` back to an image.
+It also accepts a dtype-matching array.
+
+#### `ansify`
+
+```python
+from chromatic import ansify
+
+img = ansify("input.png")
+arr = img.info["ansi_array"]
+```
+
+`ansify` runs both directions in one call, returning the rendered image with the array it rendered from on `Image.info`.
+
+#### Animated images
+
+```python
+frames = img2ansi("input.gif")
+
+assert isinstance(frames, list)
+assert all(isinstance(f, color_chain) for f in frames)
+```
+
+An animated image renders to a `list[color_chain]`, one per frame.
+
+```shell
+chromatic image ansify input.gif --stdout
+```
+
+The [CLI](https://crypt0lith.github.io/chromatic/cli/image/#chromatic-image-ansify) renders and plays one straight to the terminal.
 
 ### Installation
 

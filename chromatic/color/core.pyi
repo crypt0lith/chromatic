@@ -169,8 +169,6 @@ class SgrFlag(enum.IntFlag):
     @property
     def parameters(self) -> list[SgrParameter]: ...
 
-_P2F: tp.Final[dict[int, int]]
-_F2P: tp.Final[dict[int, int]]
 _ANSI16C_I2KV: tp.Final[dict[int, tuple[ColorDictKeys, Int3Tuple]]]
 _ANSI16C_KV2I: tp.Final[dict[tuple[ColorDictKeys, Int3Tuple], int]]
 _ANSI256_B2KEY: tp.Final[dict[L[b"38", b"48"], ColorDictKeys]]

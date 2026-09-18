@@ -1351,17 +1351,10 @@ class ColorStr(str, _IntFloatMixin):
         return self._weak_var_update(sgr=sgr)
 
     def strip_style(self):
-        only_colors = []
-        diff = False
-        for x in self._sgr:
-            if x.is_color():
-                only_colors.append(x)
-            elif not diff:
-                diff = True
-        if not diff:
+        if all(x.is_color() for x in self._sgr):
             return self
-        sgr = self._sgr.copy()
-        sgr[:] = only_colors
+        sgr = SgrSequence()
+        sgr.set_colors(self._sgr.rgb_dict, self.ansi_type)
         return self._weak_var_update(sgr=sgr)
 
     def add_reset(self):

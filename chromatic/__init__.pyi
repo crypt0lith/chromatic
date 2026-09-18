@@ -38,10 +38,10 @@ __all__ = [
     "reshape_ansi",
     "rgb2hexstr",
     "rgb2int",
+    "set_default_ansi",
     "sort_glyphs",
     "ttf_extract_codepoints",
     "userfonts",
-    "set_default_ansi",
 ]
 from . import color, data, image
 from ._version import version as __version__

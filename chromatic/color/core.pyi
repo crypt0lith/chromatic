@@ -3,6 +3,7 @@ __all__ = [
     "Color",
     "ColorChainDType",
     "ColorStr",
+    "DEFAULT_ANSI",
     "SGR_RESET",
     "SgrFlag",
     "SgrParameter",
@@ -16,6 +17,7 @@ __all__ = [
     "is_vt_enabled",
     "randcolor",
     "rgb2ansi_escape",
+    "set_default_ansi",
 ]
 
 import collections.abc as abc

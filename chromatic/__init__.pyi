@@ -3,6 +3,7 @@ __all__ = [
     "Color",
     "ColorNamespace",
     "ColorStr",
+    "DEFAULT_FONT",
     "Fore",
     "SgrFlag",
     "SgrParameter",
@@ -38,10 +39,10 @@ __all__ = [
     "reshape_ansi",
     "rgb2hexstr",
     "rgb2int",
+    "set_default_ansi",
     "sort_glyphs",
     "ttf_extract_codepoints",
     "userfonts",
-    "set_default_ansi",
 ]
 from . import color, data, image
 from ._version import version as __version__
@@ -66,7 +67,7 @@ from .color import (
     rgb2int,
     set_default_ansi,
 )
-from .data import UserFont, register_userfont, userfonts
+from .data import DEFAULT_FONT, UserFont, register_userfont, userfonts
 from .image import (
     ansi2img,
     ansi_quantize,

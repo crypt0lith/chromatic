@@ -155,3 +155,54 @@ def test_fg_input_is_not_range_checked(value, result):
 def test_wrong_length_tuple_raises(bad):
     with pytest.raises(TypeError):
         ColorStr("x", fg=bad)
+
+
+# ---- benchmarks ----
+
+
+@pytest.fixture
+def subject():
+    return ColorStr("chromatic", fg=(200, 100, 50), bg=(10, 20, 30), ansi_type="24b")
+
+
+def test_bench_construct(benchmark):
+    benchmark(
+        lambda: ColorStr(
+            "chromatic", fg=(200, 100, 50), bg=(10, 20, 30), ansi_type="24b"
+        )
+    )
+
+
+@pytest.mark.parametrize("ansi_type", ["4b", "8b", "24b"])
+def test_bench_as_ansi_type(benchmark, subject, ansi_type):
+    benchmark(lambda: subject.as_ansi_type(ansi_type))
+
+
+def test_bench_recolor(benchmark, subject):
+    benchmark(lambda: subject.recolor(fg=(0, 255, 0), bg=(255, 0, 255)))
+
+
+def test_bench_invert(benchmark, subject):
+    benchmark(lambda: ~subject)
+
+
+def test_bench_strip_style(benchmark, subject):
+    styled = subject.bold().italicize()
+    benchmark(styled.strip_style)
+
+
+def test_bench_add_sgr_param(benchmark, subject):
+    benchmark(lambda: subject.add_sgr_param(SgrParameter.SINGLE_UNDERLINE))
+
+
+def test_bench_remove_sgr_param(benchmark, subject):
+    styled = subject.bold()
+    benchmark(lambda: styled.remove_sgr_param(SgrParameter.BOLD))
+
+
+def test_bench_style_toggles(benchmark, subject):
+    benchmark(lambda: subject.bold().italicize().underline().negative())
+
+
+def test_bench_color_properties(benchmark, subject):
+    benchmark(lambda: (subject.ansi, subject.rgb_dict, subject.ansi_partition()))

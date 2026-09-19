@@ -35,6 +35,9 @@ docs = [
     "mkdocs-material>=9.7.7",
     "mkdocstrings[python]>=1.0.6",
 ]
+tests = [
+    "pytest>=8.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/crypt0lith/chromatic"

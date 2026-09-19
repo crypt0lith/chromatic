@@ -131,7 +131,7 @@ def test_bench_equalize_white_point(benchmark, rgb_array):
 
 
 def test_bench_scale_saturation(benchmark, rgb_array):
-    benchmark(lambda: scale_saturation(rgb_array.copy(), 1.5))
+    benchmark.pedantic(scale_saturation, setup=lambda: ((rgb_array.copy(), 1.5), {}))
 
 
 def test_bench_sort_glyphs(benchmark):

@@ -656,10 +656,11 @@ def handle_image(ns):
     params = {}
     if is_anim := arr.ndim == 3:
         params.update(save_all=True)
+    isatty = False
     if hasattr(ns, "dumpfile"):
         from .color.core import color_chain
 
-        if is_anim and ns.dumpfile.isatty():
+        if (isatty := ns.dumpfile.isatty()) and is_anim:
 
             def anim_loop(n: int | None, duration: int | float):
                 from time import sleep
@@ -691,6 +692,11 @@ def handle_image(ns):
             cc = color_chain.fromarray(arr)
             ns.dumpfile.write(f"{cc}\x1b[0m\n".encode())
     if img is None:
+        return
+    if not hasattr(ns, "outfile_callback"):
+        show = getattr(ns, "show", None)
+        if show is True or not (show is False or isatty):
+            return img.show()
         return
     try:
         outpath = ns.outfile_callback(ns, img, **params)

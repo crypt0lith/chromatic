@@ -4,6 +4,7 @@
 ![image](https://img.shields.io/pypi/pyversions/chromatic-python)
 [![image](https://static.pepy.tech/badge/chromatic-python)](https://pepy.tech/projects/chromatic-python)
 [![image](https://mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/crypt0lith/chromatic?utm_source=badge)
 
 Chromatic is a library for ANSI art image processing and colored terminal text.
 

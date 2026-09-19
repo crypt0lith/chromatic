@@ -206,3 +206,36 @@ def test_bench_style_toggles(benchmark, subject):
 
 def test_bench_color_properties(benchmark, subject):
     benchmark(lambda: (subject.ansi, subject.rgb_dict, subject.ansi_partition()))
+
+
+@pytest.mark.parametrize("ansi_type", ["4b", "8b", "24b"])
+def test_bench_parse_sgr(benchmark, ansi_type):
+    raw = str(ColorStr("chromatic", fg=(200, 100, 50), ansi_type=ansi_type).bold())
+    benchmark(lambda: ColorStr(raw))
+
+
+def test_bench_render_str(benchmark, subject):
+    styled = subject.bold().underline()
+    benchmark(lambda: str(styled))
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        pytest.param(lambda s: s.upper(), id="upper"),
+        pytest.param(lambda s: s.replace("a", "A"), id="replace"),
+        pytest.param(lambda s: s.center(64, "."), id="center"),
+        pytest.param(lambda s: s.split("a"), id="split"),
+        pytest.param(lambda s: s + s, id="concat"),
+    ],
+)
+def test_bench_str_transforms(benchmark, subject, op):
+    benchmark(lambda: op(subject))
+
+
+def test_bench_iter_chars(benchmark, subject):
+    benchmark(lambda: [c.base_str for c in subject])
+
+
+def test_bench_hash(benchmark, subject):
+    benchmark(lambda: hash(subject))

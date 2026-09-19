@@ -270,3 +270,101 @@ def test_rgb_to_ansi_8bit_batch_shape(shape_in, shape_out):
 def test_lerp_lch_shape_overloads(shape_in, shape_out):
     out = lerp_lch(np.zeros(shape_in), np.ones(shape_in), num=8)
     assert np.asarray(out).shape == shape_out
+
+
+# ---- benchmarks ----
+
+
+@pytest.fixture(scope="module")
+def rgb_batch():
+    # deterministic 64x64 RGB image, the shape of input the array paths get fed
+    return np.random.default_rng(0xC0FFEE).integers(
+        0, 256, size=(64, 64, 3), dtype=np.uint8
+    )
+
+
+@pytest.mark.parametrize(
+    "fwd,back",
+    [
+        pytest.param(rgb2hsv, hsv2rgb, id="hsv"),
+        pytest.param(rgb2hsl, hsl2rgb, id="hsl"),
+        pytest.param(rgb2xyz, xyz2rgb, id="xyz"),
+        pytest.param(rgb2lab, lab2rgb, id="lab"),
+        pytest.param(rgb2lch, lch2rgb, id="lch"),
+    ],
+)
+def test_bench_scalar_roundtrip(benchmark, fwd, back):
+    benchmark(lambda: back(fwd((200, 100, 50))))
+
+
+@pytest.mark.parametrize(
+    "fn",
+    [
+        pytest.param(rgb2hsv, id="rgb2hsv"),
+        pytest.param(rgb2hsl, id="rgb2hsl"),
+        pytest.param(rgb2xyz, id="rgb2xyz"),
+        pytest.param(rgb2lab, id="rgb2lab"),
+        pytest.param(rgb2lch, id="rgb2lch"),
+    ],
+)
+def test_bench_batch_forward(benchmark, fn, rgb_batch):
+    benchmark(lambda: fn(rgb_batch))
+
+
+@pytest.mark.parametrize(
+    "fn,arr",
+    [
+        pytest.param(xyz2rgb, rgb2xyz, id="xyz2rgb"),
+        pytest.param(lab2rgb, rgb2lab, id="lab2rgb"),
+        pytest.param(lch2rgb, rgb2lch, id="lch2rgb"),
+        pytest.param(hsv2rgb, rgb2hsv, id="hsv2rgb"),
+        pytest.param(hsl2rgb, rgb2hsl, id="hsl2rgb"),
+    ],
+)
+def test_bench_batch_inverse(benchmark, fn, arr, rgb_batch):
+    converted = arr(rgb_batch)
+    benchmark(lambda: fn(converted))
+
+
+@pytest.mark.parametrize(
+    "fn", [nearest_ansi_4bit_rgb, nearest_ansi_8bit_rgb], ids=["4bit", "8bit"]
+)
+def test_bench_nearest_scalar(benchmark, fn):
+    benchmark(lambda: fn((200, 100, 50)))
+
+
+@pytest.mark.parametrize(
+    "fn", [nearest_ansi_4bit_rgb, nearest_ansi_8bit_rgb], ids=["4bit", "8bit"]
+)
+def test_bench_nearest_batch(benchmark, fn, rgb_batch):
+    benchmark(lambda: fn(rgb_batch))
+
+
+def test_bench_rgb_to_ansi_8bit_batch(benchmark, rgb_batch):
+    benchmark(lambda: rgb_to_ansi_8bit(rgb_batch))
+
+
+def test_bench_ansi_8bit_to_rgb_batch(benchmark, rgb_batch):
+    codes = rgb_to_ansi_8bit(rgb_batch)
+    benchmark(lambda: ansi_8bit_to_rgb(codes))
+
+
+def test_bench_rgb_diff_batch(benchmark, rgb_batch):
+    other = rgb_batch[::-1]
+    benchmark(lambda: rgb_diff(rgb_batch, other))
+
+
+def test_bench_lerp_lch_gradient(benchmark):
+    lch1, lch2 = rgb2lch((255, 0, 0)), rgb2lch((0, 0, 255))
+    benchmark(lambda: lerp_lch(lch1, lch2, num=256))
+
+
+@pytest.mark.parametrize(
+    "encode,decode",
+    [
+        pytest.param(rgb2int, int2rgb, id="int"),
+        pytest.param(rgb2hexstr, hexstr2rgb, id="hexstr"),
+    ],
+)
+def test_bench_codec_roundtrip(benchmark, encode, decode):
+    benchmark(lambda: decode(encode((200, 100, 50))))

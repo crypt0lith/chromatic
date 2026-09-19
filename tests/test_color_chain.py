@@ -172,3 +172,73 @@ def test_term_array_fillchar_pads(chain):
 
 def test_term_array_empty_is_zero_shape():
     assert color_chain().term_array().shape == (0, 0)
+
+
+# ---- benchmarks ----
+
+
+@pytest.fixture
+def many_segments():
+    return [
+        ColorStr(
+            f"seg{i:02d} ",
+            fg=(i * 7 % 256, i * 13 % 256, i * 29 % 256),
+            ansi_type="24b",
+        )
+        for i in range(64)
+    ]
+
+
+@pytest.fixture
+def long_chain(many_segments):
+    return color_chain(many_segments)
+
+
+@pytest.fixture
+def long_sgr(long_chain):
+    return str(long_chain)
+
+
+def test_bench_construct_from_segments(benchmark, many_segments):
+    benchmark(lambda: color_chain(many_segments))
+
+
+@pytest.mark.parametrize("ansi_type", ["4b", "8b", "24b"])
+def test_bench_coerce_ansi_type(benchmark, many_segments, ansi_type):
+    benchmark(lambda: color_chain(many_segments, ansi_type=ansi_type))
+
+
+def test_bench_parse_sgr_string(benchmark, long_sgr):
+    benchmark(lambda: color_chain(long_sgr))
+
+
+def test_bench_render_str(benchmark, long_chain):
+    benchmark(lambda: str(long_chain))
+
+
+def test_bench_shrink(benchmark, long_sgr):
+    benchmark.pedantic(color_chain.shrink, setup=lambda: ((color_chain(long_sgr),), {}))
+
+
+def test_bench_concat(benchmark, long_chain, chain):
+    benchmark(lambda: long_chain + chain)
+
+
+def test_bench_term_array(benchmark, long_chain):
+    benchmark(long_chain.term_array)
+
+
+def test_bench_term_array_reshape(benchmark, long_chain):
+    benchmark(lambda: long_chain.term_array((16, 80), fillchar=" "))
+
+
+def test_bench_fromarray(benchmark, long_chain):
+    arr = long_chain.term_array()
+    benchmark(lambda: color_chain.fromarray(arr))
+
+
+def test_bench_splitlines(benchmark):
+    src = color_chain(
+        [ColorStr("\n".join(f"line {i:02d}" for i in range(64)), ansi_type="24b")]
+    )
+    benchmark(src.splitlines)

@@ -581,8 +581,7 @@ def Parser(prog=None):
 
 
 def parse_args(argv=None):
-    argv = argv or sys.argv
-    return Parser(os.path.basename(argv[0])).parse_args(argv[1:])
+    return Parser(os.path.basename((argv or sys.argv)[0])).parse_args(argv)
 
 
 def _call_from_ns[R](f: abc.Callable[..., R], /, ns, **kwargs) -> R:

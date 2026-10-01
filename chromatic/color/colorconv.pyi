@@ -141,29 +141,15 @@ def rgb2lch[_Shape: tuple[int, ...]](
 
 @tp.overload
 def lerp_lch[_N: int](
-    lch1: Float3Tuple | ShapedNDArray[tuple[L[3]], np.floating],
-    lch2: Float3Tuple | ShapedNDArray[tuple[L[3]], np.floating],
-    /,
-    num: _N = 8,
+    lch1: Float3Tuple, lch2: Float3Tuple, /, num: _N = 8
 ) -> ShapedNDArray[tuple[_N, L[3]], np.float64]: ...
 @tp.overload
-def lerp_lch[_D1: int, _N: int](
-    lch1: ShapedNDArray[tuple[_D1, L[3]], np.floating],
-    lch2: ShapedNDArray[tuple[_D1, L[3]], np.floating],
+def lerp_lch[_Shape: tuple[int, ...], _N: int](
+    lch1: ShapedNDArray[tuple[*_Shape, L[3]], np.floating],
+    lch2: ShapedNDArray[tuple[*_Shape, L[3]], np.floating],
     /,
     num: _N = 8,
-) -> ShapedNDArray[tuple[_D1, _N, L[3]], np.float64]: ...
-@tp.overload
-def lerp_lch[_D1: int, _D2: int, _N: int](
-    lch1: ShapedNDArray[tuple[_D1, _D2, L[3]], np.floating],
-    lch2: ShapedNDArray[tuple[_D1, _D2, L[3]], np.floating],
-    /,
-    num: _N = 8,
-) -> ShapedNDArray[tuple[_D1, _D2, _N, L[3]], np.float64]: ...
-@tp.overload
-def lerp_lch(
-    lch1: np.typing.NDArray[np.floating], lch2: np.typing.NDArray[np.floating], /, num=8
-) -> np.typing.NDArray[np.float64]: ...
+) -> ShapedNDArray[tuple[*_Shape, _N, L[3]], np.float64]: ...
 
 @tp.overload
 def rgb_diff(

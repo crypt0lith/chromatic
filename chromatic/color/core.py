@@ -676,35 +676,23 @@ class SgrParamBuffer[_T]:
 
 @ft.lru_cache
 def _get_sgr_nums(x: bytes, /) -> list[int]:
-    """Return a list of integers from a bytestring of ANSI SGR parameters.
-
-    Notes
-    -----
-    Roughly, bitwise equivalent to ``list(map(int, bytes().split(b';')))``
-
-    """
-    x = x.removeprefix(CSI)[: i if ~(i := x.find(*b"m")) else None].removesuffix(b"m")
+    """Return a list of integers from a bytestring of ANSI SGR parameters."""
+    x = x.removeprefix(CSI).partition(b"m")[0]
     length = len(x)
-    mask_indices = enumerate(
-        map(
-            bool,
-            int.to_bytes(
-                int.from_bytes(x) ^ int.from_bytes(b";" * length), length=length
-            ),
-        )
-    )
+    [SEMI] = b";"
     res = []
-    digits = bytearray()
-    for i, is_digit in mask_indices:
-        try:
-            while is_digit:
-                digits.append(x[i] | 0x30)
-                i, is_digit = next(mask_indices)
-        except StopIteration:
-            break
-        finally:
-            res.append(int(digits) if digits else 0)
-        digits.clear()
+    i = j = 0
+    while j < length:
+        if x[j] == SEMI:
+            res.append(int(x[i:j] or 0))
+            i = j = j + 1
+        else:
+            j += 1
+    else:
+        if xn := x[i:j]:
+            res.append(int(xn))
+        elif not res:
+            res.append(0)
     return res
 
 

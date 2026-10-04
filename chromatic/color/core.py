@@ -957,9 +957,6 @@ class SgrSequence(abc.MutableSequence[SgrParamBuffer]):
             return self.__class__(x for xs in (self, other) for x in xs)
         return NotImplemented
 
-    def __bool__(self):
-        return bool(self._sgr_params)
-
     def __bytes__(self):
         return _concat_ansi_escape(self.values()) if self else b""
 
@@ -2056,9 +2053,6 @@ class color_chain(abc.MutableSequence[tuple[SgrSequence, str]]):
                 (x for xs in (self, other) for x in xs), ansi_type=self._ansi_type
             )
         return NotImplemented
-
-    def __bool__(self):
-        return bool(self._items)
 
     def __call__(self, obj="", /):
         return f"{self}{obj}\x1b[0m"
